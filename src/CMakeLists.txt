@@ -1,0 +1,4 @@
+add_compile_definitions(SOL_ALL_SAFETIES_ON=1)
+
+add_subdirectory(geometry)
+add_subdirectory(matrices)
