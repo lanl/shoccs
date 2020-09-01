@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mesh/mesh.hpp"
 #include "shapes.hpp"
 #include <span>
 #include <vector>
@@ -16,15 +17,6 @@ struct mesh_object_info {
     int shape_id;
 };
 
-// bundle up some data to make it easy to compute coordinates for a uniform 
-// cartesian mesh.  
-struct umesh_line {
-    real min;
-    real max;
-    real h;
-};
-
-
 class geometry
 {
     // mesh / object intersection info for all rays
@@ -40,14 +32,11 @@ class geometry
     std::vector<int3> sy_;
     std::vector<int3> sz_;
 
-
 public:
-
     geometry() = default;
 
-    // constructor for uniform meshes.  Non-uniform meshes would requires spans or data.
-    geometry(std::span<const shape>, const umesh_line& x, const umesh_line& y, const umesh_line& z);
-
+    // constructor for uniform meshes.
+    geometry(std::span<const shape>, const mesh& m);
 
     // Intersection of rays in x and object `shape_id`
     std::span<const mesh_object_info> Rx(int shape_id) const;
@@ -62,10 +51,34 @@ public:
     // Intersection of rays in z and all objects
     std::span<const mesh_object_info> Rz() const;
 
+    std::span<const mesh_object_info> R(int dir) const
+    {
+        switch (dir) {
+        case 0:
+            return Rx();
+        case 1:
+            return Ry();
+        default:
+            return Rz();
+        }
+    }
+
     // details about points in solid
     std::span<const int3> Sx() const;
     std::span<const int3> Sy() const;
     std::span<const int3> Sz() const;
+
+    std::span<const int3> S(int dir) const
+    {
+        switch (dir) {
+        case 0:
+            return Sx();
+        case 1:
+            return Sy();
+        default:
+            return Sz();
+        }
+    }
 };
 
 } // namespace ccs

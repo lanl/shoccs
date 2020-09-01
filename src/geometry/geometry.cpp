@@ -7,11 +7,6 @@
 namespace ccs
 {
 
-static int npoints(const umesh_line& line)
-{
-    return 1 + static_cast<int>((line.max - line.min + 0.1 * line.h) / line.h);
-}
-
 static std::optional<hit_info>
 closest_hit(std::span<const shape> shapes, const ray& r, real t_min, real t_max)
 {
@@ -30,38 +25,31 @@ closest_hit(std::span<const shape> shapes, const ray& r, real t_min, real t_max)
 // check for intersections along line I using line
 template <int I>
 static void init_line(std::span<const shape> shapes,
-                      const umesh_line& xline,
-                      const umesh_line& yline,
-                      const umesh_line& zline,
+                      const std::array<umesh_line, 3>& lines,                
                       std::vector<mesh_object_info>& info,
                       std::vector<std::vector<mesh_object_info>>& sorted_info)
 {
     sorted_info.resize(shapes.size());
     // handy shortcuts
-    using T = const umesh_line&;
-    const std::tuple<T, T, T> lines{xline, yline, zline};
     constexpr auto S = index::dir<I>::slow;
     constexpr auto F = index::dir<I>::fast;
 
-    T fline = std::get<F>(lines);
-    T sline = std::get<S>(lines);
-    T iline = std::get<I>(lines);
-
-    const int nf = npoints(fline);
-    const int ns = npoints(sline);
+    const umesh_line& fline = lines[F];
+    const umesh_line& sline = lines[S];
+    const umesh_line& iline = lines[I];
 
     real3 origin{};
     int3 coord{};
 
-    for (int s = 0; s < ns; s++) {
+    for (int s = 0; s < sline.n; s++) {
         origin[S] = sline.min + s * sline.h;
         coord[S] = s;
 
-        for (int f = 0; f < nf; f++) {
+        for (int f = 0; f < fline.n; f++) {
             origin[F] = fline.min + f * fline.h;
             coord[F] = f;
 
-            const auto& [min, max, h] = iline;
+            const auto& [min, max, h, n] = iline;
 
             real t_min{0};
             real t_max{max - min};
@@ -118,21 +106,17 @@ static void append_solid_points(std::vector<int3>& info,
 }
 
 template <int I>
-static void init_solid(const umesh_line& xline,
-                       const umesh_line& yline,
-                       const umesh_line& zline,
+static void init_solid(const std::array<umesh_line, 3>& lines,                     
                        std::span<const mesh_object_info> r,
                        std::vector<int3>& info)
-{
-    using T = const umesh_line&;
-    const std::tuple<T, T, T> lines{xline, yline, zline};
+{    
     constexpr auto S = index::dir<I>::slow;
     constexpr auto F = index::dir<I>::fast;
 
-    T iline = std::get<I>(lines);
+    const umesh_line& iline = lines[I];
 
     // npoints is needed to bound the calculation
-    const int ni = npoints(iline);
+    const int ni = iline.n;
 
     // Loop through all solid_coord (SC) in Rw.   These are the boundaries of the solid
     // points to be added to info object.  There are Z cases to consider
@@ -158,7 +142,7 @@ static void init_solid(const umesh_line& xline,
         if (m.ray_outside) {
             auto next = first + 1;
             if (next == last || !same_plane<S, F>(m.solid_coord, (*next).solid_coord)) {
-                append_solid_points<I>(info, m.solid_coord, ni);
+                append_solid_points<I>(info, m.solid_coord, ni-1);
             }
         } else if (prev == last) {
             // if prev == last, then this is the first intersection point encountered
@@ -184,17 +168,16 @@ static void init_solid(const umesh_line& xline,
 }
 
 geometry::geometry(std::span<const shape> shapes,
-                   const umesh_line& xline,
-                   const umesh_line& yline,
-                   const umesh_line& zline)
+                   const mesh& m)
 {
-    init_line<0>(shapes, xline, yline, zline, rx_, rx_m_);
-    init_line<1>(shapes, xline, yline, zline, ry_, ry_m_);
-    init_line<2>(shapes, xline, yline, zline, rz_, rz_m_);
+    std::array<umesh_line, 3> lines{m.line(0), m.line(1), m.line(2)};
+    init_line<0>(shapes, lines, rx_, rx_m_);
+    init_line<1>(shapes, lines, ry_, ry_m_);
+    init_line<2>(shapes, lines, rz_, rz_m_);
 
-    init_solid<0>(xline, yline, zline, rx_, sx_);
-    init_solid<1>(xline, yline, zline, ry_, sy_);
-    init_solid<2>(xline, yline, zline, rz_, sz_);
+    init_solid<0>(lines, rx_, sx_);
+    init_solid<1>(lines, ry_, sy_);
+    init_solid<2>(lines, rz_, sz_);
 }
 
 std::span<const mesh_object_info> geometry::Rx() const { return rx_; }

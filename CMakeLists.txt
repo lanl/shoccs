@@ -35,5 +35,6 @@ function(add_unit_test test label)
   set_tests_properties(t-${test} PROPERTIES LABELS "${label}")
 endfunction()
 
+add_subdirectory(external)
 add_subdirectory(src)
 add_subdirectory(docs)

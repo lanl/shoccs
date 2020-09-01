@@ -48,7 +48,7 @@ At the moment, the user is responsible for esuring that shapes are assigned cont
 
 Geometry
 -------
-The primary way the driver will interact with the embedded geometry is through the `geometry` object.  This object is initialized by a `span` of shapes and some mesh information.  The query operations are analagous to those described in the paper:
+The primary way the driver will interact with the embedded geometry is through the `geometry` object.  This object is initialized by a `span` of shapes and some mesh information.  The query operations are analogous to those described in the paper:
 
 ```c++
 // record psi and solid_coord for use in operator construction

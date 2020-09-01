@@ -45,6 +45,7 @@ private:
     friend constexpr auto operator*(const circulant& mat, R&& rng)
     {
         assert(rng.size() >= static_cast<unsigned>(mat.rows()));
+        assert(mat.size() > 0);
 
         return ranges::views::zip_with(
             [](auto&& a, auto&& b) { return ranges::inner_product(a, b, 0.0); },

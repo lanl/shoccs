@@ -7,9 +7,15 @@
 namespace ccs
 {
 
+// A stencil is comprised of both an interior discretization and its
+// associated numerical boundary scheme.
+// The interior discretization is of order 2p and containts 2p + 1 points
+// The nbs is a dense small dense rxt matrix
+// A stencil can have extra information associated with it (like Neumann BC's)
 struct stencil_info {
-    int rows;
-    int columns;
+    int p;
+    int r;
+    int t;
     int nextra;
 };
 
@@ -28,7 +34,11 @@ concept Stencil = requires(const T& stencil,
     }
     ->std::same_as<stencil_info>;
 
-    {stencil.coefficients(dx, b, psi, ray_outside, c, extra)};
+    { stencil.query_max() } ->std::same_as<stencil_info>;
+
+    {stencil.nbs(h, b, psi, ray_outside, c, extra)};
+
+    {stencil.interior(h, c)};
 };
 
 class stencil
@@ -40,15 +50,17 @@ class stencil
         virtual ~any_stencil() {}
         virtual any_stencil* clone() const = 0;
         virtual stencil_info query(boundary) const = 0;
-        virtual void coefficients(real h,
-                                  boundary,
-                                  real psi,
-                                  bool ray_outside,
-                                  std::span<real> coeffs,
-                                  std::span<real> extra) const = 0;
+        virtual stencil_info query_max() const = 0;
+        virtual void nbs(real h,
+                         boundary,
+                         real psi,
+                         bool ray_outside,
+                         std::span<real> coeffs,
+                         std::span<real> extra) const = 0;
+        virtual void interior(real c, std::span<real> coeffs) const = 0;
     };
 
-    template <stencil S>
+    template <Stencil S>
     class any_stencil_impl : public any_stencil
     {
         S s;
@@ -60,15 +72,21 @@ class stencil
         any_stencil_impl* clone() const override { return new any_stencil_impl(s); }
 
         stencil_info query(boundary b) const override { return s.query(b); }
+        stencil_info query_max() const override { return s.query_max(); }
 
-        void coefficients(real h,
-                          boundary b,
-                          real psi,
-                          bool ray_outside,
-                          std::span<real> c,
-                          std::span<real> extra) const override
+        void nbs(real h,
+                 boundary b,
+                 real psi,
+                 bool ray_outside,
+                 std::span<real> c,
+                 std::span<real> extra) const override
         {
-            return s.coefficients(h, b, psi, ray_outside, c, extra);
+            return s.nbs(h, b, psi, ray_outside, c, extra);
+        }
+
+        void interior(real h, std::span<real> c) const override
+        {
+            return s.interior(h, c);
         }
     };
 
@@ -113,16 +131,19 @@ public:
     explicit operator bool() const { return s != nullptr; }
 
     stencil_info query(boundary b) const { return s->query(b); }
+    stencil_info query_max() const { return s->query_max(); }
 
-    void coefficients(real h,
-                      boundary b,
-                      real psi,
-                      bool ray_outside,
-                      std::span<real> c,
-                      std::span<real> ex) const
+    void nbs(real h,
+             boundary b,
+             real psi,
+             bool ray_outside,
+             std::span<real> c,
+             std::span<real> ex) const
     {
-        return s->coefficients(h, b, psi, ray_outside, c, ex);
+        return s->nbs(h, b, psi, ray_outside, c, ex);
     }
+
+    void interior(real h, std::span<real> c) const { return s->interior(h, c); }
 };
 
 } // namespace ccs

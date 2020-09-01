@@ -108,5 +108,8 @@ public:
 
 // factory functions
 shape make_sphere(int id, const real3& origin, real radius);
+shape make_xy_rect(int id, const real3& corner0, const real3& corner1, real fluid_normal);
+shape make_xz_rect(int id, const real3& corner0, const real3& corner1, real fluid_normal);
+shape make_yz_rect(int id, const real3& corner0, const real3& corner1, real fluid_normal);
 
 } // namespace shoccs

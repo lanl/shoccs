@@ -10,13 +10,10 @@ TEST_CASE("sphere intersections")
     std::vector<shape> shapes;
     shapes.push_back(make_sphere(0, std::array{0.01, -0.01, 0.5}, 0.25));
 
-    int nx = 21, ny = 22, nz = 23;
-    real xmin = -1, ymin = -1, zmin = 0;
-    real xmax = 1, ymax = 2, zmax = 2.2;
-    umesh_line xl{xmin, xmax, (xmax - xmin) / (nx - 1)};
-    umesh_line yl{ymin, ymax, (ymax - ymin) / (ny - 1)};
-    umesh_line zl{zmin, zmax, (zmax - zmin) / (nz - 1)};
-    geometry g{shapes, xl, yl, zl};
+    int3 n{21, 22, 23};
+    real3 min{-1, -1, 0};
+    real3 max{1, 2, 2.2};
+    geometry g{shapes, mesh{min, max, n}};
 
     // intersections in x from Mathematica
     SECTION("X")
@@ -68,17 +65,17 @@ TEST_CASE("sphere intersections")
 
         auto rx = g.Rx();
 
-        for (int n = 0; auto&& c : rx) {
-            auto [x, y, z] = exact[n];
+        for (int i = 0; auto&& c : rx) {
+            auto [x, y, z] = exact[i];
             auto [cx, cy, cz] = c.position;
             REQUIRE(cx == Catch::Approx(x));
             REQUIRE(cy == Catch::Approx(y));
             REQUIRE(cz == Catch::Approx(z));
 
-            REQUIRE(c.psi == Catch::Approx(psi[n]));
+            REQUIRE(c.psi == Catch::Approx(psi[i]));
 
-            REQUIRE(c.solid_coord == sc[n]);
-            n++;
+            REQUIRE(c.solid_coord == sc[i]);
+            i++;
         }
 
         std::vector<int3> sx = {
@@ -91,9 +88,9 @@ TEST_CASE("sphere intersections")
             {11, 8, 4}, {9, 8, 5},  {10, 8, 5}, {11, 8, 5}, {12, 8, 5}, {9, 8, 6},
             {10, 8, 6}, {11, 8, 6}};
 
-        for (int n = 0; auto&& s : g.Sx()) {
-            REQUIRE(s == sx[n]);
-            ++n;
+        for (int i = 0; auto&& s : g.Sx()) {
+            REQUIRE(s == sx[i]);
+            ++i;
         }
     }
 
@@ -303,4 +300,19 @@ TEST_CASE("sphere intersections")
             n++;
         }
     }
+}
+
+TEST_CASE("rect_intersections")
+{
+    using namespace ccs;
+
+    auto m = mesh{real3{}, real3{1, 1, 1}, int3{11, 2, 1}};
+    REQUIRE(m.dims() == 2);
+
+    real loc = 1.0 - 1e-6;
+    auto shapes =
+        std::vector<shape>{make_yz_rect(0, real3{loc, -1, -1}, real3{loc, 2, 2}, -1)};
+    auto g = geometry(shapes, m);
+    REQUIRE(g.Rx().size() == 2u);
+    REQUIRE(g.Sx().size() == 2u);
 }

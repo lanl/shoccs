@@ -52,6 +52,9 @@ $$
 where $B^x$ would be our CSR representation of all the boundary matrices.  There would have to be a 'pre' step where appropriate data is copied to the right points in $U$ and a 'post' phase
 where the data is copied back out.
 
+Potential Matrix Formats
+---
+
 Some options and their implications using the assumptions
 
 1.  There is a persistent set of points (i.e. $R^x$) associated with all boundary data.  This
@@ -129,3 +132,56 @@ appropriate BC matrices.
 * The functions producing $\mathbf{B}_l(\psi,\boldsymbol\alpha)$ should produce $B^{c_0}$, $B^{r_0}$, and $B^I$
 
 * Sparse matrix formats for $O^x$, $B^x$, and $N^x$.  $O^x$ is a sparse block matrix comprised of $C$, and $\mathbf{B}_{l/r}$ matrices
+
+1D Operator
+----
+What does a 1D operator need to do/know?  Should $B^x$ actually be exposed to the user at all or should $O^x$ and $B^x$ be members of a single operator.  They are not really independent things that can be mixed and matched so it makes sense to wrap them up.  So, we wrap them up and then have our operator, $D$, which will be applied to a random access range of the data.  If we pass in boundary condition information  to the operator rather than pre-apply it to the range we can more easily wrap up a series of 1D operators into a 3D operator.
+
+However, requiring boundary condition information means abandoning `operator*` for the discrete operators.  If we keep it, then we need to make the user call a method that sets the boundary condition information before the call `operator*`.
+
+How should we pass in boundary condition values?  The type of boundary conditions has already been incorporated by the construction of the operator via $O^x$ and $B^x$.  We could pass in functions which will then operate on $R^x$ mapped to $S^x$.  But how would we do something line the Carpenter test with $v_0 = u_n$ and $u_0 = v_n$.  That kind of boundary condition would require a lambda capture on the boundary points or a weird calling convention.  It seems better to pre-compute the object boundary conditions and pass them in as a span (conforming to $R^x$ which is mapped to $S^x$ in the operator).  What about domain bc's? dirichlet values could be written on the range
+before passing it in.  Floating doesn't have an impact.  Neumann requires some thought (also for the object bc's).  In general, the Neumann boundary is not a function of the field so it can simply be added to the computed field after the fact.  We might require Neumann conditions on domain bcs and the object.  Neumann conditions could simply be represented as a CSR matrix of coefficients which are applied to boundary values rather than the field data.
+
+Operator Generator
+----
+
+The discrete operator can be partially constructed using the information about the stencil and geometry information.  However, it can't be finished until it knows about the boundary conditions for the problem.  Given the different sources of knowledge, it makes sense to have an "Operator Generator" or "Operator Builder" class with an interface like:
+
+```c++
+class discrete_operator;
+
+struct object_bc_map {
+    int shape_id;
+    boundary b;
+};
+
+struct domain_bc_map {
+    boundary xmin, xmax;
+    boundary ymin, ymax;
+    boundary zmin, zmax;
+
+};
+
+class operator_builder {
+    public:
+    operator_builder(const geometry& geom, const stencil& st);
+
+    discrete_operator build(domain_bc_map, std::vector<bc_map>);
+};
+```
+
+What to do about `gradient`, `divergence`, `laplacian` operators? should they be separate classes?  The `operator*` method needs to templated on a range so we can't make use of any virtuals.  Should the `build` method be split into `build_gradient`, `build_divergence`, `build_laplacian`?  The operator will already have knowledge of the solid geometry and bc's so it should be able to wrap the necessary computations with input about the bc values (rather than just the bc type).  Let's make them separate to simplify the implementation of the system solvers
+
+Gradient Operator
+-----
+
+Assuming an `operator_builder` has been properly constructed with the geometry and scheme information, we construct a `gradient_opererator` using the `build` interface described above.  The idea is then evaluate a gradient simply as
+
+```c++
+gradient_operator grad = builder.build_gradient(domain_bc_map, std::vector<bc_map>);
+
+auto rng = /* some computations on field variables that yields a random_access_range*/ ;
+
+           // grad * rng
+auto rhs = grad(rng); // we could convert this to a vector or leave as range
+```
