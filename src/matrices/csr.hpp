@@ -10,6 +10,7 @@
 #include <range/v3/view/sliding.hpp>
 #include <range/v3/view/transform.hpp>
 
+#include <iostream>
 namespace ccs::matrix
 {
 class csr
@@ -49,7 +50,11 @@ public:
         builder_() = default;
         builder_(int n) { p.reserve(n); }
 
-        void add_point(int row, int col, real v) { p.emplace_back(row, col, v); }
+        void add_point(int row, int col, real v)
+        {
+            std::cout << "adding\t" << row << '\t' << col << '\t' << v << '\n';
+            p.emplace_back(row, col, v);
+        }
 
         csr to_csr(int nrows)
         {

@@ -15,8 +15,8 @@ public:
     constexpr int rows() const { return rows_; }
 
 private:
-    template <ranges::random_access_range R>
-    friend constexpr auto operator*(const zeros& mat, R&& rng)
+    template <ranges::input_range R>
+    friend constexpr auto operator*(const zeros& mat, [[maybe_unused]] R&& rng)
     {        
         return ranges::views::repeat_n(real{}, mat.rows());
     }

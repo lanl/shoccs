@@ -146,4 +146,5 @@ public:
     void interior(real h, std::span<real> c) const { return s->interior(h, c); }
 };
 
+stencil make_E2_2();
 } // namespace ccs

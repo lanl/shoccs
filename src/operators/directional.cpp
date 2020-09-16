@@ -10,6 +10,7 @@
 #include <range/v3/view/reverse.hpp>
 #include <range/v3/view/stride.hpp>
 #include <range/v3/view/take.hpp>
+#include <range/v3/view/take_exactly.hpp>
 
 namespace ccs::op
 {
@@ -24,7 +25,121 @@ struct boundary_info {
 struct wall_info {
     matrix::dense mat; // boundary matrix to place in O
     int pt;            // first or last point in O for stencil
-    int s;             // number of solid points consumed
+};
+
+namespace detail
+{
+// Encapsulate the logic for building the boundary value and boundary derivative
+// CSR matrices.  They each need their own copy of the solid points iterator because
+// boundary values are associated with every point in R but derivative values are only
+// needed at a few places.  Keeping separate iterators allows the user to simply pass in
+// lists of values where the order dictates everything. The boundary derivative CSR matrix
+// also contains information on the domain boundaries whereas the boundary value CSR
+// matrix does not
+using It = typename std::vector<int>::const_iterator;
+class builder_
+{
+    matrix::csr_builder b;
+    It spts;
+
+    template <ranges::random_access_range R>
+    void add_(R&& rng, int bpt, int r, int t, int uc, int inc)
+    {
+        using namespace ranges::views;
+
+        // add boundary column to csr
+        for (auto&& [i, v] : rng | stride(t) | enumerate | drop(1))
+            b.add_point(uc + inc * i, bpt, v);
+
+        // add boundary point to csr
+        b.add_point(bpt, bpt, rng[0]);
+
+        // add boundary row to csr
+        for (auto&& [i, v] : rng | enumerate | drop(1) | take(t - 1))
+            b.add_point(bpt, uc + inc * i, v);
+    }
+
+protected:
+    builder_() = default;
+    builder_(int n, It spts) : b{n}, spts{spts} {}
+
+    void add(std::span<real> c, int r, int t, int uc, int inc, bool solid)
+    {
+        using namespace ranges::views;
+        auto bpt = solid ? *spts++ : uc;
+        if (inc > 0)
+            add_(c | take_exactly(r * t), bpt, r, t, uc, inc);
+        else
+            add_(c | take_exactly(r * t) | reverse, bpt, r, t, uc, inc);
+    }
+
+    auto to_csr_(int nrows) { return b.to_csr(nrows); }
+};
+} // namespace detail
+class value_builder : detail::builder_
+{
+public:
+    value_builder() = default;
+    value_builder(int n, detail::It spts) : detail::builder_{n, spts} {}
+
+    void add_left(std::span<real> c, int r, int t, int uc)
+    {
+        std::cout << "\nvb left\n";
+        add(c, r, t, uc, 1, true);
+    }
+
+    void add_right(std::span<real> c, int r, int t, int uc)
+    {
+        std::cout << "\nvb right\n";
+        add(c, r, t, uc, -1, true);
+    }
+
+    auto inner_left(std::span<real> c, int r, int t)
+    {
+        using namespace ranges::views;
+        return c | chunk(t) | drop(1) | for_each(drop(1));
+    }
+
+    auto inner_right(std::span<real> c, int r, int t)
+    {
+        using namespace ranges::views;
+        return c | chunk(t) | for_each(take(t - 1));
+    }
+
+    auto to_csr(int nrows) { return to_csr_(nrows); }
+};
+
+class derivative_builder : detail::builder_
+{
+public:
+    derivative_builder() = default;
+    derivative_builder(int n, detail::It spts) : detail::builder_{n, spts} {}
+
+    void add_left_domain(std::span<real> c, int r, int uc)
+    {
+        std::cout << "\ndb left domain\n";
+        if (r > 0) add(c, r, 1, uc, 1, false);
+    }
+
+    void add_left_solid(std::span<real> c, int r, int uc)
+    {
+        std::cout << "\ndb left solid\n";
+        if (r > 0) add(c, r, 1, uc, 1, true);
+    }
+
+    void add_right_domain(std::span<real> c, int r, int uc)
+    {
+        std::cout << "\ndb right domain\n";
+        if (r > 0) add(c, r, 1, uc, -1, false);
+    }
+
+    void add_right_solid(std::span<real> c, int r, int uc)
+    {
+        std::cout << "\ndb right solid\n";
+        if (r > 0) add(c, r, 1, uc, -1, true);
+    }
+
+    auto to_csr(int nrows) { return to_csr_(nrows); }
 };
 
 // We need to return lines of boundary_info so the caller
@@ -92,7 +207,7 @@ cppcoro::generator<std::array<boundary_info, 2>> static lines(
                                 lbi,
                                 boundary_info{ijk2uc(next_obj.solid_coord),
                                               next_obj.psi,
-                                              ob[obj.shape_id],
+                                              ob[next_obj.shape_id],
                                               false}};
                         }
                     }
@@ -101,81 +216,57 @@ cppcoro::generator<std::array<boundary_info, 2>> static lines(
         }
 }
 
-template <typename R>
 static wall_info left_wall(const stencil& st,
                            real h,
                            const boundary_info& bi,
-                           R&& solid,
-                           bool no_solid,
                            std::span<real> coeffs,
                            std::span<real> extra,
-                           matrix::csr_builder& bld)
+                           value_builder& vb,
+                           derivative_builder& db)
 {
 
     auto q = st.query(bi.b);
     st.nbs(h, bi.b, bi.psi, false, coeffs, extra);
 
-    if (bi.is_domain_b) return {matrix::dense{q.r, q.t, coeffs}, bi.global_i, 0};
+    if (bi.is_domain_b) {
+        db.add_left_domain(extra, q.nextra, bi.global_i);
+        return {matrix::dense{q.r, q.t, coeffs}, bi.global_i};
+    }
+    if (bi.b == boundary::neumann)
+        db.add_left_solid(extra, q.nextra, bi.global_i);
+    else
+        vb.add_left(coeffs, q.r, q.t, bi.global_i);
 
-    // should really do something better here
-    if (no_solid) throw std::runtime_error("Ran out of solid points");
+    auto inner = vb.inner_left(coeffs, q.r, q.t);
 
-    // Add boundary column (first) to csr
-    auto bpt = *solid;
-    using namespace ranges::views;
-    for (auto&& [i, v] : coeffs | stride(q.t) | enumerate | drop(1) | take(q.r - 1))
-        bld.add_point(bi.global_i + i, bpt, v);
-
-    // Add corner of boundary matrix to csr
-    bld.add_point(bpt, bpt, coeffs[0]);
-    // Add rest of boundary row to csr
-    for (auto&& [i, v] : coeffs | enumerate | drop(1) | take(q.t - 1))
-        bld.add_point(bpt, bi.global_i + i, v);
-
-    // range representing the non-boundary portion of the boundary matrix
-    auto rng = coeffs | chunk(q.t) | drop(1) | for_each(drop(1));
-    return {matrix::dense{q.r - 1, q.t - 1, rng}, bi.global_i + 1, 1};
+    return {matrix::dense{q.r - 1, q.t - 1, inner}, bi.global_i + 1};
 }
 
-template <typename R>
 static wall_info right_wall(const stencil& st,
                             real h,
                             const boundary_info& bi,
-                            R&& solid,
-                            bool no_solid,
                             std::span<real> coeffs,
                             std::span<real> extra,
-                            matrix::csr_builder& bld)
+                            value_builder& vb,
+                            derivative_builder& db)
 {
 
     auto q = st.query(bi.b);
     st.nbs(h, bi.b, bi.psi, true, coeffs, extra);
 
-    if (bi.is_domain_b) return {matrix::dense{q.r, q.t, coeffs}, bi.global_i, 0};
+    if (bi.is_domain_b) {
+        db.add_right_domain(extra, q.nextra, bi.global_i);
+        return {matrix::dense{q.r, q.t, coeffs}, bi.global_i};
+    }
 
-    // should really do something better here
-    if (no_solid) throw std::runtime_error("Ran out of solid points");
+    if (bi.b == boundary::neumann)
+        db.add_right_solid(extra, q.nextra, bi.global_i);
+    else
+        vb.add_right(coeffs, q.r, q.t, bi.global_i);
 
-    auto bpt = *solid;
-    auto sz = q.r * q.t;
+    auto inner = vb.inner_right(coeffs, q.r, q.t);
 
-    using namespace ranges::views;
-    // reverse the range for easier processing
-    auto rev = coeffs | take(sz) | reverse;
-
-    // Add boundary column (last) to csr
-    for (auto&& [i, v] : rev | stride(q.t) | enumerate | drop(1))
-        bld.add_point(bi.global_i - i, bpt, v);
-
-    // Add corner of boundary matrix to csr
-    bld.add_point(bpt, bpt, coeffs[sz - 1]);
-    // Add rest of boundary row (last) to csr
-    for (auto&& [i, v] : rev | enumerate | drop(1) | take(q.t - 1))
-        bld.add_point(bpt, bi.global_i - i, v);
-
-    // range representing the non-boundary portion of the boundary matrix
-    auto rng = coeffs | chunk(q.t) | take(q.r - 1) | for_each(take(q.t - 1));
-    return {matrix::dense{q.r - 1, q.t - 1, rng}, bi.global_i - 1, 1};
+    return {matrix::dense{q.r - 1, q.t - 1, inner}, bi.global_i - 1};
 }
 
 directional::directional(int dir,
@@ -185,15 +276,13 @@ directional::directional(int dir,
                          domain_boundaries db,
                          std::span<const boundary> object_b)
 {
+    // keep transformed solid points for mapping values in application function
+    const auto b_sz = g.R(dir).size();
+    spts = g.S(dir) | ranges::view::transform(m.ucf_ijk2dir(dir)) |
+           ranges::view::take(b_sz) | ranges::to<std::vector<int>>();
+
     const auto ps = m.plane_size(dir);
     const auto h = m.line(dir).h;
-    // educated guess for memory usage
-    {
-        const auto boundary_pts = g.R(dir).size();
-        offsets.reserve(ps + boundary_pts);
-        O.reserve(ps + boundary_pts);
-        zeros.reserve(ps + 1 + boundary_pts);
-    }
 
     auto [p, rmax, tmax, ex_max] = st.query_max();
     // set up the interior stencil
@@ -206,44 +295,28 @@ directional::directional(int dir,
 
     // We will be adding points to the csr via the builder so they can be inserted
     // in any order
-    auto bld = matrix::csr::builder(ps);
-    auto solid_pts = g.S(dir) | ranges::view::transform(m.ucf_ijk2dir(dir));
-    auto solid = ranges::begin(solid_pts);
-    auto solid_last = ranges::end(solid_pts);
-
-    // initialize with -1 to ensure calculations work out for first lb point
-    int b_prev = -1;
+    auto B_bld = value_builder(ps, spts.begin());
+    auto N_bld = derivative_builder(ps, spts.begin());
+    auto O_bld = matrix::block::builder(ps + b_sz);
 
     for (auto&& [lb, rb] : lines(dir, m, g, db, object_b)) {
 
-        auto [left_mat, lpt, li] =
-            left_wall(st, h, lb, solid, solid == solid_last, left, extra, bld);
-        solid += li;
+        auto [left_mat, lpt] = left_wall(st, h, lb, left, extra, B_bld, N_bld);
 
-        auto [right_mat, rpt, ri] =
-            right_wall(st, h, rb, solid, solid == solid_last, right, extra, bld);
-        solid += ri;
+        auto [right_mat, rpt] = right_wall(st, h, rb, right, extra, B_bld, N_bld);
 
         int n = rpt - lpt + 1;
         int nl = left_mat.rows();
         int nr = right_mat.rows();
 
-        // std::cout << "\n[lpt,rpt]\t[" << lpt << ", " << rpt << "]\n";
-        // std::cout << "[nl,n,nr]\t[" << nl << ", " << n << ", " << nr << "]\n";
-
-        O.emplace_back(std::move(left_mat),
-                       matrix::circulant{nl - p, n - nr - nl, interior_c},
-                       std::move(right_mat));
-        offsets.push_back(lpt);
-
-        zeros.push_back(lpt - 1 - b_prev);
-
-        b_prev = rpt;
+        O_bld.add_inner_block(lpt,
+                              std::move(left_mat),
+                              matrix::circulant{nl - p, n - nr - nl, interior_c},
+                              std::move(right_mat));
     }
-    // handle trailing zeros
-    zeros.push_back(std::max(0, m.size() - 1 - b_prev));
-
     // finish off csr
-    B = bld.to_csr(m.size());
+    B = B_bld.to_csr(m.size());
+    N = N_bld.to_csr(m.size());
+    O = std::move(O_bld).to_block(m.size());
 }
 } // namespace ccs::op

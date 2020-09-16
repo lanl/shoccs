@@ -31,12 +31,6 @@ public:
 
     size_t size() const noexcept { return v.size(); }
 
-    auto begin() const noexcept { return v.begin(); }
-    auto begin() noexcept { return v.begin(); }
-
-    auto end() const noexcept { return v.end(); }
-    auto end() noexcept { return v.end(); }
-
     constexpr int rows() const { return rows_; }
     constexpr int offset() const { return offset_; }
 
@@ -49,7 +43,7 @@ private:
 
         return ranges::views::zip_with(
             [](auto&& a, auto&& b) { return ranges::inner_product(a, b, 0.0); },
-            ranges::views::repeat_n(mat, mat.rows()),
+            ranges::views::repeat_n(mat.v, mat.rows()),
             rng | ranges::views::drop(mat.offset()) |
                 ranges::views::sliding(mat.size()));
     }

@@ -6,40 +6,60 @@
 #include <random>
 #include <vector>
 
+#include <range/v3/algorithm/equal.hpp>
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/generate_n.hpp>
+#include <range/v3/view/take_exactly.hpp>
 
 TEST_CASE("Identity")
 {
     using namespace ccs;
+    using namespace ranges::views;
 
     std::vector<real> left_c{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
     std::vector<real> int_c{1.0};
     std::vector<real> right_c{1, 0, 0, 1};
 
-    auto mat = matrix::block{matrix::dense{4, 4, left_c},
-                             matrix::circulant{4, 10, int_c},
-                             matrix::dense{2, 2, right_c}};
+    auto bld = matrix::block::builder();
+    bld.add_inner_block(1,
+                        matrix::dense{4, 4, left_c},
+                        matrix::circulant{4, 10, int_c},
+                        matrix::dense{2, 2, right_c});
+    bld.add_inner_block(17,
+                        matrix::dense{4, 4, left_c},
+                        matrix::circulant{4, 10, int_c},
+                        matrix::dense{2, 2, right_c});
+    bld.add_inner_block(34,
+                        matrix::dense{4, 4, left_c},
+                        matrix::circulant{4, 10, int_c},
+                        matrix::dense{2, 2, right_c});
 
-    REQUIRE(mat.rows() == 16);
+    auto mat = std::move(bld).to_block(52);
+
+    REQUIRE(mat.rows() == 52);
 
     std::random_device rd;  // Will be used to obtain a seed for the random number engine
     std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
     std::uniform_real_distribution<> dis{};
-    std::vector<real> rng =
-        ranges::views::generate_n([&gen, &dis]() { return dis(gen); }, mat.rows()) |
-        ranges::to<std::vector<real>>();
+    std::vector<real> rng = generate_n([&gen, &dis]() { return dis(gen); }, mat.rows()) |
+                            ranges::to<std::vector<real>>();
 
-    auto res = mat * rng;
+    auto res = mat * rng | ranges::to<std::vector<real>>();
 
-    REQUIRE(res.size() == 16u);
+    // zero locations
+    REQUIRE(res[0] == 0.0);
+    REQUIRE(res[33] == 0.0);
+    REQUIRE(res[50] == 0.0);
+    REQUIRE(res[51] == 0.0);
 
-    for (int i = 0; i < mat.rows(); i++) REQUIRE(rng[i] == res[i]);
+    REQUIRE(ranges::equal(rng | drop(1) | take(32), res | drop(1) | take(32)));
+    REQUIRE(ranges::equal(rng | drop(34) | take(16), res | drop(34) | take(16)));
 }
 
 TEST_CASE("Random Boundary")
 {
     using namespace ccs;
+    using namespace ranges::views;
 
     std::vector<real> left_c{
         2.247323503221594,   -5.0275337061235135, -0.9845370624957113, 9.621361506824222,
@@ -56,31 +76,42 @@ TEST_CASE("Random Boundary")
                               1.288208276267654,
                               1.3345939131355147,
                               -1.4713774812532359};
+    auto bld = matrix::block::builder(3);
+    auto msz = 16;
 
-    auto mat = matrix::block{matrix::dense{4, 5, left_c},
-                             matrix::circulant{3, 10, int_c},
-                             matrix::dense{2, 3, right_c}};
+    bld.add_inner_block(1,
+                        matrix::dense{4, 5, left_c},
+                        matrix::circulant{3, 10, int_c},
+                        matrix::dense{2, 3, right_c});
+    bld.add_inner_block(msz + 5,
+                        matrix::dense{4, 5, left_c},
+                        matrix::circulant{3, 10, int_c},
+                        matrix::dense{2, 3, right_c});
 
-    std::vector<real> rhs{1.1489955608128035,
-                          -9.641815125514444,
-                          0.5975150739415511,
-                          5.321795555035614,
-                          -5.467954909319733,
-                          1.4687325444642383,
-                          8.370366165425736,
-                          -2.810816575553474,
-                          1.815504174076466,
-                          1.1769187743854737,
-                          -8.870585410511126,
-                          -0.14181686526567816,
-                          7.93970270970086,
-                          0.14183234352470464,
-                          -8.054425087325441,
-                          -3.809075460321715};
+    auto mat = std::move(bld).to_block(2 * msz + 8);
+
+    std::vector<real> rhs_{1.1489955608128035,
+                           -9.641815125514444,
+                           0.5975150739415511,
+                           5.321795555035614,
+                           -5.467954909319733,
+                           1.4687325444642383,
+                           8.370366165425736,
+                           -2.810816575553474,
+                           1.815504174076466,
+                           1.1769187743854737,
+                           -8.870585410511126,
+                           -0.14181686526567816,
+                           7.93970270970086,
+                           0.14183234352470464,
+                           -8.054425087325441,
+                           -3.809075460321715};
+
+    auto rhs = concat(single(0.0), rhs_, repeat_n(0.0, 4), rhs_, repeat_n(0.0, 3)) | take_exactly(2 * msz + 8);
 
     auto result = mat * rhs;
 
-    std::vector<real> exact{109.78978122898833,
+    std::vector<real> exact_{109.78978122898833,
                             32.2780625869145,
                             -32.38838457188155,
                             33.25158538253831,
@@ -96,9 +127,8 @@ TEST_CASE("Random Boundary")
                             12.97052379948305,
                             -12.477808805315766,
                             -4.962089239867884};
+    auto exact = concat(single(0.0), exact_, repeat_n(0.0, 4), exact_, repeat_n(0.0, 3));
 
-    REQUIRE(result.size() == exact.size());
-
-    for (int i = 0; i < static_cast<int>(exact.size()); i++)
-        REQUIRE(result[i] == Catch::Approx(exact[i]));
+    for (auto&& [comp, ex] : zip(result, exact))
+        REQUIRE(comp == Catch::Approx(ex));
 }

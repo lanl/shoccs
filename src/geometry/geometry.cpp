@@ -25,7 +25,7 @@ closest_hit(std::span<const shape> shapes, const ray& r, real t_min, real t_max)
 // check for intersections along line I using line
 template <int I>
 static void init_line(std::span<const shape> shapes,
-                      const std::array<umesh_line, 3>& lines,                
+                      const std::array<umesh_line, 3>& lines,
                       std::vector<mesh_object_info>& info,
                       std::vector<std::vector<mesh_object_info>>& sorted_info)
 {
@@ -64,8 +64,10 @@ static void init_line(std::span<const shape> shapes,
                 // how should this be handled to favor uniform over degenerate cases.
                 coord[I] = static_cast<int>(hit->t / iline.h) + hit->ray_outside;
 
-                // if ray_outside then coord[I]-1 is the fluid coord and psi = hit->position[I]-(mesh_position[coord[I]-1])
-                // if !ray_outside then coord[I]+1 is the fluid coord and psi = mesh_position[coord[I]+1] - hit->position[I]
+                // if ray_outside then coord[I]-1 is the fluid coord and psi =
+                // hit->position[I]-(mesh_position[coord[I]-1]) if !ray_outside then
+                // coord[I]+1 is the fluid coord and psi = mesh_position[coord[I]+1] -
+                // hit->position[I]
                 int off = 1 - 2 * hit->ray_outside;
                 real fluid_pos = min + h * (coord[I] + off);
                 real psi = off * (fluid_pos - hit->position[I]) / h;
@@ -91,25 +93,24 @@ static constexpr bool same_plane(const int3& x, const int3& y)
 // append a range of points in `I` direction for:
 // [starting_coord, ending_I]
 template <int I>
-static void append_solid_points(std::vector<int3>& info,
-                                int3 starting_coord,
-                                int ending_I)
+static void
+append_solid_points(std::vector<int3>& info, int3 starting_coord, int ending_I)
 {
-    int nitems = ending_I - starting_coord[I]+1;
+    int nitems = ending_I - starting_coord[I] + 1;
     // info.reserve(info.size() + nitems);
     for (int i = 0; i < nitems; i++) {
         info.push_back(starting_coord);
         ++starting_coord[I];
     }
 
-    assert(nitems < 0 || starting_coord[I] == ending_I+1);
+    assert(nitems < 0 || starting_coord[I] == ending_I + 1);
 }
 
 template <int I>
-static void init_solid(const std::array<umesh_line, 3>& lines,                     
+static void init_solid(const std::array<umesh_line, 3>& lines,
                        std::span<const mesh_object_info> r,
                        std::vector<int3>& info)
-{    
+{
     constexpr auto S = index::dir<I>::slow;
     constexpr auto F = index::dir<I>::fast;
 
@@ -142,7 +143,7 @@ static void init_solid(const std::array<umesh_line, 3>& lines,
         if (m.ray_outside) {
             auto next = first + 1;
             if (next == last || !same_plane<S, F>(m.solid_coord, (*next).solid_coord)) {
-                append_solid_points<I>(info, m.solid_coord, ni-1);
+                append_solid_points<I>(info, m.solid_coord, ni - 1);
             }
         } else if (prev == last) {
             // if prev == last, then this is the first intersection point encountered
@@ -167,8 +168,7 @@ static void init_solid(const std::array<umesh_line, 3>& lines,
     }
 }
 
-geometry::geometry(std::span<const shape> shapes,
-                   const mesh& m)
+geometry::geometry(std::span<const shape> shapes, const mesh& m, bool check_domain)
 {
     std::array<umesh_line, 3> lines{m.line(0), m.line(1), m.line(2)};
     init_line<0>(shapes, lines, rx_, rx_m_);
@@ -178,6 +178,23 @@ geometry::geometry(std::span<const shape> shapes,
     init_solid<0>(lines, rx_, sx_);
     init_solid<1>(lines, ry_, sy_);
     init_solid<2>(lines, rz_, sz_);
+
+    // solid points are used as storage for data associated with
+    // boundary points.  For now we just crash if there isn't enough.
+    // A different strategy would be to "pad" the geometry with extra
+    // solid points and require all allocations over the domain to
+    // contain this extra padding.
+    if (check_domain) {
+        if (sx_.size() > rx_.size())
+            throw std::runtime_error(
+                "Not enough solid points in x to accomidate boundaries");
+        if (sy_.size() > ry_.size())
+            throw std::runtime_error(
+                "Not enough solid points in x to accomidate boundaries");
+        if (sz_.size() > rz_.size())
+            throw std::runtime_error(
+                "Not enough solid points in x to accomidate boundaries");
+    }
 }
 
 std::span<const mesh_object_info> geometry::Rx() const { return rx_; }

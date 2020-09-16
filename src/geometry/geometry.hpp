@@ -36,7 +36,7 @@ public:
     geometry() = default;
 
     // constructor for uniform meshes.
-    geometry(std::span<const shape>, const mesh& m);
+    geometry(std::span<const shape>, const mesh& m, bool check_domain = true);
 
     // Intersection of rays in x and object `shape_id`
     std::span<const mesh_object_info> Rx(int shape_id) const;

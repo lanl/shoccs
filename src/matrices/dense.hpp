@@ -34,12 +34,6 @@ public:
 
     size_t size() const noexcept { return v.size(); }
 
-    auto begin() const noexcept { return v.begin(); }
-    auto begin() noexcept { return v.begin(); }
-
-    auto end() const noexcept { return v.end(); }
-    auto end() noexcept { return v.end(); }
-
     constexpr int rows() const { return rows_; }
     constexpr int columns() const { return columns_; }
 
@@ -51,7 +45,7 @@ private:
 
         return ranges::views::zip_with(
             [](auto&& a, auto&& b) { return ranges::inner_product(a, b, 0.0); },
-            ranges::views::chunk(mat, mat.columns()),
+            ranges::views::chunk(mat.v, mat.columns()),
             ranges::views::repeat_n(rng, mat.rows()));
     }
 };

@@ -34,11 +34,13 @@ namespace ccs::op
 
 class directional
 {
-    std::vector<int> offsets;
-    std::vector<int> zeros;
-    std::vector<matrix::block> O;
-    matrix::csr B;
+    matrix::block O;  // main operator
+    matrix::csr B; // field values for boundary conditions
+    matrix::csr N; // for Neumann
     std::vector<real> interior_c;
+    // We only need the transformed coordinates of the solid points to map
+    // boundary values to their proper location
+    std::vector<int> spts;
 
 public:
     directional() = default;
@@ -50,23 +52,20 @@ public:
                 domain_boundaries db,
                 std::span<const boundary> object_b);
 
-    template <ranges::random_access_range R>
-    auto operator()(R&& rng)
+    template <ranges::random_access_range V,
+              ranges::input_range BV,
+              ranges::random_access_range DV = decltype(ranges::views::empty<real>),
+              ranges::input_range NBV = decltype(ranges::views::empty<real>)>
+    auto
+    operator()(V&& rng, BV&& boundary_values, DV&& deriv = {}, NBV&& neumann_values = {})
     {
         using namespace ranges::views;
-        // is returning a range worth it here?  If we simply take a "out" span we can
-        // write directly to it and do away with the explicit zeros here.  Our output
-        // range is no longer a random access range either
+
+        for (auto&& [i, v] : zip(spts, boundary_values)) rng[i] = v;
+        for (auto&& [i, v] : zip(spts, neumann_values)) deriv[i] = v;
+
         return zip_with(
-            std::plus{},
-            concat(repeat_n(0.0, zeros[0]),
-                   for_each(zip(offsets, O, zeros | drop(1)),
-                            [rng](auto&& t) {
-                                auto&& [off, mat, nz] = t;
-                                return ranges::yield_from(
-                                    concat(mat * (rng | drop(off)), repeat_n(0.0, nz)));
-                            })),
-            B * rng);
+            [](auto&&... args) { return (args + ...); }, O * rng, B * rng, N * deriv);
     }
 };
 } // namespace ccs::op

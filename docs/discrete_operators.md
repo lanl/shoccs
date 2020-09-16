@@ -142,6 +142,29 @@ However, requiring boundary condition information means abandoning `operator*` f
 How should we pass in boundary condition values?  The type of boundary conditions has already been incorporated by the construction of the operator via $O^x$ and $B^x$.  We could pass in functions which will then operate on $R^x$ mapped to $S^x$.  But how would we do something line the Carpenter test with $v_0 = u_n$ and $u_0 = v_n$.  That kind of boundary condition would require a lambda capture on the boundary points or a weird calling convention.  It seems better to pre-compute the object boundary conditions and pass them in as a span (conforming to $R^x$ which is mapped to $S^x$ in the operator).  What about domain bc's? dirichlet values could be written on the range
 before passing it in.  Floating doesn't have an impact.  Neumann requires some thought (also for the object bc's).  In general, the Neumann boundary is not a function of the field so it can simply be added to the computed field after the fact.  We might require Neumann conditions on domain bcs and the object.  Neumann conditions could simply be represented as a CSR matrix of coefficients which are applied to boundary values rather than the field data.
 
+For the gradient operator, the above boils down to passing in Dirichlet boundary data on $R^x$, $R^y$, and $R^z$.  Data should also be passed in for floating since information on the boundary will be overwritten. Same is true for the fluid data with neumann boundaries.
+
+In addition, for Neumann, we need to pass in data for $f'$ possibly at the domain boundaries as well as on $R^x$, $R^y$ and $R^z$.  This suggests another full domain range that is used just for Neumann bcs and is overwritten with boundary data.  
+This does pose a problem for domain corners where it is not strictly necessary to enforce $\partial f /\partial x = \partial f / \partial y$.  We could simply list that
+as a solver limitation to simplify the implementation
+
+Note that for Neumann BC's we need both the derivative information in the Neumann CSR matrix, $N^x$, and also coefficient data depending on the value information in $B^x$.  Furthermore, we are using a simple index based mapping scheme for boundary and derivative values $R^x \to S^x$.  If we return ranges from the gradient application operator we need to return a range associate with values and another with Neumann corrections.  We can't do much more because the ranges that result from applying the operator are not random access.  It would then be the callers' responsibility to extract the boundary
+information on $R^x$ for both sets of boundary conditions and combine them in a meaningful way.
+
+On the other hand we could adopt an interface that returns two spans, a full domain span
+and a boundary span.  Ideally we would like to not split up the data in terms of boundary conditions but simply return the computed derivative on the boundary points.  The full domain span would have the data from the solid points zeroed out.  
+
+Rather than returning spans, we could have the user specify two random access ranges to use as output ranges.  These probably can't be reused from the input field ranges or we will run into data access update conflicts.  What should this look like when calling the gradient operator?
+
+```c++
+// this?
+grad.with_boundary_values(dirichlet_Rx, Neumann_Rx).with_outputs(field_rng, deriv_rng).apply(a + b * c)
+
+// this?
+grad(a + b * c, dirichlet_Rx, Neumann_Rx, field_rng, deriv_rng)?
+```
+Should I abandon spans and just use a custom type?  
+
 Operator Generator
 ----
 

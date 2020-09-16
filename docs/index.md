@@ -8,6 +8,7 @@ Welcome to shoccs's documentation!
 
 ```{toctree}
 lazyness.md
+field.md
 geometry.md
 stencils.md
 discrete_operators.md
