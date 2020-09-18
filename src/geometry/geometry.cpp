@@ -185,13 +185,13 @@ geometry::geometry(std::span<const shape> shapes, const mesh& m, bool check_doma
     // solid points and require all allocations over the domain to
     // contain this extra padding.
     if (check_domain) {
-        if (sx_.size() > rx_.size())
+        if (sx_.size() < rx_.size())
             throw std::runtime_error(
                 "Not enough solid points in x to accomidate boundaries");
-        if (sy_.size() > ry_.size())
+        if (sy_.size() < ry_.size())
             throw std::runtime_error(
                 "Not enough solid points in x to accomidate boundaries");
-        if (sz_.size() > rz_.size())
+        if (sz_.size() < rz_.size())
             throw std::runtime_error(
                 "Not enough solid points in x to accomidate boundaries");
     }
