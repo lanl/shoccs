@@ -117,25 +117,25 @@ public:
 
     void add_left_domain(std::span<real> c, int r, int uc)
     {
-        std::cout << "\ndb left domain\n";
+        //std::cout << "\ndb left domain\n";
         if (r > 0) add(c, r, 1, uc, 1, false);
     }
 
     void add_left_solid(std::span<real> c, int r, int uc)
     {
-        std::cout << "\ndb left solid\n";
+        //std::cout << "\ndb left solid\n";
         if (r > 0) add(c, r, 1, uc, 1, true);
     }
 
     void add_right_domain(std::span<real> c, int r, int uc)
     {
-        std::cout << "\ndb right domain\n";
+        //std::cout << "\ndb right domain\n";
         if (r > 0) add(c, r, 1, uc, -1, false);
     }
 
     void add_right_solid(std::span<real> c, int r, int uc)
     {
-        std::cout << "\ndb right solid\n";
+        //std::cout << "\ndb right solid\n";
         if (r > 0) add(c, r, 1, uc, -1, true);
     }
 
@@ -318,5 +318,12 @@ directional::directional(int dir,
     B = B_bld.to_csr(m.size());
     N = N_bld.to_csr(m.size());
     O = std::move(O_bld).to_block(m.size());
+}
+
+void directional::operator()(std::span<const real> f,
+                             std::span<const real> df,
+                             result_view result) const
+{
+    result = O * f + B * f + N * df;
 }
 } // namespace ccs::op

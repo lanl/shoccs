@@ -2,6 +2,7 @@
 
 #include "circulant.hpp"
 #include "dense.hpp"
+#include "fields/result_field.hpp"
 #include "types.hpp"
 
 #include <range/v3/view/concat.hpp>
@@ -39,12 +40,13 @@ private:
     template <ranges::random_access_range R>
     friend constexpr auto operator*(const inner_block& mat, R&& rng)
     {
-        auto x = rng | ranges::views::drop(mat.row_start);
+        namespace vs = ranges::views;
+        auto x = rng | vs::drop(mat.row_start);
         int right_offset = mat.rows() - mat.right_boundary.columns();
-        return ranges::views::concat(mat.left_boundary * x,
-                                     mat.interior * x,
-                                     mat.right_boundary *
-                                         (x | ranges::views::drop(right_offset)));
+        return result_range{vs::concat(
+            (mat.left_boundary * x).range(),
+            (mat.interior * x).range(),
+            (mat.right_boundary * (x | vs::drop(right_offset))).range())};
     }
 };
 } // namespace ccs::matrix

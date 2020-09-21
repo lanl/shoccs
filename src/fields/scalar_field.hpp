@@ -3,16 +3,10 @@
 #include "indexing.hpp"
 #include "types.hpp"
 
-#include <concepts>
-#include <functional>
+#include "result_field.hpp"
 
 #include <range/v3/algorithm/copy.hpp>
-#include <range/v3/range/concepts.hpp>
 #include <range/v3/view/repeat_n.hpp>
-#include <range/v3/view/zip_with.hpp>
-#include <range/v3/view/zip.hpp>
-
-//#include "range_operators.hpp"
 
 namespace ccs
 {
@@ -84,51 +78,35 @@ template <typename T, typename U>
 concept Transposable_Fields = Field<T>&& Field<U> && (!detail::is_same_dim_v<T, U>);
 
 template <typename R>
-concept Index_Range = ranges::random_access_range<R> &&
+concept Index_Range = ranges::input_range<R> &&
                       (!std::same_as<int3, std::remove_cvref_t<R>>);
 
-
 template <ranges::random_access_range R, int I>
-struct scalar_range {
-    R r;
+struct scalar_range : result_range<R> {
     int3 extents_;
 
-    const R& range() const& { return r; }
-    R& range() & { return r; }
-    R range() && { return std::move(r); }
-
     int3 extents() { return extents_; }
-
-    // iterator interface
-    size_t size() const noexcept { return r.size(); }
-
-    auto begin() const { return r.begin(); }
-    auto begin() { return r.begin(); }
-    auto end() const { return r.end(); }
-    auto end() { return r.end(); }
-
-    decltype(auto) operator[](int i) & { return r[i]; }
-    auto operator[](int i) && { return r[i]; }
-    decltype(auto) operator[](int i) const& { return r[i]; }
 };
 
+namespace detail
+{
 template <Index_Range R, typename T, int I>
-class scalar_field_index
+class scalar_field_select
 {
     R indices;
     scalar_field<T, I>& f;
 
 public:
-    scalar_field_index(R indices, scalar_field<T, I>& f) requires std::is_lvalue_reference_v<R>
+    scalar_field_select(R indices,
+                        scalar_field<T, I>& f) requires std::is_lvalue_reference_v<R>
         : indices{indices}, f{f}
     {
     }
 
-    scalar_field_index(R indices, scalar_field<T, I>& f)
+    scalar_field_select(R indices, scalar_field<T, I>& f)
         : indices{std::move(indices)}, f{f}
     {
     }
-
 
     template <ranges::input_range V>
     void operator=(V&& values)
@@ -136,27 +114,29 @@ public:
         for (auto&& [i, v] : vs::zip(indices, values)) f(i) = v;
     }
 };
+} // namespace detail
 
 template <typename T, int I>
-class scalar_field
+class scalar_field : public result_field<std::vector, T>
 {
     using S = scalar_field<T, I>;
+    using P = result_field<std::vector, T>;
 
-    std::vector<T> f;
+    using P::f;
     int3 extents_;
 
 public:
     scalar_field() = default;
 
-    scalar_field(int n, int3 ex) : f(n), extents_{ex} {}
+    scalar_field(int n, int3 ex) : P{n}, extents_{ex} {}
 
-    scalar_field(std::vector<T>&& f, int3 ex) : f{std::move(f)}, extents_{ex} {}
+    scalar_field(std::vector<T> f, int3 ex) : P{std::move(f)}, extents_{ex} {}
 
     // this will not override default copy/move constructors
     template <typename R>
         requires Compatible_Fields<S, R> &&
         (!std::same_as<S, std::remove_cvref<R>>)scalar_field(R&& r)
-        : f(r.size()),
+        : P(r.size()),
     extents_{r.extents()}
     {
         ranges::copy(r, f.begin());
@@ -164,7 +144,7 @@ public:
 
     template <typename R>
     requires Transposable_Fields<S, R> scalar_field(R&& r)
-        : f(r.size()), extents_{r.extents()}
+        : P(r.size()), extents_{r.extents()}
     {
         // invoke copy assignment
         *this = r;
@@ -211,7 +191,7 @@ public:
     template <Numeric N>                                                                 \
     scalar_field& op(N n)                                                                \
     {                                                                                    \
-        for (auto&& v : f) v acc n;                                                      \
+        for (auto&& v : f) v acc n;                                                \
         return *this;                                                                    \
     }
 
@@ -223,54 +203,34 @@ gen_operators(operator*=, *=)
 gen_operators(operator/=, /=)
 #undef gen_operators
 
-        // clang-format on
+    // clang-format on
 
-        T&
-        operator[](int i)
-    {
-        return f[i];
-    }
-    const T& operator[](int i) const { return f[i]; }
-
-    // allow several kinds of indexing for easy use
-    const T& operator()(int i) const { return f[i]; };
-    T& operator()(int i) { return f[i]; }
-
-    const T& operator()(int3 ijk) const
+                constexpr int index(const int3& ijk) const
     {
         constexpr int D = I;
         constexpr int S = index::dir<D>::slow;
         constexpr int F = index::dir<D>::fast;
-        return f[ijk[S] * extents_[D] * extents_[F] + ijk[F] * extents_[D] + ijk[D]];
+        return ijk[S] * extents_[D] * extents_[F] + ijk[F] * extents_[D] + ijk[D];
     }
 
-    T& operator()(int3 ijk)
-    {
-        constexpr int D = I;
-        constexpr int S = index::dir<D>::slow;
-        constexpr int F = index::dir<D>::fast;
-        return f[ijk[S] * extents_[D] * extents_[F] + ijk[F] * extents_[D] + ijk[D]];
-    }
+    // bring base class call operator into scope so we don't shadow them
+    using P::operator();
+
+    const T& operator()(const int3& ijk) const { return f[index(ijk)]; }
+
+    T& operator()(const int3& ijk) { return f[index(ijk)]; }
 
     template <ranges::random_access_range R>
     requires(!std::same_as<int3, std::remove_cvref_t<R>>) auto operator()(R&& r) &
     {
-        return scalar_field_index<R, T, I>{std::forward<R>(r), *this};
+        return detail::scalar_field_select<R, T, I>{std::forward<R>(r), *this};
     }
 
     int3 extents() { return extents_; }
 
-    // iterator interface
-    size_t size() const noexcept { return f.size(); }
+    operator std::span<const T>() const { return f; }
 
-    auto begin() const { return f.begin(); }
-    auto begin() { return f.begin(); }
-    auto end() const { return f.end(); }
-    auto end() { return f.end(); }
-
-    const std::vector<T>& range() const& { return f; }
-    std::vector<T>& range() & { return f; }
-    std::vector<T> range() && { return std::move(f); }
+    operator result_view_t<T>() { return {f}; }
 }; // namespace ccs
 
 #define ret_range(expr)                                                                  \
@@ -312,5 +272,9 @@ gen_operators(operator/, std::divides{})
 
 #undef gen_operators
 #undef ret_range
+
+using x_field = scalar_field<real, 0>;
+using y_field = scalar_field<real, 1>;
+using z_field = scalar_field<real, 2>;
 
 } // namespace ccs

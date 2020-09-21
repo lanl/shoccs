@@ -1,5 +1,7 @@
 #include "types.hpp"
-#include "range_operators.hpp"
+
+#include "fields/result_field.hpp"
+#include <range/v3/view/repeat_n.hpp>
 
 namespace ccs::matrix
 {
@@ -18,7 +20,7 @@ private:
     template <ranges::input_range R>
     friend constexpr auto operator*(const zeros& mat, [[maybe_unused]] R&& rng)
     {        
-        return ranges::views::repeat_n(real{}, mat.rows());
+        return result_range{ranges::views::repeat_n(real{}, mat.rows())};
     }
 };
 } // namespace ccs::matrix

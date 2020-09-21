@@ -6,12 +6,8 @@
 #include "matrices/csr.hpp"
 #include "mesh/mesh.hpp"
 #include "stencils/stencils.hpp"
-#include "types.hpp"
+#include "fields/fields.hpp"
 
-#include <functional>
-#include <range/v3/range/concepts.hpp>
-#include <range/v3/view/for_each.hpp>
-#include <range/v3/view/zip.hpp>
 
 namespace ccs::op
 {
@@ -34,9 +30,9 @@ namespace ccs::op
 
 class directional
 {
-    matrix::block O;  // main operator
-    matrix::csr B; // field values for boundary conditions
-    matrix::csr N; // for Neumann
+    matrix::block O; // main operator
+    matrix::csr B;   // field values for boundary conditions
+    matrix::csr N;   // for Neumann
     std::vector<real> interior_c;
     // We only need the transformed coordinates of the solid points to map
     // boundary values to their proper location
@@ -52,20 +48,10 @@ public:
                 domain_boundaries db,
                 std::span<const boundary> object_b);
 
-    template <ranges::random_access_range V,
-              ranges::input_range BV,
-              ranges::random_access_range DV = decltype(ranges::views::empty<real>),
-              ranges::input_range NBV = decltype(ranges::views::empty<real>)>
-    auto
-    operator()(V&& rng, BV&& boundary_values, DV&& deriv = {}, NBV&& neumann_values = {})
-    {
-        using namespace ranges::views;
+    void operator()(std::span<const real> f,
+                    std::span<const real> df,
+                    result_view result) const;
 
-        for (auto&& [i, v] : zip(spts, boundary_values)) rng[i] = v;
-        for (auto&& [i, v] : zip(spts, neumann_values)) deriv[i] = v;
-
-        return zip_with(
-            [](auto&&... args) { return (args + ...); }, O * rng, B * rng, N * deriv);
-    }
+    const auto& solid_points() const { return spts; }
 };
 } // namespace ccs::op

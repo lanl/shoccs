@@ -4,13 +4,15 @@
 #include <compare>
 #include <vector>
 
+#include "fields/result_field.hpp"
+
 #include <range/v3/algorithm/sort.hpp>
 #include <range/v3/range/concepts.hpp>
 #include <range/v3/view/enumerate.hpp>
 #include <range/v3/view/sliding.hpp>
 #include <range/v3/view/transform.hpp>
 
-#include <iostream>
+//#include <iostream>
 namespace ccs::matrix
 {
 class csr
@@ -52,7 +54,7 @@ public:
 
         void add_point(int row, int col, real v)
         {
-            std::cout << "adding\t" << row << '\t' << col << '\t' << v << '\n';
+            //std::cout << "adding\t" << row << '\t' << col << '\t' << v << '\n';
             p.emplace_back(row, col, v);
         }
 
@@ -87,15 +89,15 @@ private:
     {
         // assert(rng.size() >= static_cast<unsigned>(mat.columns()));
 
-        return mat.u | ranges::views::sliding(2) |
-               ranges::views::transform([&mat, &rng](auto&& cols) {
-                   real acc{};
+        return result_range{mat.u | ranges::views::sliding(2) |
+                            ranges::views::transform([&mat, &rng](auto&& cols) {
+                                real acc{};
 
-                   for (int i = cols[0]; i < cols[1]; i++)
-                       acc += mat.w[i] * rng[mat.v[i]];
+                                for (int i = cols[0]; i < cols[1]; i++)
+                                    acc += mat.w[i] * rng[mat.v[i]];
 
-                   return acc;
-               });
+                                return acc;
+                            })};
     }
 };
 

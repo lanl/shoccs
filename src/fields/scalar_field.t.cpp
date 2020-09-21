@@ -95,10 +95,13 @@ TEST_CASE("selection")
     auto ind = std::vector<int>{0, 2, 5};
 
     // assert capture by reference
-    static_assert(std::same_as<decltype(x(ind)), scalar_field_index<std::vector<int>&, real, 0>>);
+    static_assert(std::same_as<decltype(x(ind)),
+                               detail::scalar_field_select<std::vector<int>&, real, 0>>);
     // assert capture by value
-    static_assert(std::same_as<decltype(x(std::move(ind))), scalar_field_index<std::vector<int>, real, 0>>);
-    static_assert(std::same_as<decltype(x(std::vector<int>{})), scalar_field_index<std::vector<int>, real, 0>>);
+    static_assert(std::same_as<decltype(x(std::move(ind))),
+                               detail::scalar_field_select<std::vector<int>, real, 0>>);
+    static_assert(std::same_as<decltype(x(std::vector<int>{})),
+                               detail::scalar_field_select<std::vector<int>, real, 0>>);
 
     x(ind) = std::vector<real>{-1, -3, -6};
 
@@ -106,14 +109,15 @@ TEST_CASE("selection")
 
     // these coordinates are in ijk and thus do not depend on the orientation of the
     // scalar field
-    const auto i = std::vector<int3> {{0, 0, 0}, {2, 0, 0}, {2, 1, 0}};
+    const auto i = std::vector<int3>{{0, 0, 0}, {2, 0, 0}, {2, 1, 0}};
     // assert capture by const reference
-    static_assert(std::same_as<decltype(x(i)), scalar_field_index<const std::vector<int3>&, real, 0>>);
+    static_assert(
+        std::same_as<decltype(x(i)),
+                     detail::scalar_field_select<const std::vector<int3>&, real, 0>>);
 
     scalar_field<real, 2> z = x;
-    z(i) = std::vector<real> {1, 3, 6};
+    z(i) = std::vector<real>{1, 3, 6};
     scalar_field<real, 0> xx = z;
 
     REQUIRE(rs::equal(xx, std::vector<real>{1, 2, 3, 4, 5, 6}));
-
 }

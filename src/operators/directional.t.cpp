@@ -12,6 +12,9 @@
 #include <range/v3/view/filter.hpp>
 #include <range/v3/view/generate_n.hpp>
 #include <range/v3/view/stride.hpp>
+#include <range/v3/view/iota.hpp>
+
+#include "fields/fields.hpp"
 
 namespace ccs
 {
@@ -81,7 +84,8 @@ TEST_CASE("Identity")
     using namespace ranges::views;
 
     auto st = stencil{identity_stencil{}};
-    auto m = mesh{real3{}, real3{1, 1, 1}, int3{11, 4, 4}};
+    const int3 extents {11, 4, 4};
+    auto m = mesh{real3{}, real3{1, 1, 1}, extents};
 
     domain_boundaries db{boundary::dirichlet, boundary::neumann};
     std::vector<boundary> ob{boundary::neumann, boundary::floating};
@@ -92,17 +96,19 @@ TEST_CASE("Identity")
     std::vector<real> rng = generate_n([&gen, &dis]() { return dis(gen); }, m.size()) |
                             ranges::to<std::vector<real>>();
 
+    std::vector<real> rhs(rng.size());
     SECTION("x-domain")
     {
 
         auto d = op::directional{0, st, m, geometry{}, db, ob};
-        std::vector<real> bv{};
-        std::vector<real> nv{};
-        std::vector<real> neumann_rng(rng.size());
+        scalar_field<real, 0> f{rng, extents};
+        scalar_field<real, 0> df(rng.size(), extents);
+        result_view result(rhs);
         // set neumann values
-        for (int i = m.n(0)-1; i < m.size(); i += m.n(0)) neumann_rng[i] = rng[i];
-        auto res = d(rng, bv, neumann_rng, nv);
-        REQUIRE(ranges::equal(res, rng));
+        for (int i = m.n(0)-1; i < m.size(); i += m.n(0)) df[i] = rng[i];
+        d(f, df, result);
+
+        REQUIRE(ranges::equal(result, rng));
     }
 #if 0
     SECTION("x-planes")

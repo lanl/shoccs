@@ -1,9 +1,8 @@
 #pragma once
 
-#include "range_operators.hpp"
+#include "fields/result_field.hpp"
 #include "types.hpp"
 #include <vector>
-
 
 // range includes
 #include <range/v3/algorithm/copy.hpp>
@@ -43,10 +42,10 @@ private:
     {
         assert(rng.size() >= static_cast<unsigned>(mat.columns()));
 
-        return ranges::views::zip_with(
+        return result_range{ranges::views::zip_with(
             [](auto&& a, auto&& b) { return ranges::inner_product(a, b, 0.0); },
             ranges::views::chunk(mat.v, mat.columns()),
-            ranges::views::repeat_n(rng, mat.rows()));
+            ranges::views::repeat_n(rng, mat.rows()))};
     }
 };
 } // namespace ccs::matrix

@@ -1,6 +1,8 @@
 #pragma once
 
+#include "fields/result_field.hpp"
 #include "types.hpp"
+
 #include <cassert>
 #include <span>
 
@@ -41,11 +43,11 @@ private:
         assert(rng.size() >= static_cast<unsigned>(mat.rows()));
         assert(mat.size() > 0);
 
-        return ranges::views::zip_with(
+        return result_range{ranges::views::zip_with(
             [](auto&& a, auto&& b) { return ranges::inner_product(a, b, 0.0); },
             ranges::views::repeat_n(mat.v, mat.rows()),
             rng | ranges::views::drop(mat.offset()) |
-                ranges::views::sliding(mat.size()));
+                ranges::views::sliding(mat.size()))};
     }
 };
 

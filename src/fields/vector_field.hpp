@@ -73,6 +73,42 @@ struct vector_range {
 #endif
 };
 
+struct vector_field_index {
+    std::span<const int> x;
+    std::span<const int> y;
+    std::span<const int> z;
+};
+
+struct vector_field_bvalues
+{
+    std::span<const real> x;
+    std::span<const real> y;
+    std::span<const real> z;
+};
+
+namespace detail
+{
+template <typename T>
+class vector_field_select
+{
+    const vector_field_index& indices;
+    vector_field<T>& f;
+
+public:
+    vector_field_select(const vector_field_index& indices,
+                        vector_field<T>& f)
+        : indices{indices}, f{f}
+    {
+    }
+
+    void operator=(const vector_field_bvalues& values)
+    {
+        f.x()(indices.x) = values.x;
+        f.y()(indices.y) = values.y;
+        f.z()(indices.z) = values.z;
+    }
+};
+} // namespace detail
 template <typename T>
 class vector_field
 {
@@ -140,19 +176,11 @@ gen_operators(operator/=, /=)
     {
         return x_.extents_;
     }
-#if 0
-    // iterator interface
-    size_t size() const noexcept { return f.size(); }
 
-    auto begin() const { return f.begin(); }
-    auto begin() { return f.begin(); }
-    auto end() const { return f.end(); }
-    auto end() { return f.end(); }
-
-    const std::vector<T>& range() const& { return f; }
-    std::vector<T>& range() & { return f; }
-    std::vector<T> range() && { return std::move(f); }
-#endif
+    auto operator()(const vector_field_index& i) &
+    {
+        return detail::vector_field_select<T>{i, *this};
+    }
 };
 
 } // namespace ccs

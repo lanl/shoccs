@@ -6,6 +6,8 @@
 #include "types.hpp"
 #include "zeros.hpp"
 
+#include "fields/result_field.hpp"
+
 #include <concepts>
 #include <range/v3/view/concat.hpp>
 #include <range/v3/view/for_each.hpp>
@@ -78,11 +80,12 @@ private:
     {
         using namespace ranges::views;
 
-        return concat(mat.z[0] * rng,
-                      for_each(zip(mat.blocks, mat.z | drop(1)), [rng](auto&& t) {
-                          auto&& [m, z] = t;
-                          return ranges::yield_from(concat(m * rng, z * rng));
-                      }));
+        return result_range{concat(
+            (mat.z[0] * rng).range(),
+            for_each(zip(mat.blocks, mat.z | drop(1)), [rng](auto&& t) {
+                auto&& [m, z] = t;
+                return ranges::yield_from(concat((m * rng).range(), (z * rng).range()));
+            }))};
     }
 };
 } // namespace ccs::matrix
