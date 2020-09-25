@@ -1,7 +1,7 @@
 add_library(matrices INTERFACE)
 
 target_include_directories(matrices INTERFACE ..)
-target_link_libraries(matrices INTERFACE ranges)
+target_link_libraries(matrices INTERFACE range-v3::range-v3)
 
 add_unit_test(dense "matrices" matrices)
 add_unit_test(circulant "matrices" matrices)

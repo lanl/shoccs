@@ -85,7 +85,7 @@ template <ranges::random_access_range R, int I>
 struct scalar_range : result_range<R> {
     int3 extents_;
 
-    int3 extents() { return extents_; }
+    int3 extents() const { return extents_; }
 };
 
 namespace detail
@@ -113,6 +113,13 @@ public:
     {
         for (auto&& [i, v] : vs::zip(indices, values)) f(i) = v;
     }
+
+    template <ranges::output_range<T> V>
+    void to(V&& values) const
+    {
+         for (auto&& [i, v] : vs::zip(indices, values)) v = f(i);
+    }
+
 };
 } // namespace detail
 
@@ -226,7 +233,7 @@ gen_operators(operator/=, /=)
         return detail::scalar_field_select<R, T, I>{std::forward<R>(r), *this};
     }
 
-    int3 extents() { return extents_; }
+    int3 extents() const { return extents_; }
 
     operator std::span<const T>() const { return f; }
 

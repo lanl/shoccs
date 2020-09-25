@@ -11,8 +11,6 @@
 TEST_CASE("transposing")
 {
     using namespace ccs;
-    namespace rs = ranges;
-    namespace vs = ranges::views;
 
     auto x =
         scalar_field<real, 0>{std::vector{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, int3{3, 2, 1}};
@@ -42,8 +40,6 @@ TEST_CASE("transposing")
 TEST_CASE("3d")
 {
     using namespace ccs;
-    namespace rs = ranges;
-    namespace vs = ranges::views;
 
     auto v = vs::iota(1, 13) | rs::to<std::vector<real>>();
 
@@ -85,8 +81,6 @@ TEST_CASE("3d")
 TEST_CASE("selection")
 {
     using namespace ccs;
-    namespace rs = ranges;
-    namespace vs = ranges::views;
 
     auto x = scalar_field<real, 0>{std::vector<real>{1, 2, 3, 4, 5, 6}, int3{3, 2, 1}};
 
@@ -107,6 +101,12 @@ TEST_CASE("selection")
 
     REQUIRE(rs::equal(x, std::vector<real>{-1, 2, -3, 4, 5, -6}));
 
+    std::vector<real> w(2);
+
+    x(ind).to(w);
+    REQUIRE(w == std::vector<real>{-1, -3});
+
+
     // these coordinates are in ijk and thus do not depend on the orientation of the
     // scalar field
     const auto i = std::vector<int3>{{0, 0, 0}, {2, 0, 0}, {2, 1, 0}};
@@ -120,4 +120,5 @@ TEST_CASE("selection")
     scalar_field<real, 0> xx = z;
 
     REQUIRE(rs::equal(xx, std::vector<real>{1, 2, 3, 4, 5, 6}));
+    
 }

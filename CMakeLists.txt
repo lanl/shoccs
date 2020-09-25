@@ -6,7 +6,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
+option(SHOCCS_TPL_DIR "Third party library installation directory")
+if (SHOCCS_TPL_DIR)
+  list(APPEND CMAKE_PREFIX_PATH ${SHOCCS_TPL_DIR})
+endif()
 
 find_package(Lua REQUIRED)
 # make lua a target
@@ -16,14 +21,14 @@ target_link_libraries(lua INTERFACE ${LUA_LIBRARIES})
 
 find_package(sol2 REQUIRED)
 find_package(fmt REQUIRED)
+find_package(range-v3 REQUIRED)
 find_package(Catch2 3)
 if (Catch2_FOUND)
   message(STATUS "Catch2 has been found.  Enabling testing via ctest")
   enable_testing()
 endif()
 
-add_library(ranges INTERFACE)
-target_include_directories(ranges INTERFACE "/Users/ptb/gitrepos/range-v3/include")
+
 
 include(GNUInstallDirs)
 

@@ -79,35 +79,59 @@ struct vector_field_index {
     std::span<const int> z;
 };
 
-struct vector_field_bvalues
-{
-    std::span<const real> x;
-    std::span<const real> y;
-    std::span<const real> z;
+// Do we need this in addition to vector_range?
+template <typename X, typename Y, typename Z>
+struct vector_field_bvalues {
+    X x;
+    Y y;
+    Z z;
 };
+
+template <typename X, typename Y, typename Z>
+vector_field_bvalues(X&&, Y&&, Z &&)->vector_field_bvalue<X, Y, Z>;
 
 namespace detail
 {
-template <typename T>
-class vector_field_select
-{
-    const vector_field_index& indices;
-    vector_field<T>& f;
-
-public:
-    vector_field_select(const vector_field_index& indices,
-                        vector_field<T>& f)
-        : indices{indices}, f{f}
-    {
-    }
-
-    void operator=(const vector_field_bvalues& values)
-    {
-        f.x()(indices.x) = values.x;
-        f.y()(indices.y) = values.y;
-        f.z()(indices.z) = values.z;
-    }
+// some traits for bvalues
+template <typename = void>
+struct is_vector_field_bvalues : std::false_type {
 };
+
+template <typename X, typename Y, typename Z>
+struct is_vector_field_bvalues<vector_field_bvalues<X, Y, Z>> : std::true_type {
+};
+
+template <typename U>
+constexpr bool is_vector_field_bvalues_v =
+    is_vector_field_bvalues<std::remove_cvref_t<U>>::value;
+} // namespace detail
+
+
+    namespace detail
+{
+    template <typename T>
+    class vector_field_select
+    {
+        const vector_field_index& indices;
+        vector_field<T>& f;
+
+    public:
+        vector_field_select(const vector_field_index& indices, vector_field<T>& f)
+            : indices{indices}, f{f}
+        {
+        }
+
+        template <rs::input_range X, rs::input_range Y, rs::input_range Z>
+        void operator=(vector_field_bvalues<X, Y, Z> values)
+        {
+            f.x()(indices.x) = values.x;
+            f.y()(indices.y) = values.y;
+            f.z()(indices.z) = values.z;
+        }
+
+        template <rs::output_range<T> X, rs::output_range<T>, Y, rs::output_range<T> Z>
+        void to
+    };
 } // namespace detail
 template <typename T>
 class vector_field
