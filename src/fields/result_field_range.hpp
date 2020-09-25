@@ -1,7 +1,9 @@
 #pragma once
 
+#include <range/v3/core.hpp>
 #include <range/v3/range/concepts.hpp>
 #include <range/v3/view/repeat.hpp>
+#include <range/v3/view/repeat_n.hpp>
 #include <range/v3/view/zip.hpp>
 #include <range/v3/view/zip_with.hpp>
 
@@ -12,6 +14,8 @@
 
 namespace ccs
 {
+
+namespace vs = ranges::views;
 
 template <ranges::input_range R>
 struct result_range;
@@ -50,50 +54,119 @@ constexpr bool is_result_v = is_result_field_v<U> || is_result_range_v<U>;
 template <typename T>
 concept Result = detail::is_result_v<T>;
 
-template <rs::input_range R>
-struct result_range {
+template <ranges::input_range R>
+struct result_range : R {
+#if 0
+private:
+    friend ranges::range_access;
+
     R r;
 
-    const R& range() const& { return r; }
-    R& range() & { return r; }
-    R range() && { return std::move(r); }
+    struct cursor {
+    private:
+        using It = ranges::iterator_t<R>;
+        It iter;
 
-    // iterator interface
-    size_t size() const noexcept requires rs::sized_range<R> { return r.size(); }
+    public:
+        // using contiguous = ;
 
-    auto begin() const { return r.begin(); }
-    auto begin() { return r.begin(); }
-    auto end() const { return r.end(); }
-    auto end() { return r.end(); }
+        cursor() = default;
+        cursor(It it) : iter(it) {}
 
-    decltype(auto) operator[](int i) & requires rs::random_access_range<R>
-    {
-        return r[i];
-    }
-    auto operator[](int i) && requires rs::random_access_range<R> { return r[i]; }
-    const auto& operator[](int i) const& requires rs::random_access_range<R>
-    {
-        return r[i];
-    }
+        decltype(auto) read() const { return *iter; }
+        decltype(auto) read() { return *iter; }
+
+        bool equal(const cursor& other) const { return iter == other.iter; }
+
+        void next() { ++iter; }
+
+        void prev() requires ranges::bidirectional_iterator<It> { --iter; }
+
+        auto distance_to(const cursor& other) const
+            -> decltype(ranges::distance(iter, other.iter))
+        {
+            return ranges::distance(iter, other.iter);
+        }
+
+        auto advance(std::ptrdiff_t n) -> decltype(ranges::advance(iter, n))
+        {
+            ranges::advance(iter, n);
+        }
+    };
+
+    cursor begin_cursor() const { return {r.begin()}; }
+    cursor begin_cursor() { return {r.begin()}; }
+
+    cursor end_cursor() const { return {ranges::end(r)}; }
+    cursor end_cursor() { return {ranges::end(r)}; }
+#endif
+public:
+    result_range() = default;
+
+    result_range(R&& r) : R{std::forward<R>(r)} {}
 };
 
-template <rs::input_range R>
-result_range(R r) -> result_range<R>;
+template <typename R>
+result_range<R> result(R&& r)
+{
+    return {std::forward<R>(r)};
+}
 
 template <template <typename> typename C, typename T>
-class result_field
+class result_field : public ranges::view_facade<result_field<C, T>>
 {
     using S = result_field<C, T>;
+    using F = C<T>;
+    friend ranges::range_access;
 
 protected:
-    C<T> f;
+    F f;
+
+private:
+    struct cursor {
+    private:
+        using It = ranges::iterator_t<F>;
+        It iter;
+
+    public:
+        using contiguous = std::true_type;
+
+        cursor() = default;
+        cursor(It it) : iter(it) {}
+
+        decltype(auto) read() const { return *iter; }
+        decltype(auto) read() { return *iter; }
+
+        bool equal(const cursor& other) const { return iter == other.iter; }
+
+        void next() { ++iter; }
+
+        void prev() { --iter; }
+
+        auto distance_to(const cursor& other) const
+            -> decltype(ranges::distance(iter, other.iter))
+        {
+            return ranges::distance(iter, other.iter);
+        }
+
+        auto advance(std::ptrdiff_t n) -> decltype(ranges::advance(iter, n))
+        {
+            ranges::advance(iter, n);
+        }
+    };
+
+    cursor begin_cursor() const { return {ranges::begin(f)}; }
+    cursor begin_cursor() { return {ranges::begin(f)}; }
+
+    cursor end_cursor() const { return {ranges::end(f)}; }
+    cursor end_cursor() { return {ranges::end(f)}; }
 
 public:
     result_field() = default;
 
-    result_field(const C<T>& f) : f{f} {}
-    result_field(C<T>&& f) : f{std::move(f)} {}
-    result_field(int sz) requires std::is_constructible_v<C<T>, int> : f(sz) {}
+    result_field(const F& f) : f{f} {}
+    result_field(F&& f) : f{std::move(f)} {}
+    result_field(int sz) requires std::is_constructible_v<F, int> : f(sz) {}
 
     // do not provide a constructor from an input range since C may be non-owning
     // and that would make such an operator dangerous
@@ -102,7 +175,7 @@ public:
     template <Result R>                                                                  \
     requires(!std::same_as<S, std::remove_cvref<R>>) result_field& op(R&& r)             \
     {                                                                                    \
-        constexpr bool can_resize = requires(R a, C<T> b) { b.resize(a.size()); };       \
+        constexpr bool can_resize = requires(R a, F b) { b.resize(a.size()); };          \
         if constexpr (can_resize) f.resize(r.size());                                    \
                                                                                          \
         int sz = f.size();                                                               \
@@ -128,54 +201,57 @@ gen_operators(operator*=, *=)
 gen_operators(operator/=, /=)
 #undef gen_operators
 
-        // clang-format on
+    // clang-format on
 
+#if 0
         T&
         operator[](int i)
     {
         return f[i];
     }
     const T& operator[](int i) const { return f[i]; }
-
-    // allow several kinds of indexing for easy use
-    const T& operator()(int i) const { return f[i]; };
+#endif
+        // allow several kinds of indexing for easy use
+        const T&
+        operator()(int i) const
+    {
+        return f[i];
+    };
     T& operator()(int i) { return f[i]; }
-
-    // iterator interface
-    size_t size() const noexcept { return f.size(); }
-
-    auto begin() const { return f.begin(); }
-    auto begin() { return f.begin(); }
-    auto end() const { return f.end(); }
-    auto end() { return f.end(); }
 
     // allow conversion to spans
     operator std::span<T>() { return f; }
 
-    const C<T>& range() const& { return f; }
-    C<T>& range() & { return f; }
-    C<T> range() && { return std::move(f); }
-};
-
-#define ret_range(expr)                                                                  \
-    return scalar_range<decltype(expr), I> { expr, t.extents() }
+#if 0
+    const F& range() const& { return f; }
+    F& range() & { return f; }
+    F range() && { return std::move(f); }
+#endif
+}; // namespace ccs
 
 #define gen_operators(op, f)                                                             \
     template <Result T, Result U>                                                        \
     constexpr auto op(T&& t, U&& u)                                                      \
     {                                                                                    \
-        return result_range{                                                             \
-            vs::zip_with(f, std::forward<T>(t).range(), std::forward<U>(u).range())};    \
+        return result(vs::zip_with(f, std::forward<T>(t), std::forward<U>(u)));          \
     }                                                                                    \
     template <Result T, Numeric U>                                                       \
     constexpr auto op(T&& t, U u)                                                        \
     {                                                                                    \
-        return result_range{vs::zip_with(f, std::forward<T>(t).range(), vs::repeat(u))}; \
+        if constexpr (ranges::sized_range<T>)                                            \
+            return result(                                                               \
+                vs::zip_with(f, std::forward<T>(t), vs::repeat_n(u, t.size())));         \
+        else                                                                             \
+            return result(vs::zip_with(f, std::forward<T>(t), vs::repeat(u)));           \
     }                                                                                    \
     template <Result T, Numeric U>                                                       \
     constexpr auto op(U u, T&& t)                                                        \
     {                                                                                    \
-        return result_range{vs::zip_with(f, vs::repeat(u), std::forward<T>(t).range())}; \
+        if constexpr (ranges::sized_range<T>)                                            \
+            return result(                                                               \
+                vs::zip_with(f, vs::repeat_n(u, t.size()), std::forward<T>(t)));         \
+        else                                                                             \
+            return result(vs::zip_with(f, vs::repeat(u), std::forward<T>(t)));           \
     }
 
 // clang-format off
@@ -188,10 +264,11 @@ gen_operators(operator*, std::multiplies{})
 gen_operators(operator/, std::divides{})
 
 #undef gen_operators
-#undef ret_range
+
     // clang-format on
 
     template <typename T = real>
     using result_view_t = result_field<std::span, T>;
 using result_view = result_view_t<real>;
+
 } // namespace ccs

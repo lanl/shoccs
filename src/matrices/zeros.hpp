@@ -20,7 +20,7 @@ private:
     template <ranges::input_range R>
     friend constexpr auto operator*(const zeros& mat, [[maybe_unused]] R&& rng)
     {        
-        return result_range{ranges::views::repeat_n(real{}, mat.rows())};
+        return result_range{vs::repeat_n(real{}, mat.rows())};
     }
 };
 } // namespace ccs::matrix

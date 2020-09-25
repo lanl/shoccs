@@ -128,7 +128,7 @@ class scalar_field : public result_field<std::vector, T>
 public:
     scalar_field() = default;
 
-    scalar_field(int n, int3 ex) : P{n}, extents_{ex} {}
+    scalar_field(int3 ex) : P{ex[0]*ex[1]*ex[2]}, extents_{ex} {}
 
     scalar_field(std::vector<T> f, int3 ex) : P{std::move(f)}, extents_{ex} {}
 

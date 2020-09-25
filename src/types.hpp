@@ -4,6 +4,8 @@
 #include <span>
 #include <concepts>
 
+// do this for easy reference
+namespace ranges::views {}
 
 namespace ccs
 {
@@ -18,6 +20,9 @@ using span = std::span<T>;
 
 template <typename T>
 concept Numeric = std::integral<T> || std::floating_point<T>;
+
+namespace rs = ranges;
+namespace vs = ranges::views;
 
 }
 

@@ -37,10 +37,9 @@ public:
     }
 
 private:
-    template <ranges::random_access_range R>
+    template <rs::random_access_range R>
     friend constexpr auto operator*(const inner_block& mat, R&& rng)
     {
-        namespace vs = ranges::views;
         auto x = rng | vs::drop(mat.row_start);
         int right_offset = mat.rows() - mat.right_boundary.columns();
         return result_range{vs::concat(

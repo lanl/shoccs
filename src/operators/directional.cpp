@@ -36,6 +36,9 @@ namespace detail
 // lists of values where the order dictates everything. The boundary derivative CSR matrix
 // also contains information on the domain boundaries whereas the boundary value CSR
 // matrix does not
+//
+// In order for `B * f + N * df` to make sense, a boundary point must be denoted by the same
+// row in each matrix but the columns are allowed to differ
 using It = typename std::vector<int>::const_iterator;
 class builder_
 {
@@ -43,34 +46,38 @@ class builder_
     It spts;
 
     template <ranges::random_access_range R>
-    void add_(R&& rng, int bpt, int r, int t, int uc, int inc)
+    void add_(R&& rng, int2 bpt, int r, int t, int uc, int inc)
     {
         using namespace ranges::views;
 
         // add boundary column to csr
         for (auto&& [i, v] : rng | stride(t) | enumerate | drop(1))
-            b.add_point(uc + inc * i, bpt, v);
+            b.add_point(uc + inc * i, bpt[1], v);
 
         // add boundary point to csr
-        b.add_point(bpt, bpt, rng[0]);
+        b.add_point(bpt[0], bpt[1], rng[0]);
 
         // add boundary row to csr
         for (auto&& [i, v] : rng | enumerate | drop(1) | take(t - 1))
-            b.add_point(bpt, uc + inc * i, v);
+            b.add_point(bpt[0], uc + inc * i, v);
     }
 
 protected:
     builder_() = default;
     builder_(int n, It spts) : b{n}, spts{spts} {}
 
-    void add(std::span<real> c, int r, int t, int uc, int inc, bool solid)
+    int add(std::span<real> c, int r, int t, int uc, int inc, bool solid, int bpt_row)
     {
         using namespace ranges::views;
-        auto bpt = solid ? *spts++ : uc;
+        auto bpt_col = solid ? *spts++ : uc;
+        auto bpt = bpt_row >= 0 ? int2{bpt_row, bpt_col} : int2{bpt_col, bpt_col}; 
+
         if (inc > 0)
             add_(c | take_exactly(r * t), bpt, r, t, uc, inc);
         else
             add_(c | take_exactly(r * t) | reverse, bpt, r, t, uc, inc);
+
+        return bpt_col;
     }
 
     auto to_csr_(int nrows) { return b.to_csr(nrows); }
@@ -82,16 +89,16 @@ public:
     value_builder() = default;
     value_builder(int n, detail::It spts) : detail::builder_{n, spts} {}
 
-    void add_left(std::span<real> c, int r, int t, int uc)
+    int add_left(std::span<real> c, int r, int t, int uc)
     {
-        std::cout << "\nvb left\n";
-        add(c, r, t, uc, 1, true);
+        //std::cout << "\nvb left\n";
+        return add(c, r, t, uc, 1, true, -1);
     }
 
-    void add_right(std::span<real> c, int r, int t, int uc)
+    int add_right(std::span<real> c, int r, int t, int uc)
     {
-        std::cout << "\nvb right\n";
-        add(c, r, t, uc, -1, true);
+        //std::cout << "\nvb right\n";
+        return add(c, r, t, uc, -1, true, -1);
     }
 
     auto inner_left(std::span<real> c, int r, int t)
@@ -118,25 +125,25 @@ public:
     void add_left_domain(std::span<real> c, int r, int uc)
     {
         //std::cout << "\ndb left domain\n";
-        if (r > 0) add(c, r, 1, uc, 1, false);
+        if (r > 0) add(c, r, 1, uc, 1, false, -1);
     }
 
-    void add_left_solid(std::span<real> c, int r, int uc)
+    void add_left_solid(std::span<real> c, int r, int uc, int bpt)
     {
         //std::cout << "\ndb left solid\n";
-        if (r > 0) add(c, r, 1, uc, 1, true);
+        if (r > 0) add(c, r, 1, uc, 1, true, bpt);
     }
 
     void add_right_domain(std::span<real> c, int r, int uc)
     {
         //std::cout << "\ndb right domain\n";
-        if (r > 0) add(c, r, 1, uc, -1, false);
+        if (r > 0) add(c, r, 1, uc, -1, false, -1);
     }
 
-    void add_right_solid(std::span<real> c, int r, int uc)
+    void add_right_solid(std::span<real> c, int r, int uc, int bpt)
     {
         //std::cout << "\ndb right solid\n";
-        if (r > 0) add(c, r, 1, uc, -1, true);
+        if (r > 0) add(c, r, 1, uc, -1, true, bpt);
     }
 
     auto to_csr(int nrows) { return to_csr_(nrows); }
@@ -232,10 +239,11 @@ static wall_info left_wall(const stencil& st,
         db.add_left_domain(extra, q.nextra, bi.global_i);
         return {matrix::dense{q.r, q.t, coeffs}, bi.global_i};
     }
-    if (bi.b == boundary::neumann)
-        db.add_left_solid(extra, q.nextra, bi.global_i);
-    else
-        vb.add_left(coeffs, q.r, q.t, bi.global_i);
+    // always add coefficients to value_builder since field values will
+    // be required for both df and f approximations
+    auto bpt = vb.add_left(coeffs, q.r, q.t, bi.global_i);
+
+    if (bi.b == boundary::neumann) db.add_left_solid(extra, q.nextra, bi.global_i, bpt);
 
     auto inner = vb.inner_left(coeffs, q.r, q.t);
 
@@ -258,11 +266,11 @@ static wall_info right_wall(const stencil& st,
         db.add_right_domain(extra, q.nextra, bi.global_i);
         return {matrix::dense{q.r, q.t, coeffs}, bi.global_i};
     }
+    // always add coefficients to value_builder since field values will
+    // be required for both df and f approximations
+    auto bpt = vb.add_right(coeffs, q.r, q.t, bi.global_i);
 
-    if (bi.b == boundary::neumann)
-        db.add_right_solid(extra, q.nextra, bi.global_i);
-    else
-        vb.add_right(coeffs, q.r, q.t, bi.global_i);
+    if (bi.b == boundary::neumann) db.add_right_solid(extra, q.nextra, bi.global_i, bpt);
 
     auto inner = vb.inner_right(coeffs, q.r, q.t);
 

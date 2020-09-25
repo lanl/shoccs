@@ -28,8 +28,8 @@ TEST_CASE("Identity")
     std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
     std::uniform_real_distribution<> dis{};
     std::vector<real> rng =
-        ranges::views::generate_n([&gen, &dis]() { return dis(gen); }, mat.rows()) |
-        ranges::to<std::vector<real>>();
+        vs::generate_n([&gen, &dis]() { return dis(gen); }, mat.rows()) |
+        rs::to<std::vector<real>>();
 
     auto res = mat * rng;
 

@@ -78,13 +78,11 @@ private:
     template <ranges::random_access_range R>
     friend constexpr auto operator*(const block& mat, R&& rng)
     {
-        using namespace ranges::views;
-
-        return result_range{concat(
+        return result_range{vs::concat(
             (mat.z[0] * rng).range(),
-            for_each(zip(mat.blocks, mat.z | drop(1)), [rng](auto&& t) {
+            vs::for_each(vs::zip(mat.blocks, mat.z | vs::drop(1)), [rng](auto&& t) {
                 auto&& [m, z] = t;
-                return ranges::yield_from(concat((m * rng).range(), (z * rng).range()));
+                return rs::yield_from(vs::concat((m * rng).range(), (z * rng).range()));
             }))};
     }
 };

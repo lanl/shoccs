@@ -15,6 +15,14 @@ class gradient
     vector_field_index b_index;
 
 public:
+    gradient() = default;
+    gradient(derivative&& dxyz, int3 extents);
+    gradient(const stencil&,
+             const mesh&,
+             const geometry&,
+             const grid_boundaries&,
+             const object_boundaries&);
+
     template <int N>
     void operator()(const scalar_field<real, N>& f,
                     const scalar_field<real, N>& df,
@@ -33,5 +41,5 @@ public:
         // compute directional derivatives in all directions and store result in `grad`
         dxyz(f_work, df_work, grad);
     }
-}
+};
 } // namespace ccs::op

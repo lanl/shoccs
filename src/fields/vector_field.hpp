@@ -123,7 +123,7 @@ class vector_field
 public:
     vector_field() = default;
 
-    vector_field(int n, int3 ex) : x_{n, ex}, y_{n, ex}, z_{n, ex} {}
+    vector_field(int3 ex) : x_{ex}, y_{ex}, z_{ex} {}
 
     vector_field(X&& x, Y&& y, Z&& z)
         : x_{std::move(x)}, y_{std::move(y)}, z_{std::move(z)}
