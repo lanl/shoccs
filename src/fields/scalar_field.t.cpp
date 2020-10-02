@@ -1,5 +1,5 @@
 #include "scalar_field.hpp"
-
+#include "select.hpp"
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -7,6 +7,7 @@
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/repeat_n.hpp>
+#include <range/v3/view/transform.hpp>
 
 TEST_CASE("transposing")
 {
@@ -14,9 +15,10 @@ TEST_CASE("transposing")
 
     auto x =
         scalar_field<real, 0>{std::vector{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, int3{3, 2, 1}};
+    REQUIRE(x.size() == 6u);
     auto y = scalar_field<real, 0>{std::vector{-1.0, -2.0, -3.0, -4.0, -5.0, -6.0},
                                    int3{3, 2, 1}};
-
+    REQUIRE(y.size() == 6u);
     auto sum = x + y + 2 * x - y + 3 * y;
 
     REQUIRE(rs::equal(sum, vs::repeat_n(0.0, sum.size())));
@@ -84,41 +86,34 @@ TEST_CASE("selection")
 
     auto x = scalar_field<real, 0>{std::vector<real>{1, 2, 3, 4, 5, 6}, int3{3, 2, 1}};
 
-    // what we want, can x(ind) be a scalar range?  seems like it needs to be something
-    // special that has a reference to a scalar range and an indexing range
     auto ind = std::vector<int>{0, 2, 5};
 
-    // assert capture by reference
-    static_assert(std::same_as<decltype(x(ind)),
-                               detail::scalar_field_select<std::vector<int>&, real, 0>>);
-    // assert capture by value
-    static_assert(std::same_as<decltype(x(std::move(ind))),
-                               detail::scalar_field_select<std::vector<int>, real, 0>>);
-    static_assert(std::same_as<decltype(x(std::vector<int>{})),
-                               detail::scalar_field_select<std::vector<int>, real, 0>>);
-
-    x(ind) = std::vector<real>{-1, -3, -6};
+    x >> select(ind) <<= std::vector<real>{-1, -3, -6};
 
     REQUIRE(rs::equal(x, std::vector<real>{-1, 2, -3, 4, 5, -6}));
 
-    std::vector<real> w(2);
+    std::vector<real> w{};
+    w <<= x >> select(ind) >> vs::transform([](auto&& v) { return v * v; });
 
-    x(ind).to(w);
-    REQUIRE(w == std::vector<real>{-1, -3});
-
+    REQUIRE(w == std::vector<real>{1, 9, 36});
 
     // these coordinates are in ijk and thus do not depend on the orientation of the
     // scalar field
     const auto i = std::vector<int3>{{0, 0, 0}, {2, 0, 0}, {2, 1, 0}};
-    // assert capture by const reference
-    static_assert(
-        std::same_as<decltype(x(i)),
-                     detail::scalar_field_select<const std::vector<int3>&, real, 0>>);
 
     scalar_field<real, 2> z = x;
-    z(i) = std::vector<real>{1, 3, 6};
+    z >> select(i) <<= std::vector<real>{1, 3, 6};
     scalar_field<real, 0> xx = z;
 
     REQUIRE(rs::equal(xx, std::vector<real>{1, 2, 3, 4, 5, 6}));
-    
+
+    REQUIRE(rs::equal(xx | vs::transform([](auto&& v) { return v * v; }),
+                      std::vector<real>{1, 4, 9, 16, 25, 36}));
+
+    auto xxt = xx >> vs::transform([](auto&& v) { return v * v; });
+    REQUIRE(rs::equal(xxt, std::vector<real>{1, 4, 9, 16, 25, 36}));
+    REQUIRE(Scalar<decltype(xxt)>);
+    REQUIRE(Compatible_Fields<decltype(xx), decltype(xxt)>);
+
+
 }

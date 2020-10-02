@@ -20,9 +20,9 @@ public:
     {
     }
 
-    vector_field_index solid_points() const
+    auto solid_points() const
     {
-        return {x.solid_points(), y.solid_points(), z.solid_points()};
+        return vector_range{x.solid_points(), y.solid_points(), z.solid_points()};
     }
 
     void operator()(const vector_field<real>& f,

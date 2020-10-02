@@ -18,7 +18,6 @@
 #include "fields/fields.hpp"
 #include "identity_stencil.hpp"
 
-
 TEST_CASE("Identity")
 {
     using namespace ccs;
@@ -38,6 +37,14 @@ TEST_CASE("Identity")
         rs::to<std::vector<real>>();
 
     std::vector<real> rhs(rng.size());
+
+    auto neumann_coords = [&ob](auto&& f) {
+        return vs::filter([&ob](auto&& info) {
+                   return ob[info.shape_id] == boundary::neumann;
+               }) |
+               vs::transform([&f](auto&& info) { return f(info.solid_coord); });
+    };
+
     SECTION("x-domain")
     {
 
@@ -68,11 +75,7 @@ TEST_CASE("Identity")
         // indicies for df boundaries come from all solid points
         scalar_field<real, 0> df{extents};
 
-        auto df_bvals = g.Rx() | vs::filter([&ob](auto&& info) {
-                            return ob[info.shape_id] == boundary::neumann;
-                        }) |
-                        vs::transform([&f](auto&& info) { return f(info.solid_coord); });
-        df(g.Sx()) = df_bvals;
+        df >> select(g.Sx()) <<= g.Rx() | neumann_coords(f);
 
         d(f, df, result_view(rhs));
 
@@ -106,10 +109,7 @@ TEST_CASE("Identity")
         y_field f{rng, extents};
         y_field df{extents};
 
-        df(g.Sy()) = g.Ry() | vs::filter([&ob](auto&& info) {
-                         return ob[info.shape_id] == boundary::neumann;
-                     }) |
-                     vs::transform([&f](auto&& info) { return f(info.solid_coord); });
+        df >> select(g.Sy()) <<= g.Ry() | neumann_coords(f);
 
         d(f, df, result_view(rhs));
         REQUIRE(ranges::equal(rhs, rng));
@@ -140,10 +140,7 @@ TEST_CASE("Identity")
         z_field f(rng, extents);
         z_field df(extents);
 
-        df(g.Sz()) = g.Rz() | vs::filter([&ob](auto&& info) {
-                         return ob[info.shape_id] == boundary::neumann;
-                     }) |
-                     vs::transform([&f](auto&& info) { return f(info.solid_coord); });
+        df >> select(g.Sz()) <<= g.Rz() | neumann_coords(f);
 
         d(f, df, result_view(rhs));
         REQUIRE(ranges::equal(rhs, rng));

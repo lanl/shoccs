@@ -79,10 +79,10 @@ private:
     friend constexpr auto operator*(const block& mat, R&& rng)
     {
         return result_range{vs::concat(
-            (mat.z[0] * rng).range(),
+            mat.z[0] * rng,
             vs::for_each(vs::zip(mat.blocks, mat.z | vs::drop(1)), [rng](auto&& t) {
                 auto&& [m, z] = t;
-                return rs::yield_from(vs::concat((m * rng).range(), (z * rng).range()));
+                return rs::yield_from(vs::concat(m * rng, z * rng));
             }))};
     }
 };

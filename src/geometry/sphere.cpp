@@ -41,7 +41,6 @@ struct sphere {
 // factory function
 shape make_sphere(int id, const real3& origin, real radius)
 {
-    assert(origin.size() >= 3u);
     return {sphere{origin, radius, id}};
 }
 

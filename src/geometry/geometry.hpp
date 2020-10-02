@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fields/fields.hpp"
 #include "mesh/mesh.hpp"
 #include "shapes.hpp"
 #include <span>
@@ -63,6 +64,8 @@ public:
         }
     }
 
+    auto Rxyz() const { return vector_range{Rx(), Ry(), Rz()}; }
+
     // details about points in solid
     std::span<const int3> Sx() const;
     std::span<const int3> Sy() const;
@@ -79,6 +82,8 @@ public:
             return Sz();
         }
     }
+
+    auto Sxyz() const { return vector_range{Sx(), Sy(), Sz()}; }
 };
 
 } // namespace ccs

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "stencils/stencils.hpp"
+#include <cassert>
 // a simple identity stencil for testing operators
 
 namespace ccs
@@ -19,11 +20,12 @@ struct identity_stencil {
 
     void nbs(real,
              boundary b,
-             real,
+             real psi,
              bool right_wall,
              std::span<real> c,
              std::span<real> x) const
     {
+        assert(0 <= psi && psi <= 1);
         if (b == boundary::neumann) {
             if (right_wall) {
                 x[0] = 0;
