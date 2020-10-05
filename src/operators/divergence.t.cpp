@@ -1,4 +1,4 @@
-#include "gradient.hpp"
+#include "divergence.hpp"
 #include "identity_stencil.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -12,42 +12,43 @@
 
 #include "fields/matchers.hpp"
 
+
 TEST_CASE("domain")
 {
     using namespace ccs;
     using Catch::Matchers::Approx;
 
     stencil st{identity_stencil{}};
-    const int3 extents{31, 33, 32};
+    const int3 extents{5, 4, 1};
     auto m = mesh{real3{-1, -1, -1}, real3{1, 1, 1}, extents};
 
     auto dd = domain_boundaries{boundary::dirichlet, boundary::dirichlet};
     auto nn = domain_boundaries{boundary::neumann, boundary::neumann};
-    grid_boundaries grid_b{dd, nn, dd};
+    grid_boundaries grid_b{dd, dd, nn};
     object_boundaries obj_b{};
 
     auto g = geometry{};
 
-    auto grad = op::gradient{st, m, g, grid_b, obj_b};
+    auto div = op::divergence{st, m, g, grid_b, obj_b};
 
     randomize();
 
     auto solution =
         vs::generate_n([]() { return pick(); }, m.size()) | rs::to<std::vector<real>>();
 
-    const x_field f{solution, extents};
-    const x_field df{solution, extents};
+    y_field s{solution, extents};
+    const v_field f{s};
+    const v_field df{f};
+    y_field dxyz {extents};
 
     // no objects in domain
     vector_range<std::vector<real>> f_bvals{};
     vector_range<std::vector<real>> df_bvals{};
 
-    vector_field<real> dxyz{extents};
+    s *= m.dims();
+    div(f, df, f_bvals, df_bvals, dxyz);
 
-    grad(f, df, f_bvals, df_bvals, dxyz);
-
-    vector_field<real> vf{f};
-    REQUIRE_THAT(vf, Approx(dxyz));
+    REQUIRE_THAT(s, Approx(dxyz));
 }
 
 TEST_CASE("objects")
@@ -68,16 +69,17 @@ TEST_CASE("objects")
     object_boundaries obj_b{boundary::dirichlet, boundary::neumann};
 
     auto geom = geometry{shapes, m};
-    auto grad = op::gradient{st, m, geom, grid_b, obj_b};
+    auto div = op::divergence{st, m, geom, grid_b, obj_b};
 
     randomize();
 
     auto solution =
         vs::generate_n([]() { return pick(); }, m.size()) | rs::to<std::vector<real>>();
 
-    const x_field f{solution, extents};
-    const x_field df{solution, extents};
-    vector_field<real> dxyz{extents};
+    z_field s{solution, extents};
+    const v_field f{s};
+    const v_field df{f};
+    z_field dxyz{extents};
 
     auto coords = vs::transform([](auto&& info) { return info.solid_coord; });
     auto is_neumann = vs::filter(
@@ -102,7 +104,7 @@ TEST_CASE("objects")
     b_values_df.resize(df_size);
     b_values_df <<= f >> select(geom.Rxyz() >> is_neumann >> coords);
 
-    grad(f, df, b_values_f, b_values_df, dxyz);
+    div(f, df, b_values_f, b_values_df, dxyz);
 
     // size should not have changed
     REQUIRE(b_f.size() == b_values_f.size());
@@ -110,9 +112,9 @@ TEST_CASE("objects")
     REQUIRE_THAT(b_values_f, Approx(b_f));
     
     // zero out the solid points so we can easily compare fluid values
-    vector_field vf{f};
-    vf >> select(geom.Sxyz()) <<= 1000;
-    dxyz >> select(geom.Sxyz()) <<= 1000;
+    dxyz >> select(geom.Sy()) <<= 0;
+    s >> select(geom.Sy()) <<= 0;
+    s *= 3;
 
-    REQUIRE_THAT(vf, Approx(dxyz));
+    REQUIRE_THAT(s, Approx(dxyz));
 }

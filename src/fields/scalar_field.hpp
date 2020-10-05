@@ -103,7 +103,6 @@ struct scalar_range : result_range<R>, detail::ext<I> {
     decltype(auto) operator()(const int3& ijk) { return (*this)[this->index(ijk)]; }
 };
 
-
 template <typename T, int I>
 class scalar_field : public result_field<std::vector, T>, public detail::ext<I>
 {
@@ -183,11 +182,26 @@ public:
 
     // clang-format off
 gen_operators(operator=, =)
-gen_operators(operator+=, +=)
-gen_operators(operator-=, -=)
-gen_operators(operator*=, *=)
-gen_operators(operator/=, /=)
+    // clang-format on
+
+#define gen_operators2(op, acc)                                                          \
+    gen_operators(op, acc)                                                               \
+                                                                                         \
+        template <typename R>                                                            \
+        requires Compatible_Fields<S, R> scalar_field& op(R&& r)                         \
+    {                                                                                    \
+        int sz = this->size();                                                           \
+        for (int i = 0; i < sz; i++) (*this)[i] acc r[i];                                \
+        return *this;                                                                    \
+    }
+        // clang-format off
+
+gen_operators2(operator+=, +=)
+gen_operators2(operator-=, -=)
+gen_operators2(operator*=, *=)
+gen_operators2(operator/=, /=)
 #undef gen_operators
+#undef gen_operators2
 
         // clang-format on
 
@@ -196,7 +210,6 @@ gen_operators(operator/=, /=)
 
     const T& operator()(const int3& ijk) const { return (*this)[this->index(ijk)]; }
     T& operator()(const int3& ijk) { return (*this)[this->index(ijk)]; }
-
 
     operator std::span<const T>() const { return {&(*this)[0], this->size()}; }
     operator std::span<T>() { return {&(*this)[0], this->size()}; }

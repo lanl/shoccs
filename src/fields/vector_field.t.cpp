@@ -69,8 +69,7 @@ TEST_CASE("from scalar")
     auto x =
         scalar_field<real, 0>{std::vector{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, int3{3, 2, 1}};
 
-    vector_field v =
-        scalar_field<real, 0>{std::vector{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, int3{3, 2, 1}};
+    vector_field v {x};
 
     auto vz = v.z;
     vz += v.y;

@@ -2,6 +2,7 @@
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_vector.hpp>
 
 #include <random>
 #include <vector>
@@ -21,6 +22,7 @@
 TEST_CASE("Identity")
 {
     using namespace ccs;
+    using Catch::Matchers::Approx;
 
     auto st = stencil{identity_stencil{}};
     const int3 extents{11, 12, 15};
@@ -54,7 +56,7 @@ TEST_CASE("Identity")
 
         d(f, df, result_view(rhs));
 
-        REQUIRE(rs::equal(rhs, rng));
+        REQUIRE_THAT(rhs, Approx(rng));
     }
 
     SECTION("x-planes")
@@ -79,7 +81,7 @@ TEST_CASE("Identity")
 
         d(f, df, result_view(rhs));
 
-        REQUIRE(rs::equal(rhs, rng));
+        REQUIRE_THAT(rhs, Approx(rng));
     }
 
     SECTION("y-domain")
@@ -92,7 +94,7 @@ TEST_CASE("Identity")
 
         d(f, df, result_view(rhs));
 
-        REQUIRE(ranges::equal(rhs, rng));
+        REQUIRE_THAT(rhs, Approx(rng));
     }
 
     SECTION("y-planes")
@@ -112,7 +114,7 @@ TEST_CASE("Identity")
         df >> select(g.Sy()) <<= g.Ry() | neumann_coords(f);
 
         d(f, df, result_view(rhs));
-        REQUIRE(ranges::equal(rhs, rng));
+        REQUIRE_THAT(rhs, Approx(rng));
     }
 
     SECTION("z-domain")
@@ -124,7 +126,7 @@ TEST_CASE("Identity")
 
         d(f, df, result_view(rhs));
 
-        REQUIRE(rs::equal(rhs, rng));
+        REQUIRE_THAT(rhs, Approx(rng));
     }
 
     SECTION("z-planes")
@@ -143,6 +145,6 @@ TEST_CASE("Identity")
         df >> select(g.Sz()) <<= g.Rz() | neumann_coords(f);
 
         d(f, df, result_view(rhs));
-        REQUIRE(ranges::equal(rhs, rng));
+        REQUIRE_THAT(rhs, Approx(rng));
     }
 }

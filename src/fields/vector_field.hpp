@@ -102,12 +102,15 @@ struct vector_field {
 
     vector_field(int3 ex) : x{ex}, y{ex}, z{ex} {}
 
-    vector_field(X&& x, Y&& y, Z&& z) : x{std::move(x)}, y{std::move(y)}, z{std::move(z)}
+    template <Scalar XX, Scalar YY, Scalar ZZ>
+    vector_field(XX&& x, YY&& y, ZZ&& z)
+        : x{std::forward<XX>(x)}, y{std::forward<YY>(y)}, z{std::forward<ZZ>(z)}
     {
     }
 
-    template <Scalar S>
-    vector_field(S&& s) : x{s}, y{s}, z{std::forward<S>(s)}
+    template <Scalar A>
+    vector_field(A&& a)
+        : x{a}, y{a}, z{std::forward<A>(a)}
     {
     }
 
@@ -141,12 +144,12 @@ gen_operators(operator/=, /=)
 
         // clang-format on
 
-        int3 extents()
+        int3 extents() const 
     {
         return x.extents_;
     }
 
-    int3 size() const { return {x.size(), y.size(), z.size()}; }
+    int3 size() const { return {(int)x.size(), (int)y.size(), (int)z.size()}; }
 };
 
 namespace detail
@@ -208,4 +211,5 @@ constexpr auto vector_take(int3 sz)
         vs::take_exactly(sz[0]), vs::take_exactly(sz[1]), vs::take_exactly(sz[2])};
 }
 
+using v_field = vector_field<real>;
 } // namespace ccs

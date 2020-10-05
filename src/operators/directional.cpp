@@ -48,17 +48,15 @@ class builder_
     template <ranges::random_access_range R>
     void add_(R&& rng, int2 bpt, int r, int t, int uc, int inc)
     {
-        using namespace ranges::views;
-
         // add boundary column to csr
-        for (auto&& [i, v] : rng | stride(t) | enumerate | drop(1))
+        for (auto&& [i, v] : rng | vs::stride(t) | vs::enumerate | vs::drop(1))
             b.add_point(uc + inc * i, bpt[1], v);
 
         // add boundary point to csr
         b.add_point(bpt[0], bpt[1], rng[0]);
 
         // add boundary row to csr
-        for (auto&& [i, v] : rng | enumerate | drop(1) | take(t - 1))
+        for (auto&& [i, v] : rng | vs::enumerate | vs::drop(1) | vs::take(t - 1))
             b.add_point(bpt[0], uc + inc * i, v);
     }
 
@@ -68,14 +66,13 @@ protected:
 
     int add(std::span<real> c, int r, int t, int uc, int inc, bool solid, int bpt_row)
     {
-        using namespace ranges::views;
         auto bpt_col = solid ? *spts++ : uc;
         auto bpt = bpt_row >= 0 ? int2{bpt_row, bpt_col} : int2{bpt_col, bpt_col}; 
 
         if (inc > 0)
-            add_(c | take_exactly(r * t), bpt, r, t, uc, inc);
+            add_(c | vs::take_exactly(r * t), bpt, r, t, uc, inc);
         else
-            add_(c | take_exactly(r * t) | reverse, bpt, r, t, uc, inc);
+            add_(c | vs::take_exactly(r * t) | vs::reverse, bpt, r, t, uc, inc);
 
         return bpt_col;
     }
@@ -103,14 +100,12 @@ public:
 
     auto inner_left(std::span<real> c, int r, int t)
     {
-        using namespace ranges::views;
-        return c | chunk(t) | drop(1) | for_each(drop(1));
+        return c | vs::chunk(t) | vs::drop(1) | vs::for_each(vs::drop(1));
     }
 
     auto inner_right(std::span<real> c, int r, int t)
     {
-        using namespace ranges::views;
-        return c | chunk(t) | for_each(take(t - 1));
+        return c | vs::chunk(t) | vs::for_each(vs::take(t - 1));
     }
 
     auto to_csr(int nrows) { return to_csr_(nrows); }
@@ -184,7 +179,7 @@ cppcoro::generator<std::array<boundary_info, 2>> static lines(
             auto left_ic = uc(int3{s, f, 0});
             auto right_ic = uc(int3{s, f, n - 1});
 
-            if (first == last) {
+            if (first == last || first->solid_coord[slow] != s || first->solid_coord[fast] != f) {
                 co_yield std::array{boundary_info{left_ic, 1.0, db.left, true},
                                     boundary_info{right_ic, 1.0, db.right, true}};
             } else
@@ -316,7 +311,6 @@ directional::directional(int dir,
         int n = rpt - lpt + 1;
         int nl = left_mat.rows();
         int nr = right_mat.rows();
-
         O_bld.add_inner_block(lpt,
                               std::move(left_mat),
                               matrix::circulant{nl - p, n - nr - nl, interior_c},

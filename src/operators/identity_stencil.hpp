@@ -28,23 +28,23 @@ struct identity_stencil {
         assert(0 <= psi && psi <= 1);
         if (b == boundary::neumann) {
             if (right_wall) {
-                x[0] = 0;
+                x[0] = 1;
                 x[1] = 2;
 
                 c[0] = 0;
                 c[1] = 1;
-                c[2] = 0;
+                c[2] = -1;
                 c[3] = 0;
                 c[4] = 0;
                 c[5] = -1;
             } else {
                 x[0] = 2;
-                x[1] = 0;
+                x[1] = 1;
 
                 c[0] = -1;
                 c[1] = 0;
                 c[2] = 0;
-                c[3] = 0;
+                c[3] = -1;
                 c[4] = 1;
                 c[5] = 0;
             }

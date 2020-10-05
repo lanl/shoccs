@@ -4,13 +4,18 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+
 #include "random/random.hpp"
+#include "fields/matchers.hpp"
 
 #include <range/v3/algorithm/equal.hpp>
+
+
 
 TEST_CASE("identity")
 {
     using namespace ccs;
+    using Catch::Matchers::Approx;
 
     stencil st{identity_stencil{}};
     const int3 extents{12, 10, 13};
@@ -38,10 +43,6 @@ TEST_CASE("identity")
     vector_field<real> dxyz{extents};
 
     deriv(f, df, dxyz);
-    // check x-direction results
-    REQUIRE(rs::equal(f.x, dxyz.x));
-    // check y-direction results
-    REQUIRE(rs::equal(f.y, dxyz.y));
-    // check z-direction results
-    REQUIRE(rs::equal(f.z, dxyz.z));
+    
+    REQUIRE_THAT(f, Approx(dxyz));
 }
