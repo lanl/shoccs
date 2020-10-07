@@ -1,51 +1,18 @@
 #pragma once
 
 #include "scalar_field.hpp"
+#include "vector_field_fwd.hpp"
 
 #include <range/v3/view/take_exactly.hpp>
 
 namespace ccs
 {
 
-template <typename T = real>
-class vector_field;
-
-template <typename X, typename Y, typename Z>
-struct vector_range;
-
-namespace traits
-{
-// define some traits and concepts to constrain our universal references and ranges
-template <typename = void>
-struct is_vector_field : std::false_type {
-};
-template <typename T>
-struct is_vector_field<vector_field<T>> : std::true_type {
-};
-
-template <typename U>
-constexpr bool is_vector_field_v = is_vector_field<std::remove_cvref_t<U>>::value;
-
-template <typename = void>
-struct is_vector_range : std::false_type {
-};
-template <typename X, typename Y, typename Z>
-struct is_vector_range<vector_range<X, Y, Z>> : std::true_type {
-};
-
-template <typename U>
-constexpr bool is_vector_range_v = is_vector_range<std::remove_cvref_t<U>>::value;
-
-template <typename U>
-constexpr bool is_vrange_or_vfield_v = is_vector_field_v<U> || is_vector_range_v<U>;
-
-} // namespace traits
-
-template <typename T>
-concept Vector_Field = traits::is_vrange_or_vfield_v<T>;
-
-template <typename X, typename Y = X, typename Z = Y>
+template <typename X_, typename Y_ = X_, typename Z_ = Y_>
 struct vector_range {
+    using X = X_;
+    using Y = Y_;
+    using Z = Z_;
     X x;
     Y y;
     Z z;
@@ -83,6 +50,11 @@ struct vector_range {
         y.resize(n[1]);
         z.resize(n[2]);
     }
+
+    int3 extents() const requires requires(X x) { x.extents(); }
+    {
+        return x.extents();
+    }
 };
 
 template <typename X, typename Y, typename Z>
@@ -109,12 +81,11 @@ struct vector_field {
     }
 
     template <Scalar A>
-    vector_field(A&& a)
-        : x{a}, y{a}, z{std::forward<A>(a)}
+    vector_field(A&& a) : x{a}, y{a}, z{std::forward<A>(a)}
     {
     }
 
-#define gen_operators(op, acc)                                                           \
+#define SHOCCS_GEN_OPERATORS_(op, acc)                                                   \
     template <Scalar R>                                                                  \
     vector_field& op(R&& r)                                                              \
     {                                                                                    \
@@ -133,24 +104,52 @@ struct vector_field {
         return *this;                                                                    \
     }
 
-    // clang-format off
+    SHOCCS_GEN_OPERATORS_(operator=, =)
 
-gen_operators(operator=, =)
-gen_operators(operator+=, +=)
-gen_operators(operator-=, -=)
-gen_operators(operator*=, *=)
-gen_operators(operator/=, /=)
-#undef gen_operators
-
-        // clang-format on
-
-        int3 extents() const 
-    {
-        return x.extents_;
+#define SHOCCS_GEN_OPERATORS(op, acc)                                                    \
+    SHOCCS_GEN_OPERATORS_(op, acc)                                                       \
+                                                                                         \
+    template <Vector_Field R>                                                            \
+    vector_field& op(R&& r)                                                              \
+    {                                                                                    \
+        x acc r.x;                                                                       \
+        y acc r.y;                                                                       \
+        z acc r.z;                                                                       \
+        return *this;                                                                    \
     }
+
+    SHOCCS_GEN_OPERATORS(operator+=, +=)
+    SHOCCS_GEN_OPERATORS(operator-=, -=)
+    SHOCCS_GEN_OPERATORS(operator*=, *=)
+    SHOCCS_GEN_OPERATORS(operator/=, /=)
+
+#undef SHOCCS_GEN_OPERATORS
+#undef SHOCCS_GEN_OPERATORS_
+
+    int3 extents() const { return x.extents_; }
 
     int3 size() const { return {(int)x.size(), (int)y.size(), (int)z.size()}; }
 };
+
+// define math operations on vector fields if they are defined on their componenents
+#define SHOCCS_GEN_OPERATORS(op, f)                                                      \
+    template <Vector_Field T, Vector_Field U>                                            \
+    requires requires(T t, U u)                                                          \
+    {                                                                                    \
+        t.x f u.x;                                                                       \
+        t.y f u.y;                                                                       \
+        t.z f u.z;                                                                       \
+    }                                                                                    \
+    constexpr auto op(T&& t, U&& u)                                                      \
+    {                                                                                    \
+        return vector_range{t.x f u.x, t.y f u.y, t.z f u.z};                            \
+    }
+
+SHOCCS_GEN_OPERATORS(operator+, +)
+SHOCCS_GEN_OPERATORS(operator*, *)
+SHOCCS_GEN_OPERATORS(operator-, -)
+SHOCCS_GEN_OPERATORS(operator/, /)
+#undef SHOCCS_GEN_OPERATORS
 
 namespace detail
 {

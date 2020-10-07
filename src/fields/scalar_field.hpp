@@ -1,81 +1,18 @@
 #pragma once
 
-#include "indexing.hpp"
+#include "index_view.hpp"
 #include "types.hpp"
 
+#include "contract.hpp"
 #include "result_field.hpp"
+#include "scalar_field_fwd.hpp"
 
 #include <range/v3/algorithm/copy.hpp>
+#include <range/v3/algorithm/copy_n.hpp>
 #include <range/v3/view/repeat_n.hpp>
 
 namespace ccs
 {
-
-namespace vs = ranges::views;
-
-template <typename T = real, int = 2>
-class scalar_field;
-
-template <ranges::random_access_range R, int I>
-struct scalar_range;
-
-namespace traits
-{
-// define some traits and concepts to constrain our universal references and ranges
-template <typename = void>
-struct is_scalar_field : std::false_type {
-};
-template <typename T, int I>
-struct is_scalar_field<scalar_field<T, I>> : std::true_type {
-};
-
-template <typename U>
-constexpr bool is_scalar_field_v = is_scalar_field<std::remove_cvref_t<U>>::value;
-
-template <typename = void>
-struct is_scalar_range : std::false_type {
-};
-template <typename T, int I>
-struct is_scalar_range<scalar_range<T, I>> : std::true_type {
-};
-
-template <typename U>
-constexpr bool is_scalar_range_v = is_scalar_range<std::remove_cvref_t<U>>::value;
-
-template <typename U>
-constexpr bool is_range_or_field_v = is_scalar_field_v<U> || is_scalar_range_v<U>;
-
-template <typename>
-struct scalar_dim_;
-
-template <typename T, int I>
-struct scalar_dim_<scalar_range<T, I>> {
-    static constexpr int dim = I;
-};
-
-template <typename T, int I>
-struct scalar_dim_<scalar_field<T, I>> {
-    static constexpr int dim = I;
-};
-
-template <typename T>
-requires is_range_or_field_v<std::remove_cvref_t<T>> constexpr int scalar_dim =
-    scalar_dim_<std::remove_cvref_t<T>>::dim;
-
-template <typename T, typename U>
-requires is_range_or_field_v<T>&& is_range_or_field_v<U> constexpr bool is_same_dim_v =
-    scalar_dim<T> == scalar_dim<U>;
-
-} // namespace traits
-
-template <typename T>
-concept Scalar = traits::is_range_or_field_v<T>;
-
-template <typename T, typename U>
-concept Compatible_Fields = Scalar<T>&& Scalar<U>&& traits::is_same_dim_v<T, U>;
-
-template <typename T, typename U>
-concept Transposable_Fields = Scalar<T>&& Scalar<U> && (!traits::is_same_dim_v<T, U>);
 
 namespace detail
 {
@@ -117,6 +54,12 @@ public:
 
     scalar_field(std::vector<T> f, int3 ex) : P{std::move(f)}, E{ex} {}
 
+    template <rs::input_range R>
+    scalar_field(R&& r, int3 ex) : P{ex[0] * ex[1] * ex[2]}, E{ex}
+    {
+        rs::copy_n(rs::begin(r), this->size(), this->begin());
+    }
+
     // this will not override default copy/move constructors
     template <typename R>
         requires Compatible_Fields<S, R> &&
@@ -134,6 +77,21 @@ public:
         *this = r;
     }
 
+    template <Contraction C>
+    scalar_field(C&& c) : P(c.size()), E{c.extents()}
+    {
+        for (auto&& ijk : index_view<I>(c.extents())) (*this)(ijk) = c(ijk);
+    }
+
+    template <Contraction C>
+    scalar_field& operator=(C&& c)
+    {
+        this->extents_ = c.extents();
+        this->resize(c.size());
+        for (auto&& ijk : index_view<I>(c.extents())) (*this)(ijk) = c(ijk);
+        return *this;
+    }
+
     // this will not override default copy/move assigmnent
     template <typename R>
         requires Compatible_Fields<S, R> &&
@@ -145,7 +103,14 @@ public:
         return *this;
     }
 
-#define gen_operators(op, acc)                                                           \
+    template <typename R>
+        requires rs::input_range<R> && (!Scalar<R>)scalar_field& operator=(R&& r)
+    {
+        rs::copy_n(rs::begin(r), this->size(), this->begin());
+        return *this;
+    }
+
+#define SHOCCS_GEN_OPERATORS_(op, acc)                                                   \
     template <typename R>                                                                \
     requires Transposable_Fields<S, R> scalar_field& op(R&& r)                           \
     {                                                                                    \
@@ -180,33 +145,28 @@ public:
         return *this;                                                                    \
     }
 
-    // clang-format off
-gen_operators(operator=, =)
-    // clang-format on
+    SHOCCS_GEN_OPERATORS_(operator=, =)
 
-#define gen_operators2(op, acc)                                                          \
-    gen_operators(op, acc)                                                               \
+#define SHOCCS_GEN_OPERATORS(op, acc)                                                    \
+    SHOCCS_GEN_OPERATORS_(op, acc)                                                       \
                                                                                          \
-        template <typename R>                                                            \
-        requires Compatible_Fields<S, R> scalar_field& op(R&& r)                         \
+    template <typename R>                                                                \
+    requires Compatible_Fields<S, R> scalar_field& op(R&& r)                             \
     {                                                                                    \
         int sz = this->size();                                                           \
         for (int i = 0; i < sz; i++) (*this)[i] acc r[i];                                \
         return *this;                                                                    \
     }
-        // clang-format off
 
-gen_operators2(operator+=, +=)
-gen_operators2(operator-=, -=)
-gen_operators2(operator*=, *=)
-gen_operators2(operator/=, /=)
-#undef gen_operators
-#undef gen_operators2
+    SHOCCS_GEN_OPERATORS(operator+=, +=)
+    SHOCCS_GEN_OPERATORS(operator-=, -=)
+    SHOCCS_GEN_OPERATORS(operator*=, *=)
+    SHOCCS_GEN_OPERATORS(operator/=, /=)
+#undef SHOCCS_GEN_OPERATORS
+#undef SHOCCS_GEN_OPERATORS_
 
-        // clang-format on
-
-        // bring base class call operator into scope so we don't shadow them
-        using P::operator();
+    // bring base class call operator into scope so we don't shadow them
+    using P::operator();
 
     const T& operator()(const int3& ijk) const { return (*this)[this->index(ijk)]; }
     T& operator()(const int3& ijk) { return (*this)[this->index(ijk)]; }
@@ -215,12 +175,12 @@ gen_operators2(operator/=, /=)
     operator std::span<T>() { return {&(*this)[0], this->size()}; }
 
     // operator result_view_t<T>() { return {f}; }
-}; // namespace ccs
+};
 
 #define ret_range(expr)                                                                  \
     return scalar_range<decltype(expr), I> { expr, t.extents() }
 
-#define gen_operators(op, f)                                                             \
+#define SHOCCS_GEN_OPERATORS(op, f)                                                      \
     template <typename T, typename U>                                                    \
     requires Compatible_Fields<T, U> constexpr auto op(T&& t, U&& u)                     \
     {                                                                                    \
@@ -241,17 +201,15 @@ gen_operators2(operator/=, /=)
         ret_range(vs::zip_with(f, vs::repeat_n(u, t.size()), std::forward<T>(t)));       \
     }
 
-// clang-format off
-gen_operators(operator+, std::plus{})
-gen_operators(operator-, std::minus{})
-gen_operators(operator*, std::multiplies{})
-gen_operators(operator/, std::divides{})
-#undef gen_operators
-    // clang-format on
+SHOCCS_GEN_OPERATORS(operator+, std::plus{})
+SHOCCS_GEN_OPERATORS(operator-, std::minus{})
+SHOCCS_GEN_OPERATORS(operator*, std::multiplies{})
+SHOCCS_GEN_OPERATORS(operator/, std::divides{})
+#undef SHOCCS_GEN_OPERATORS
 
-    template <Scalar T, typename ViewFn>
-    requires rs::invocable_view_closure<ViewFn, T> constexpr auto
-    operator>>(T&& t, vs::view_closure<ViewFn> f)
+template <Scalar T, typename ViewFn>
+requires rs::invocable_view_closure<ViewFn, T> constexpr auto
+operator>>(T&& t, vs::view_closure<ViewFn> f)
 {
     constexpr auto I = traits::scalar_dim<T>;
     ret_range(std::forward<T>(t) | f);

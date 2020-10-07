@@ -9,8 +9,8 @@
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/repeat_n.hpp>
-#include <range/v3/view/transform.hpp>
 #include <range/v3/view/take_exactly.hpp>
+#include <range/v3/view/transform.hpp>
 
 TEST_CASE("range transforms")
 {
@@ -38,7 +38,7 @@ TEST_CASE("range transforms")
     REQUIRE(rs::equal(v.z, vs::ints(-3, -2)));
 
     {
-        auto r = v >> [](auto&& a) { return a[0];};
+        auto r = v >> [](auto&& a) { return a[0]; };
         REQUIRE(r.x == 0);
         REQUIRE(r.y == 1);
         REQUIRE(r.z == -3);
@@ -69,7 +69,7 @@ TEST_CASE("from scalar")
     auto x =
         scalar_field<real, 0>{std::vector{1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, int3{3, 2, 1}};
 
-    vector_field v {x};
+    vector_field v{x};
 
     auto vz = v.z;
     vz += v.y;
@@ -78,6 +78,41 @@ TEST_CASE("from scalar")
     scalar_field<real, 0> xz = vz;
 
     REQUIRE(rs::equal(xz, x + x + x));
+}
+
+TEST_CASE("math")
+{
+    using namespace ccs;
+    y_field y{vs::iota(0), int3{3, 2, 1}};
+    v_field v{y};
+    v_field u{v};
+
+    auto a = u + v;
+    REQUIRE(rs::equal(a.y, y + y));
+    REQUIRE(rs::equal(y_field{a.x}, y + y));
+
+    auto b = u * v - v * u;
+    REQUIRE(rs::equal(b.z, vs::repeat_n(0, y.size())));
+}
+
+TEST_CASE("contraction")
+{
+    using namespace ccs;
+
+    z_field z{vs::iota(0), int3{4, 5, 6}};
+    v_field v{z};
+
+    SECTION("copy construction")
+    {
+        z_field zz = contract(v * v, std::plus{});
+        REQUIRE(rs::equal(3 * z * z, zz));
+    }
+    SECTION("copy assignment")
+    {
+        z_field zz {};
+        zz = contract(v * v, std::plus{});
+        REQUIRE(rs::equal(3 * z * z, zz));
+    }
 }
 
 TEST_CASE("selection")
@@ -144,6 +179,5 @@ TEST_CASE("selection")
         REQUIRE(r.x == T{0});
         REQUIRE(r.y == T{-1, -2, -3});
         REQUIRE(r.z == T{-4, -5});
-
     }
 }

@@ -6,6 +6,7 @@
 #include <range/v3/algorithm/equal.hpp>
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/iota.hpp>
+#include <range/v3/view/take.hpp>
 #include <range/v3/view/repeat_n.hpp>
 #include <range/v3/view/transform.hpp>
 
@@ -114,6 +115,14 @@ TEST_CASE("selection")
     REQUIRE(rs::equal(xxt, std::vector<real>{1, 4, 9, 16, 25, 36}));
     REQUIRE(Scalar<decltype(xxt)>);
     REQUIRE(Compatible_Fields<decltype(xx), decltype(xxt)>);
+}
 
+TEST_CASE("from input range")
+{
+    using namespace ccs;
 
+    auto z = z_field(int3{4, 5, 6});
+    z = vs::iota(0);
+
+    REQUIRE(rs::equal(z, vs::iota(0) | vs::take(120)));
 }

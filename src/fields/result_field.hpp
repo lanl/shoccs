@@ -140,7 +140,7 @@ public:
         ranges::copy(r, ranges::begin(f));
     }
 
-#define gen_operators(op, acc)                                                           \
+#define SHOCCS_GEN_OPERATORS(op, acc)                                                    \
     template <typename R>                                                                \
         requires rs::input_range<R> &&                                                   \
         (!std::same_as<S, std::remove_cvref_t<R>>)result_field& op(R&& r)                \
@@ -163,29 +163,22 @@ public:
         return *this;                                                                    \
     }
 
-    // clang-format off
-gen_operators(operator=, =)
-gen_operators(operator+=, +=)
-gen_operators(operator-=, -=)
-gen_operators(operator*=, *=)
-gen_operators(operator/=, /=)
-#undef gen_operators
+    SHOCCS_GEN_OPERATORS(operator=, =)
+    SHOCCS_GEN_OPERATORS(operator+=, +=)
+    SHOCCS_GEN_OPERATORS(operator-=, -=)
+    SHOCCS_GEN_OPERATORS(operator*=, *=)
+    SHOCCS_GEN_OPERATORS(operator/=, /=)
+#undef SHOCCS_GEN_OPERATORS
 
-        // clang-format on
-
-        // allow several kinds of indexing for easy use
-        const T&
-        operator()(int i) const
-    {
-        return f[i];
-    };
+    // allow several kinds of indexing for easy use
+    const T& operator()(int i) const { return f[i]; };
     T& operator()(int i) { return f[i]; }
 
     // allow conversion to spans
     // operator std::span<T>() { return f; }
 };
 
-#define gen_operators(op, f)                                                             \
+#define SHOCCS_GEN_OPERATORS(op, f)                                                      \
     template <Result T, Result U>                                                        \
     constexpr auto op(T&& t, U&& u)                                                      \
     {                                                                                    \
@@ -210,19 +203,15 @@ gen_operators(operator/=, /=)
             return result_range{vs::zip_with(f, vs::repeat(u), std::forward<T>(t))};     \
     }
 
-// clang-format off
+SHOCCS_GEN_OPERATORS(operator+, std::plus{})
+SHOCCS_GEN_OPERATORS(operator-, std::minus{})
+SHOCCS_GEN_OPERATORS(operator*, std::multiplies{})
+SHOCCS_GEN_OPERATORS(operator/, std::divides{})
+#undef SHOCCS_GEN_OPERATORS
 
-gen_operators(operator+, std::plus{})
-gen_operators(operator-, std::minus{})
-gen_operators(operator*, std::multiplies{})
-gen_operators(operator/, std::divides{})
-#undef gen_operators
-
-    // clang-format on
-
-    template <Result R, typename ViewFn>
-    requires rs::invocable_view_closure<ViewFn, R> constexpr auto
-    operator>>(R&& r, vs::view_closure<ViewFn> t)
+template <Result R, typename ViewFn>
+requires rs::invocable_view_closure<ViewFn, R> constexpr auto
+operator>>(R&& r, vs::view_closure<ViewFn> t)
 {
     return result_range{std::forward<R>(r) | t};
 }
