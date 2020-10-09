@@ -23,7 +23,13 @@ TEST_CASE("initialization")
     s = 0;
     REQUIRE_THAT(s, Approx(x_scalar{int3{4, 5, 6}, int3{3, 2, 3}}));
 
-    s = s1 * 1;
+    s += s1 * 1;
+    REQUIRE_THAT(s, Approx(s1));
+
+    s = s1 * 2 - s1;
+    REQUIRE_THAT(s, Approx(s1));
+
+    s += 3 * s1 - 2 * s1 - s1;
     REQUIRE_THAT(s, Approx(s1));
 }
 
