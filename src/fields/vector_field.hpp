@@ -168,19 +168,57 @@ struct vector_field {
     template <Vector_Field T, Vector_Field U>                                            \
     requires requires(T t, U u)                                                          \
     {                                                                                    \
-        t.x f u.x;                                                                       \
-        t.y f u.y;                                                                       \
-        t.z f u.z;                                                                       \
+        f(t.x, u.x);                                                                     \
+        f(t.y, u.y);                                                                     \
+        f(t.z, u.z);                                                                     \
     }                                                                                    \
     constexpr auto op(T&& t, U&& u)                                                      \
     {                                                                                    \
-        return vector_range{t.x f u.x, t.y f u.y, t.z f u.z};                            \
+        return vector_range{f(t.x, u.x), f(t.y, u.y), f(t.z, u.z)};                      \
+    }                                                                                    \
+    template <Vector_Field T, Numeric U>                                                 \
+    constexpr auto op(T&& t, U u)                                                        \
+    {                                                                                    \
+        constexpr bool direct_apply = requires(T t, U u)                                 \
+        {                                                                                \
+            f(t.x, u);                                                                   \
+            f(t.y, u);                                                                   \
+            f(t.z, u);                                                                   \
+        };                                                                               \
+        if constexpr (direct_apply)                                                      \
+            return vector_range{f(t.x, u), f(t.y, u), f(t.z, u)};                        \
+        else {                                                                           \
+            const auto [nx, ny, nz] = t.size();                                          \
+            return vector_range{                                                         \
+                vs::zip_with(f, std::forward<T>(t).x, vs::repeat_n(u, nx)),              \
+                vs::zip_with(f, std::forward<T>(t).y, vs::repeat_n(u, ny)),              \
+                vs::zip_with(f, std::forward<T>(t).z, vs::repeat_n(u, nz))};             \
+        }                                                                                \
+    }                                                                                    \
+    template <Vector_Field T, Numeric U>                                                 \
+    constexpr auto op(U u, T&& t)                                                        \
+    {                                                                                    \
+        constexpr bool direct_apply = requires(T t, U u)                                 \
+        {                                                                                \
+            f(u, t.x);                                                                   \
+            f(u, t.y);                                                                   \
+            f(u, t.z);                                                                   \
+        };                                                                               \
+        if constexpr (direct_apply)                                                      \
+            return vector_range{f(u, t.x), f(u, t.y), f(u, t.z)};                        \
+        else {                                                                           \
+            const auto [nx, ny, nz] = t.size();                                          \
+            return vector_range{                                                         \
+                vs::zip_with(f, vs::repeat_n(u, nx), std::forward<T>(t).x),              \
+                vs::zip_with(f, vs::repeat_n(u, ny), std::forward<T>(t).y),              \
+                vs::zip_with(f, vs::repeat_n(u, nz), std::forward<T>(t).z)};             \
+        }                                                                                \
     }
 
-SHOCCS_GEN_OPERATORS(operator+, +)
-SHOCCS_GEN_OPERATORS(operator*, *)
-SHOCCS_GEN_OPERATORS(operator-, -)
-SHOCCS_GEN_OPERATORS(operator/, /)
+SHOCCS_GEN_OPERATORS(operator+, std::plus{})
+SHOCCS_GEN_OPERATORS(operator*, std::multiplies{})
+SHOCCS_GEN_OPERATORS(operator-, std::minus{})
+SHOCCS_GEN_OPERATORS(operator/, std::divides{})
 #undef SHOCCS_GEN_OPERATORS
 
 namespace detail
