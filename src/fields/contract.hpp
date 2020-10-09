@@ -16,8 +16,9 @@ concept Vector_Aggregrate = requires(V v, F f, int3 ijk)
 
 template <typename V>
 concept Vector_of_Scalars =
-    Vector_Field<V>&& Scalar<typename std::remove_cvref_t<V>::X>&& Scalar<
-        typename std::remove_cvref_t<V>::Y>&& Scalar<typename std::remove_cvref_t<V>::Z>;
+    Vector_Field<V>&& Scalar_Field<typename std::remove_cvref_t<V>::X>&&
+        Scalar_Field<typename std::remove_cvref_t<V>::Y>&&
+            Scalar_Field<typename std::remove_cvref_t<V>::Z>;
 } // namespace detail
 
 // forward decl public api

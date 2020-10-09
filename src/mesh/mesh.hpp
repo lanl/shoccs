@@ -45,6 +45,10 @@ public:
         return {min_[i], max_[i], h_[i], n_[i]};
     }
 
+    constexpr real3 h() const {
+        return h_;
+    }
+
     constexpr int3 extents() const { return n_; }
 
     constexpr int3 n_ijk() const { return n_; }

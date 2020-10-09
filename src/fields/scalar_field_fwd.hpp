@@ -64,12 +64,12 @@ requires is_range_or_field_v<T>&& is_range_or_field_v<U> constexpr bool is_same_
 } // namespace traits
 
 template <typename T>
-concept Scalar = traits::is_range_or_field_v<T>;
+concept Scalar_Field = traits::is_range_or_field_v<T>;
 
 template <typename T, typename U>
-concept Compatible_Fields = Scalar<T>&& Scalar<U>&& traits::is_same_dim_v<T, U>;
+concept Compatible_Fields = Scalar_Field<T>&& Scalar_Field<U>&& traits::is_same_dim_v<T, U>;
 
 template <typename T, typename U>
-concept Transposable_Fields = Scalar<T>&& Scalar<U> && (!traits::is_same_dim_v<T, U>);
+concept Transposable_Fields = Scalar_Field<T>&& Scalar_Field<U> && (!traits::is_same_dim_v<T, U>);
 
 } // namespace ccs

@@ -5,7 +5,7 @@
 namespace ccs
 {
 
-#define gen_operators(op, acc)                                                           \
+#define SHOCCS_GEN_OPERATORS(op, acc)                                                    \
     constexpr real3 op(const real3& a, const real3& b)                                   \
     {                                                                                    \
         return {a[0] acc b[0], a[1] acc b[1], a[2] acc b[2]};                            \
@@ -19,20 +19,18 @@ namespace ccs
         return {n acc a[0], n acc a[1], n acc a[2]};                                     \
     }
 
-// clang-format off
-gen_operators(operator*, *)
-gen_operators(operator/, /)
-gen_operators(operator+, +)
-gen_operators(operator-, -)
-// clang-format on
+SHOCCS_GEN_OPERATORS(operator*, *)
+SHOCCS_GEN_OPERATORS(operator/, /)
+SHOCCS_GEN_OPERATORS(operator+, +)
+SHOCCS_GEN_OPERATORS(operator-, -)
 
-#undef gen_operators
+#undef SHOCCS_GEN_OPERATORS
 
-        constexpr real dot(const real3& a, const real3& b)
+constexpr real dot(const real3& a, const real3& b)
 {
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
-real length(const real3& a) { return std::sqrt(dot(a, a)); }
+inline real length(const real3& a) { return std::sqrt(dot(a, a)); }
 
 } // namespace ccs

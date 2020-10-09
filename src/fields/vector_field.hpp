@@ -55,7 +55,39 @@ struct vector_range {
     {
         return x.extents();
     }
-};
+
+#define SHOCCS_GEN_OPERATORS_(op, acc)                                                   \
+    template <Numeric N>                                                                 \
+    vector_range& op(N n) requires rs::output_range<X, N>&& rs::output_range<Y, N>&&     \
+        rs::output_range<Z, N>                                                           \
+    {                                                                                    \
+        for (auto&& v : x) v acc n;                                                      \
+        for (auto&& v : y) v acc n;                                                      \
+        for (auto&& v : z) v acc n;                                                      \
+        return *this;                                                                    \
+    }
+
+    SHOCCS_GEN_OPERATORS_(operator=, =)
+
+#define SHOCCS_GEN_OPERATORS(op, acc)                                                    \
+    SHOCCS_GEN_OPERATORS_(op, acc)                                                       \
+    template <Vector_Field F>                                                            \
+    vector_range& op(F&& f)                                                              \
+    {                                                                                    \
+        for (auto&& [v, n] : vs::zip(x, f.x)) v acc n;                                   \
+        for (auto&& [v, n] : vs::zip(y, f.y)) v acc n;                                   \
+        for (auto&& [v, n] : vs::zip(z, f.z)) v acc n;                                   \
+        return *this;                                                                    \
+    }
+
+    SHOCCS_GEN_OPERATORS(operator+=, +=)
+    SHOCCS_GEN_OPERATORS(operator-=, -=)
+    SHOCCS_GEN_OPERATORS(operator*=, *=)
+    SHOCCS_GEN_OPERATORS(operator/=, /=)
+
+#undef SHOCCS_GEN_OPERATORS
+#undef SHOCCS_GEN_OPERATORS_
+}; // namespace ccs
 
 template <typename X, typename Y, typename Z>
 vector_range(X&&, Y&&, Z &&) -> vector_range<X, Y, Z>;
@@ -74,19 +106,19 @@ struct vector_field {
 
     vector_field(int3 ex) : x{ex}, y{ex}, z{ex} {}
 
-    template <Scalar XX, Scalar YY, Scalar ZZ>
+    template <Scalar_Field XX, Scalar_Field YY, Scalar_Field ZZ>
     vector_field(XX&& x, YY&& y, ZZ&& z)
         : x{std::forward<XX>(x)}, y{std::forward<YY>(y)}, z{std::forward<ZZ>(z)}
     {
     }
 
-    template <Scalar A>
+    template <Scalar_Field A>
     vector_field(A&& a) : x{a}, y{a}, z{std::forward<A>(a)}
     {
     }
 
 #define SHOCCS_GEN_OPERATORS_(op, acc)                                                   \
-    template <Scalar R>                                                                  \
+    template <Scalar_Field R>                                                            \
     vector_field& op(R&& r)                                                              \
     {                                                                                    \
         x acc r;                                                                         \
@@ -211,4 +243,8 @@ constexpr auto vector_take(int3 sz)
 }
 
 using v_field = vector_field<real>;
+// template<typename... Args>
+// using v_range = vector_range<Args...>;
+// template<typename... Args>
+// using v_tuple = vector_range<Args...>;
 } // namespace ccs

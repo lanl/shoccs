@@ -104,7 +104,7 @@ public:
     }
 
     template <typename R>
-        requires rs::input_range<R> && (!Scalar<R>)scalar_field& operator=(R&& r)
+        requires rs::input_range<R> && (!Scalar_Field<R>)scalar_field& operator=(R&& r)
     {
         rs::copy_n(rs::begin(r), this->size(), this->begin());
         return *this;
@@ -188,13 +188,13 @@ public:
         constexpr auto I = traits::scalar_dim<T>;                                        \
         ret_range(vs::zip_with(f, std::forward<T>(t), std::forward<U>(u)));              \
     }                                                                                    \
-    template <Scalar T, Numeric U>                                                       \
+    template <Scalar_Field T, Numeric U>                                                 \
     constexpr auto op(T&& t, U u)                                                        \
     {                                                                                    \
         constexpr auto I = traits::scalar_dim<T>;                                        \
         ret_range(vs::zip_with(f, std::forward<T>(t), vs::repeat_n(u, t.size())));       \
     }                                                                                    \
-    template <Scalar T, Numeric U>                                                       \
+    template <Scalar_Field T, Numeric U>                                                 \
     constexpr auto op(U u, T&& t)                                                        \
     {                                                                                    \
         constexpr auto I = traits::scalar_dim<T>;                                        \
@@ -207,7 +207,7 @@ SHOCCS_GEN_OPERATORS(operator*, std::multiplies{})
 SHOCCS_GEN_OPERATORS(operator/, std::divides{})
 #undef SHOCCS_GEN_OPERATORS
 
-template <Scalar T, typename ViewFn>
+template <Scalar_Field T, typename ViewFn>
 requires rs::invocable_view_closure<ViewFn, T> constexpr auto
 operator>>(T&& t, vs::view_closure<ViewFn> f)
 {

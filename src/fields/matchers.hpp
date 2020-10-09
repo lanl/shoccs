@@ -3,6 +3,7 @@
 
 #include "scalar_field.hpp"
 #include "vector_field.hpp"
+#include "scalar.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
@@ -10,9 +11,9 @@
 namespace Catch::Matchers
 {
 template <typename T, int I>
-struct ScalarMatcher final : MatcherBase<ccs::scalar_field<T, I>> {
+struct ScalarFieldMatcher final : MatcherBase<ccs::scalar_field<T, I>> {
 
-    ScalarMatcher(ccs::scalar_field<T, I> const& comparator) : m_comparator(comparator) {}
+    ScalarFieldMatcher(ccs::scalar_field<T, I> const& comparator) : m_comparator(comparator) {}
 
     bool match(ccs::scalar_field<T, I> const& v) const override
     {
@@ -26,19 +27,19 @@ struct ScalarMatcher final : MatcherBase<ccs::scalar_field<T, I>> {
         return "is approx: " + ::Catch::Detail::stringify(m_comparator);
     }
     template <typename = std::enable_if_t<std::is_constructible<double, T>::value>>
-    ScalarMatcher& epsilon(T const& newEpsilon)
+    ScalarFieldMatcher& epsilon(T const& newEpsilon)
     {
         approx.epsilon(static_cast<double>(newEpsilon));
         return *this;
     }
     template <typename = std::enable_if_t<std::is_constructible<double, T>::value>>
-    ScalarMatcher& margin(T const& newMargin)
+    ScalarFieldMatcher& margin(T const& newMargin)
     {
         approx.margin(static_cast<double>(newMargin));
         return *this;
     }
     template <typename = std::enable_if_t<std::is_constructible<double, T>::value>>
-    ScalarMatcher& scale(T const& newScale)
+    ScalarFieldMatcher& scale(T const& newScale)
     {
         approx.scale(static_cast<double>(newScale));
         return *this;
@@ -55,9 +56,9 @@ struct VectorMatcher final : MatcherBase<ccs::vector_field<T>> {
 
     bool match(ccs::vector_field<T> const& v) const override
     {
-        return ScalarMatcher(m_comparator.x).match(v.x) &&
-               ScalarMatcher(m_comparator.y).match(v.y) &&
-               ScalarMatcher(m_comparator.z).match(v.z);
+        return ScalarFieldMatcher(m_comparator.x).match(v.x) &&
+               ScalarFieldMatcher(m_comparator.y).match(v.y) &&
+               ScalarFieldMatcher(m_comparator.z).match(v.z);
     }
     std::string describe() const override
     {
@@ -127,9 +128,55 @@ struct VectorRangeMatcher final : MatcherBase<ccs::vector_range<std::vector<T>>>
     mutable Catch::Approx approx = Catch::Approx::custom();
 };
 
+template <typename T, int I>
+struct ScalarMatcher final : MatcherBase<ccs::scalar<T, I>> {
+
+    ScalarMatcher(ccs::scalar<T, I> const& comparator)
+        : m_comparator(comparator)
+    {
+    }
+
+    bool match(ccs::scalar<T, I> const& v) const override
+    {
+        return ScalarFieldMatcher(m_comparator.field).match(v.field) &&
+               VectorRangeMatcher(m_comparator.obj).match(v.obj);
+    }
+    std::string describe() const override
+    {
+        return "is approx: " + ::Catch::Detail::stringify(m_comparator);
+    }
+    template <typename = std::enable_if_t<std::is_constructible<double, T>::value>>
+    ScalarMatcher& epsilon(T const& newEpsilon)
+    {
+        approx.epsilon(static_cast<double>(newEpsilon));
+        return *this;
+    }
+    template <typename = std::enable_if_t<std::is_constructible<double, T>::value>>
+    ScalarMatcher& margin(T const& newMargin)
+    {
+        approx.margin(static_cast<double>(newMargin));
+        return *this;
+    }
+    template <typename = std::enable_if_t<std::is_constructible<double, T>::value>>
+    ScalarMatcher& scale(T const& newScale)
+    {
+        approx.scale(static_cast<double>(newScale));
+        return *this;
+    }
+
+    ccs::scalar<T, I> const& m_comparator;
+    mutable Catch::Approx approx = Catch::Approx::custom();
+};
+
 //! Creates a matcher that matches vectors that `comparator` as an element
 template <typename T, int I>
-ScalarMatcher<T, I> Approx(ccs::scalar_field<T, I> const& comparator)
+ScalarFieldMatcher<T, I> Approx(ccs::scalar_field<T, I> const& comparator)
+{
+    return ScalarFieldMatcher<T, I>(comparator);
+}
+
+template <typename T, int I>
+ScalarMatcher<T, I> Approx(ccs::scalar<T, I> const& comparator)
 {
     return ScalarMatcher<T, I>(comparator);
 }

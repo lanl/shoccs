@@ -45,9 +45,7 @@ namespace ccs::op
             f_bvalues <<= tmp >> select(dxyz.solid_points() >> vector_take(sz));
 
             // combine the data at fluid points
-            div = tmp.x;
-            div += tmp.y;
-            div += tmp.z;
+            div = contract(tmp, std::plus{});
         }
     };
 } // namespace ccs::operator

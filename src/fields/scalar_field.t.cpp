@@ -113,7 +113,7 @@ TEST_CASE("selection")
 
     auto xxt = xx >> vs::transform([](auto&& v) { return v * v; });
     REQUIRE(rs::equal(xxt, std::vector<real>{1, 4, 9, 16, 25, 36}));
-    REQUIRE(Scalar<decltype(xxt)>);
+    REQUIRE(Scalar_Field<decltype(xxt)>);
     REQUIRE(Compatible_Fields<decltype(xx), decltype(xxt)>);
 }
 

@@ -1,7 +1,6 @@
 add_library(operators directional.cpp derivative.cpp gradient.cpp divergence.cpp)
 
-target_link_libraries(operators PUBLIC geometry mesh range-v3::range-v3 matrices
-PRIVATE cppcoro)
+target_link_libraries(operators PUBLIC geometry mesh range-v3::range-v3 matrices fields)
 target_include_directories(operators PUBLIC ..)
 
 add_unit_test(directional "operators" operators)
