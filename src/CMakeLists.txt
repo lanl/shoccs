@@ -2,6 +2,7 @@ add_compile_definitions(SOL_ALL_SAFETIES_ON=1)
 
 add_library(indexing INTERFACE)
 add_unit_test(indexing "indexing" indexing)
+add_unit_test(index_view "indexing" indexing cppcoro range-v3::range-v3)
 add_unit_test(real3_operators "real3")
 
 add_subdirectory(mesh)

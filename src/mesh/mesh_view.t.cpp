@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "fields/result_field.hpp"
+#include <range/v3/range/conversion.hpp>
 #include <range/v3/view/zip.hpp>
 
 TEST_CASE("location-2D")
@@ -87,5 +88,51 @@ TEST_CASE("location-3D")
                              {0, 2, 4}};
         auto r = location_view<2>(m) | rs::to<std::vector<real3>>();
         REQUIRE(c == r);
+    }
+}
+
+TEST_CASE("plane")
+{
+    using namespace ccs;
+
+    auto m = mesh{real3{-1, 1, 3}, real3{0, 2, 4}, int3{2, 2, 3}};
+
+    SECTION("X")
+    {
+        auto x = location_view<0>(m, 0) | rs::to<std::vector<real3>>();
+
+        REQUIRE(x == std::vector<real3>{{-1, 1, 3},
+                                        {-1, 1, 3.5},
+                                        {-1, 1, 4},
+                                        {-1, 2, 3},
+                                        {-1, 2, 3.5},
+                                        {-1, 2, 4}});
+        x = location_view<0>(m, -1) | rs::to<std::vector<real3>>();
+        REQUIRE(
+            x ==
+            std::vector<real3>{
+                {0, 1, 3}, {0, 1, 3.5}, {0, 1, 4}, {0, 2, 3}, {0, 2, 3.5}, {0, 2, 4}});
+    }
+
+    SECTION("Y")
+    {
+        auto y = location_view<1>(m, 0) | rs::to<std::vector<real3>>();
+        REQUIRE(
+            y ==
+            std::vector<real3>{
+                {-1, 1, 3}, {-1, 1, 3.5}, {-1, 1, 4}, {0, 1, 3}, {0, 1, 3.5}, {0, 1, 4}});
+        y = location_view<1>(m, -1) | rs::to<std::vector<real3>>();
+        REQUIRE(
+            y ==
+            std::vector<real3>{
+                {-1, 2, 3}, {-1, 2, 3.5}, {-1, 2, 4}, {0, 2, 3}, {0, 2, 3.5}, {0, 2, 4}});
+    }
+
+    SECTION("Z")
+    {
+        auto z = location_view<2>(m, 0) | rs::to<std::vector<real3>>();
+        REQUIRE(z == std::vector<real3>{{-1, 1, 3}, {-1, 2, 3}, {0, 1, 3}, {0, 2, 3}});
+        z = location_view<2>(m, -1) | rs::to<std::vector<real3>>();
+        REQUIRE(z == std::vector<real3> {{-1, 1, 4}, {-1, 2, 4}, {0, 1, 4}, {0, 2, 4}});
     }
 }

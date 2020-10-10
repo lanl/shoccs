@@ -36,4 +36,26 @@ cppcoro::generator<real3> location_view(const mesh& m)
     }
 }
 
+template <int I>
+cppcoro::generator<real3> location_view(const mesh& m, int i)
+{
+    constexpr int F = index::dir<I>::fast;
+    constexpr int S = index::dir<I>::slow;
+    real3 loc;
+
+    const auto iline = m.line(I);
+    const auto fline = m.line(F);
+    const auto sline = m.line(S);
+
+    loc[I] = iline.min + iline.h * (i < 0 ? i + iline.n : i);
+
+    for (int s = 0; s < sline.n; s++) {
+        loc[S] = sline.min + sline.h * s;
+        for (int f = 0; f < fline.n; f++) {
+            loc[F] = fline.min + fline.h * f;
+            co_yield loc;
+        }
+    }
+}
+
 } // namespace ccs
