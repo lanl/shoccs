@@ -29,7 +29,7 @@ TEST_CASE("range transforms")
     REQUIRE(rs::equal(a.y, vr.y | t));
     REQUIRE(rs::equal(a.z, vr.z | t));
 
-    auto trim = vector_take(int3{2, 3, 1});
+    auto trim = v_take(int3{2, 3, 1});
     auto v = vr >> trim;
 
     REQUIRE(v.size() == int3{2, 3, 1});
@@ -45,6 +45,19 @@ TEST_CASE("range transforms")
     }
 }
 
+TEST_CASE("construction")
+{
+    using namespace ccs;
+    using T = std::vector<real>;
+
+    auto v = vector_range<T>(5);
+
+    REQUIRE(v.size() == int3{5, 5, 5});
+
+    auto vv = vector_range<T>(v_arg(3), v_arg(4), v_arg(5));
+    REQUIRE(vv.size() == int3{3, 4, 5});
+}
+
 TEST_CASE("resizing")
 {
     using namespace ccs;
@@ -52,6 +65,16 @@ TEST_CASE("resizing")
     using T = std::vector<real>;
 
     auto v = vector_range{T{0, 1, 2}, T{-1, -2}, T{0, 1, 2, 3, 4, 5, 6}};
+
+    REQUIRE(v.xi(0) == 0);
+    v.xi(0) = -1;
+    REQUIRE(v.xi(0) == -1);
+    REQUIRE(v.yi(1) == -2);
+    v.yi(1) = 5;
+    REQUIRE(v.yi(1) == 5);
+    REQUIRE(v.zi(3) == 3);
+    v.zi(3) = -3;
+    REQUIRE(v.zi(3) == -3); 
 
     REQUIRE(v.size() == int3{3, 2, 7});
 

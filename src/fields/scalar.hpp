@@ -10,13 +10,15 @@ namespace ccs
 
 namespace detail
 {
-template <typename T, typename U>
+template <typename T, typename U, typename V>
 struct scalar_proxy {
+    using S = T;
     T field;
     U obj;
+    V m;
 };
-template <typename T, typename U>
-scalar_proxy(T&&, U &&) -> scalar_proxy<T, U>;
+template <typename T, typename U, typename V>
+scalar_proxy(T&&, U&&, V &&) -> scalar_proxy<T, U, V>;
 
 } // namespace detail
 
@@ -24,36 +26,43 @@ template <typename T, int I>
 struct scalar {
     using S = scalar_field<T, I>;
     using V = vector_range<std::vector<T>>;
+    using M =
+        vector_range<std::span<const int3>>; // mapping for Boundary points into domain
     using Type = scalar<T, I>;
-    static constexpr int dim = I;
 
     S field;
     V obj;
+    M m;
 
     scalar() = default;
 
     scalar(int3 ex) : field{ex} {}
-    scalar(int3 ex, int3 b_size) : field{ex} { obj.resize(b_size); }
+    scalar(int3 ex, int3 b_size)
+        : field{ex}, obj{v_arg(b_size[0]), v_arg(b_size[1]), v_arg(b_size[2])}
+    {
+    }
 
     template <Scalar_Field SF, Vector_Field VF>
-    scalar(SF&& field, VF&& obj)
-        : field{std::forward<SF>(field)}, obj{std::forward<VF>(obj)}
+    scalar(SF&& field, VF&& obj, M m) : field{FWD(field)}, obj{FWD(obj)}, m{MOVE(m)}
     {
     }
 
     template <Scalar U>
     requires(!std::same_as<std::remove_cvref_t<U>, Type>) scalar(U&& u)
-        : field{std::forward<U>(u).field}, obj{std::forward<U>(u).obj}
+        : field{FWD(u).field}, obj{FWD(u).obj}, m{FWD(u).m}
     {
     }
 
     template <Scalar U>
     requires(!std::same_as<std::remove_cvref_t<U>, Type>) scalar& operator=(U&& u)
     {
-        field = std::forward<U>(u).field;
-        obj = std::forward<U>(u).obj;
+        field = FWD(u).field;
+        obj = FWD(u).obj;
+        m = FWD(u).m;
         return *this;
     }
+
+    int3 extents() const { return field.extents(); }
 
 #define SHOCCS_GEN_OPERATORS_(op, acc)                                                   \
     template <Numeric N>                                                                 \
@@ -94,8 +103,8 @@ struct scalar {
     }                                                                                    \
     constexpr auto op(T&& t, U&& u)                                                      \
     {                                                                                    \
-        return detail::scalar_proxy{std::forward<T>(t).field f std::forward<U>(u).field, \
-                                    std::forward<T>(t).obj f std::forward<U>(u).obj};    \
+        return detail::scalar_proxy{                                                     \
+            FWD(t).field f FWD(u).field, FWD(t).obj f FWD(u).obj, FWD(t).m};             \
     }                                                                                    \
     template <Scalar T, Numeric U>                                                       \
     requires requires(T t, U u)                                                          \
@@ -105,8 +114,7 @@ struct scalar {
     }                                                                                    \
     constexpr auto op(T&& t, U u)                                                        \
     {                                                                                    \
-        return detail::scalar_proxy{std::forward<T>(t).field f u,                        \
-                                    std::forward<T>(t).obj f u};                         \
+        return detail::scalar_proxy{FWD(t).field f u, FWD(t).obj f u, FWD(t).m};         \
     }                                                                                    \
     template <Scalar T, Numeric U>                                                       \
     requires requires(T t, U u)                                                          \
@@ -116,8 +124,7 @@ struct scalar {
     }                                                                                    \
     constexpr auto op(U u, T&& t)                                                        \
     {                                                                                    \
-        return detail::scalar_proxy{u f std::forward<T>(t).field,                        \
-                                    u f std::forward<T>(t).obj};                         \
+        return detail::scalar_proxy{u f FWD(t).field, u f FWD(t).obj, FWD(t).m};         \
     }
 
 SHOCCS_GEN_OPERATORS(operator+, +)

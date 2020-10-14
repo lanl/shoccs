@@ -8,6 +8,21 @@
 namespace ccs
 {
 
+namespace detail
+{
+template <typename X, typename I>
+concept Call = requires(X x, I i)
+{
+    x(i);
+};
+
+template <typename X, typename I>
+concept Index = requires(X x, I i)
+{
+    x[i];
+};
+} // namespace detail
+
 template <typename X_, typename Y_ = X_, typename Z_ = Y_>
 struct vector_range {
     using X = X_;
@@ -17,6 +32,26 @@ struct vector_range {
     X x;
     Y y;
     Z z;
+
+    constexpr vector_range(X&& x, Y&& y, Z&& z) : x{FWD(x)}, y{FWD(y)}, z{FWD(z)} {}
+
+    template <typename... A, typename... B, typename... C>
+    requires std::constructible_from<X, A...>&& std::constructible_from<Y, B...>&&
+        std::constructible_from<Z, C...> constexpr vector_range(v_arg<A...> a,
+                                                                v_arg<B...> b,
+                                                                v_arg<C...> c)
+        : x{std::make_from_tuple<X>(a.args)},
+          y{std::make_from_tuple<Y>(b.args)},
+          z{std::make_from_tuple<Z>(c.args)}
+    {
+    }
+
+    template <typename... Args>
+    requires std::constructible_from<X, Args...>&& std::constructible_from<Y, Args...>&&
+        std::constructible_from<Z, Args...>
+        vector_range(Args&&... args) : x(args...), y(args...), z(FWD(args)...)
+    {
+    }
 
     template <Vector_Field V>
         requires(!std::same_as<Type, std::remove_cvref_t<V>>) &&
@@ -74,6 +109,88 @@ struct vector_range {
         return x.extents();
     }
 
+    template <typename T>
+        requires detail::Call<X, T> || detail::Index<X, T>
+        decltype(auto) xi(T&& t) const
+    {
+        if constexpr (detail::Call<X, T>)
+            return x(FWD(t));
+        else
+            return x[FWD(t)];
+    }
+
+    template <typename T>
+        requires detail::Call<X, T> || detail::Index<X, T>
+        decltype(auto) xi(T&& t)
+    {
+        if constexpr (detail::Call<X, T>)
+            return x(FWD(t));
+        else
+            return x[FWD(t)];
+    }
+
+    template <typename T>
+        requires detail::Call<Y, T> || detail::Index<Y, T>
+        decltype(auto) yi(T&& t) const
+    {
+        if constexpr (detail::Call<Y, T>)
+            return y(FWD(t));
+        else
+            return y[FWD(t)];
+    }
+
+    template <typename T>
+        requires detail::Call<Y, T> || detail::Index<Y, T>
+        decltype(auto) yi(T&& t)
+    {
+        if constexpr (detail::Call<Y, T>)
+            return y(FWD(t));
+        else
+            return y[FWD(t)];
+    }
+
+     template <typename T>
+        requires detail::Call<Z, T> || detail::Index<Z, T>
+        decltype(auto) zi(T&& t) const
+    {
+        if constexpr (detail::Call<Z, T>)
+            return z(FWD(t));
+        else
+            return z[FWD(t)];
+    }
+
+    template <typename T>
+        requires detail::Call<Z, T> || detail::Index<Z, T>
+        decltype(auto) zi(T&& t)
+    {
+        if constexpr (detail::Call<Z, T>)
+            return z(FWD(t));
+        else
+            return z[FWD(t)];
+    }
+
+    template <int I>
+    decltype(auto) get() const
+    {
+        if constexpr(I == 0)
+            return (x);
+        else if constexpr(I == 1)
+            return (y);
+        else
+            return (z);
+    }
+
+    template <int I>
+    decltype(auto) get()
+    {
+        if constexpr(I == 0)
+            return (x);
+        else if constexpr(I == 1)
+            return (y);
+        else
+            return (z);
+    }
+
 #define SHOCCS_GEN_OPERATORS_(op, acc)                                                   \
     template <Numeric N>                                                                 \
     vector_range& op(N n) requires rs::output_range<X, N>&& rs::output_range<Y, N>&&     \
@@ -125,13 +242,12 @@ struct vector_field {
     vector_field(int3 ex) : x{ex}, y{ex}, z{ex} {}
 
     template <Scalar_Field XX, Scalar_Field YY, Scalar_Field ZZ>
-    vector_field(XX&& x, YY&& y, ZZ&& z)
-        : x{std::forward<XX>(x)}, y{std::forward<YY>(y)}, z{std::forward<ZZ>(z)}
+    vector_field(XX&& x, YY&& y, ZZ&& z) : x{FWD(x)}, y{FWD(y)}, z{FWD(z)}
     {
     }
 
     template <Scalar_Field A>
-    vector_field(A&& a) : x{a}, y{a}, z{std::forward<A>(a)}
+    vector_field(A&& a) : x{a}, y{a}, z{FWD(a)}
     {
     }
 
@@ -195,10 +311,9 @@ struct vector_field {
         if constexpr (direct_apply)                                                      \
             return vector_range{f(t.x, u.x), f(t.y, u.y), f(t.z, u.z)};                  \
         else                                                                             \
-            return vector_range{                                                         \
-                vs::zip_with(f, std::forward<T>(t).x, std::forward<U>(u).x),             \
-                vs::zip_with(f, std::forward<T>(t).y, std::forward<U>(u).y),             \
-                vs::zip_with(f, std::forward<T>(t).z, std::forward<U>(u).z)};            \
+            return vector_range{vs::zip_with(f, FWD(t).x, FWD(u).x),                     \
+                                vs::zip_with(f, FWD(t).y, FWD(u).y),                     \
+                                vs::zip_with(f, FWD(t).z, FWD(u).z)};                    \
     }                                                                                    \
     template <Vector_Field T, Numeric U>                                                 \
     constexpr auto op(T&& t, U u)                                                        \
@@ -213,10 +328,9 @@ struct vector_field {
             return vector_range{f(t.x, u), f(t.y, u), f(t.z, u)};                        \
         else {                                                                           \
             const auto [nx, ny, nz] = t.size();                                          \
-            return vector_range{                                                         \
-                vs::zip_with(f, std::forward<T>(t).x, vs::repeat_n(u, nx)),              \
-                vs::zip_with(f, std::forward<T>(t).y, vs::repeat_n(u, ny)),              \
-                vs::zip_with(f, std::forward<T>(t).z, vs::repeat_n(u, nz))};             \
+            return vector_range{vs::zip_with(f, FWD(t).x, vs::repeat_n(u, nx)),          \
+                                vs::zip_with(f, FWD(t).y, vs::repeat_n(u, ny)),          \
+                                vs::zip_with(f, FWD(t).z, vs::repeat_n(u, nz))};         \
         }                                                                                \
     }                                                                                    \
     template <Vector_Field T, Numeric U>                                                 \
@@ -232,10 +346,9 @@ struct vector_field {
             return vector_range{f(u, t.x), f(u, t.y), f(u, t.z)};                        \
         else {                                                                           \
             const auto [nx, ny, nz] = t.size();                                          \
-            return vector_range{                                                         \
-                vs::zip_with(f, vs::repeat_n(u, nx), std::forward<T>(t).x),              \
-                vs::zip_with(f, vs::repeat_n(u, ny), std::forward<T>(t).y),              \
-                vs::zip_with(f, vs::repeat_n(u, nz), std::forward<T>(t).z)};             \
+            return vector_range{vs::zip_with(f, vs::repeat_n(u, nx), FWD(t).x),          \
+                                vs::zip_with(f, vs::repeat_n(u, ny), FWD(t).y),          \
+                                vs::zip_with(f, vs::repeat_n(u, nz), FWD(t).z)};         \
         }                                                                                \
     }
 
@@ -298,12 +411,19 @@ constexpr auto operator>>(F&& f, T t)
         return vector_range{f.x | t.x, f.y | t.y, f.z | t.z};
 }
 
-constexpr auto vector_take(int3 sz)
+constexpr auto v_take(int3 sz)
 {
     return vector_range{
         vs::take_exactly(sz[0]), vs::take_exactly(sz[1]), vs::take_exactly(sz[2])};
 }
 
+#if 0
+template <typename... Args>
+constexpr auto v_transform(Args&&... args)
+{
+    return vector_range{vs::transform(std::forward<Args>(args)...)};
+}
+#endif
 using v_field = vector_field<real>;
 // template<typename... Args>
 // using v_range = vector_range<Args...>;

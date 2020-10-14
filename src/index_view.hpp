@@ -3,6 +3,8 @@
 #include "indexing.hpp"
 #include <cppcoro/generator.hpp>
 
+// note that these are not currently sized ranges
+
 namespace ccs
 {
 template <int I = 2>

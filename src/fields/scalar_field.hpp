@@ -52,10 +52,8 @@ public:
 
     scalar_field(int3 ex) : P{ex[0] * ex[1] * ex[2]}, E{ex} {}
 
-    scalar_field(std::vector<T> f, int3 ex) : P{std::move(f)}, E{ex} {}
-
-    template <rs::input_range R>
-    scalar_field(R&& r, int3 ex) : P{ex[0] * ex[1] * ex[2]}, E{ex}
+    scalar_field(std::vector<T> f, int3 ex) : P{MOVE(f)}, E{ex} {}
+    template<rs::input_range R> scalar_field(R&& r, int3 ex) : P{ex[0] * ex[1] * ex[2]}, E{ex}
     {
         rs::copy_n(rs::begin(r), this->size(), this->begin());
     }
@@ -186,19 +184,19 @@ public:
     {                                                                                    \
         assert(t.extents() == u.extents());                                              \
         constexpr auto I = traits::scalar_dim<T>;                                        \
-        ret_range(vs::zip_with(f, std::forward<T>(t), std::forward<U>(u)));              \
+        ret_range(vs::zip_with(f, FWD(t), FWD(u)));                                      \
     }                                                                                    \
     template <Scalar_Field T, Numeric U>                                                 \
     constexpr auto op(T&& t, U u)                                                        \
     {                                                                                    \
         constexpr auto I = traits::scalar_dim<T>;                                        \
-        ret_range(vs::zip_with(f, std::forward<T>(t), vs::repeat_n(u, t.size())));       \
+        ret_range(vs::zip_with(f, FWD(t), vs::repeat_n(u, t.size())));                   \
     }                                                                                    \
     template <Scalar_Field T, Numeric U>                                                 \
     constexpr auto op(U u, T&& t)                                                        \
     {                                                                                    \
         constexpr auto I = traits::scalar_dim<T>;                                        \
-        ret_range(vs::zip_with(f, vs::repeat_n(u, t.size()), std::forward<T>(t)));       \
+        ret_range(vs::zip_with(f, vs::repeat_n(u, t.size()), FWD(t)));                   \
     }
 
 SHOCCS_GEN_OPERATORS(operator+, std::plus{})
@@ -212,7 +210,7 @@ requires rs::invocable_view_closure<ViewFn, T> constexpr auto
 operator>>(T&& t, vs::view_closure<ViewFn> f)
 {
     constexpr auto I = traits::scalar_dim<T>;
-    ret_range(std::forward<T>(t) | f);
+    ret_range(FWD(t) | f);
 }
 #undef ret_range
 

@@ -117,12 +117,12 @@ public:
     result_field() = default;
 
     result_field(const F& f) : f{f} {}
-    result_field(F&& f) : f{std::move(f)} {}
+    result_field(F&& f) : f{MOVE(f)} {}
     // result_field(int sz) requires std::is_constructible_v<F, int> : f(sz) {}
 
     template <typename U>
         result_field(U&& u) requires std::constructible_from<F, U> &&
-        (!std::same_as<F, std::remove_cvref_t<U>>) : f(std::forward<U>(u))
+        (!std::same_as<F, std::remove_cvref_t<U>>) : f(FWD(u))
     {
     }
 
@@ -182,25 +182,23 @@ public:
     template <Result T, Result U>                                                        \
     constexpr auto op(T&& t, U&& u)                                                      \
     {                                                                                    \
-        return result_range{vs::zip_with(f, std::forward<T>(t), std::forward<U>(u))};    \
+        return result_range{vs::zip_with(f, FWD(t), FWD(u))};                            \
     }                                                                                    \
     template <Result T, Numeric U>                                                       \
     constexpr auto op(T&& t, U u)                                                        \
     {                                                                                    \
         if constexpr (rs::sized_range<T>)                                                \
-            return result_range{                                                         \
-                vs::zip_with(f, std::forward<T>(t), vs::repeat_n(u, t.size()))};         \
+            return result_range{vs::zip_with(f, FWD(t), vs::repeat_n(u, t.size()))};     \
         else                                                                             \
-            return result_range{vs::zip_with(f, std::forward<T>(t), vs::repeat(u))};     \
+            return result_range{vs::zip_with(f, FWD(t), vs::repeat(u))};                 \
     }                                                                                    \
     template <Result T, Numeric U>                                                       \
     constexpr auto op(U u, T&& t)                                                        \
     {                                                                                    \
         if constexpr (ranges::sized_range<T>)                                            \
-            return result_range{                                                         \
-                vs::zip_with(f, vs::repeat_n(u, t.size()), std::forward<T>(t))};         \
+            return result_range{vs::zip_with(f, vs::repeat_n(u, t.size()), FWD(t))};     \
         else                                                                             \
-            return result_range{vs::zip_with(f, vs::repeat(u), std::forward<T>(t))};     \
+            return result_range{vs::zip_with(f, vs::repeat(u), FWD(t))};                 \
     }
 
 SHOCCS_GEN_OPERATORS(operator+, std::plus{})
@@ -213,7 +211,7 @@ template <Result R, typename ViewFn>
 requires rs::invocable_view_closure<ViewFn, R> constexpr auto
 operator>>(R&& r, vs::view_closure<ViewFn> t)
 {
-    return result_range{std::forward<R>(r) | t};
+    return result_range{FWD(r) | t};
 }
 
 template <typename T = real>

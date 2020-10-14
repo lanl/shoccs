@@ -12,7 +12,7 @@ struct scalar;
 
 namespace detail
 {
-template <typename S, typename U>
+template <typename S, typename U, typename V>
 struct scalar_proxy;
 
 namespace traits
@@ -20,8 +20,8 @@ namespace traits
 template <typename = void>
 struct is_scalar_proxy : std::false_type {
 };
-template <typename T, typename U>
-struct is_scalar_proxy<scalar_proxy<T, U>> : std::true_type {
+template <typename T, typename U, typename V>
+struct is_scalar_proxy<scalar_proxy<T, U, V>> : std::true_type {
 };
 } // namespace traits
 } // namespace detail

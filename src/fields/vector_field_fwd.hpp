@@ -12,6 +12,15 @@ class vector_field;
 template <typename X, typename Y, typename Z>
 struct vector_range;
 
+// A way to encapsulate arguments to various components 
+template <typename... Args>
+struct v_arg {
+    std::tuple<Args...> args;
+};
+template<typename...Args>
+v_arg(Args&&...) -> v_arg<Args...>;
+
+
 namespace traits
 {
 // define some traits and concepts to constrain our universal references and ranges

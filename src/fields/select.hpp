@@ -1,8 +1,10 @@
 #include "result_field.hpp"
+#include "scalar.hpp"
 #include "scalar_field.hpp"
 #include "types.hpp"
 #include "vector_field.hpp"
 #include <range/v3/range/concepts.hpp>
+#include <range/v3/view/iota.hpp>
 
 namespace ccs
 {
@@ -17,21 +19,33 @@ auto select(I&& i);
 namespace detail
 {
 // should think about constraints on R, something like random access range or vector field
-template <typename R, typename I>
+template <typename R, typename I, typename A>
 struct selection {
     R r;
     I i;
+    A action;
 };
 
 template <typename R, typename I>
-selection(R&&, I &&) -> selection<R, I>;
+selection(R&&, I &&) -> selection<R, I, std::identity>;
 
-template <typename I>
+template <typename R, typename I, typename A>
+selection(R&&, I&&, A &&) -> selection<R, I, A>;
+
+template <typename I, typename P, typename A>
 struct selection_helper {
     I i;
+    P proj;
+    A action;
 };
 template <typename I>
-selection_helper(I &&) -> selection_helper<I>;
+selection_helper(I &&) -> selection_helper<I, std::identity, std::identity>;
+
+template <typename I, typename P>
+selection_helper(I&&, P &&) -> selection_helper<I, P, std::identity>;
+
+template <typename I, typename P, typename A>
+selection_helper(I&&, P&&, A &&) -> selection_helper<I, P, A>;
 
 namespace traits
 {
@@ -39,8 +53,8 @@ template <typename = void>
 struct is_selection : std::false_type {
 };
 
-template <typename R, typename I>
-struct is_selection<selection<R, I>> : std::true_type {
+template <typename R, typename I, typename A>
+struct is_selection<selection<R, I, A>> : std::true_type {
 };
 
 template <typename T>
@@ -50,8 +64,8 @@ template <typename = void>
 struct is_selection_helper : std::false_type {
 };
 
-template <typename I>
-struct is_selection_helper<selection_helper<I>> : std::true_type {
+template <typename I, typename P, typename A>
+struct is_selection_helper<selection_helper<I, P, A>> : std::true_type {
 };
 
 template <typename T>
@@ -67,8 +81,8 @@ concept Selection_Helper = is_selection_helper_v<T>;
 template <typename>
 struct selection_range;
 
-template <typename R, typename I>
-struct selection_range<selection<R, I>> {
+template <typename R, typename I, typename A>
+struct selection_range<selection<R, I, A>> {
     using type = R;
 };
 template <typename U>
@@ -77,8 +91,8 @@ using selection_range_t = typename selection_range<std::remove_cvref_t<U>>::type
 // extract index type
 template <typename>
 struct selection_index;
-template <typename R, typename I>
-struct selection_index<selection<R, I>> {
+template <typename R, typename I, typename A>
+struct selection_index<selection<R, I, A>> {
     using type = I;
 };
 template <typename U>
@@ -111,14 +125,16 @@ concept Vector_Vector_Selection = Vector_Selection_Range<T>&& Vector_Selection_I
 template <typename R, traits::Selection_Helper S>
 auto operator>>(R&& r, S&& s)
 {
-    return selection{std::forward<R>(r), std::forward<S>(s).i};
+    return selection{std::invoke(s.proj, FWD(r)),
+                     FWD(s).i,
+                     [action = FWD(s).action, &r]() { std::invoke(action, r); }};
 }
 
 // allow for chaining transformations on the selections
 template <traits::Selection S, typename ViewFn>
 auto operator>>(S&& s, vs::view_closure<ViewFn> t)
 {
-    return selection{std::forward<S>(s).r >> t, std::forward<S>(s).i};
+    return selection{FWD(s).r >> t, FWD(s).i, FWD(s).action};
 }
 
 // support: field >> select(input_range) <<= container
@@ -140,47 +156,75 @@ void select_in_place(S&& s, R&& r)
 template <traits::Vector_Scalar_Selection S, rs::input_range R>
 void select_in_place(S&& s, R&& r)
 {
-    for (auto&& [i, v] : vs::zip(s.i, r)) s.r.x(i) = v;
-    for (auto&& [i, v] : vs::zip(s.i, r)) s.r.y(i) = v;
-    for (auto&& [i, v] : vs::zip(s.i, r)) s.r.z(i) = v;
+    for (auto&& [i, v] : vs::zip(s.i, r)) s.r.xi(i) = v;
+    for (auto&& [i, v] : vs::zip(s.i, r)) s.r.yi(i) = v;
+    for (auto&& [i, v] : vs::zip(s.i, r)) s.r.zi(i) = v;
 }
 
 template <traits::Vector_Vector_Selection S, rs::input_range R>
 void select_in_place(S&& s, R&& r)
 {
-    for (auto&& [i, v] : vs::zip(s.i.x, r)) s.r.x(i) = v;
-    for (auto&& [i, v] : vs::zip(s.i.y, r)) s.r.y(i) = v;
-    for (auto&& [i, v] : vs::zip(s.i.z, r)) s.r.z(i) = v;
+    for (auto&& [i, v] : vs::zip(s.i.x, r)) s.r.xi(i) = v;
+    for (auto&& [i, v] : vs::zip(s.i.y, r)) s.r.yi(i) = v;
+    for (auto&& [i, v] : vs::zip(s.i.z, r)) s.r.zi(i) = v;
 }
 
 template <traits::Vector_Scalar_Selection S, Vector_Field R>
 void select_in_place(S&& s, R&& r)
 {
-    for (auto&& [i, v] : vs::zip(s.i, r.x)) s.r.x(i) = v;
-    for (auto&& [i, v] : vs::zip(s.i, r.y)) s.r.y(i) = v;
-    for (auto&& [i, v] : vs::zip(s.i, r.z)) s.r.z(i) = v;
+    for (auto&& [i, v] : vs::zip(s.i, r.x)) s.r.xi(i) = v;
+    for (auto&& [i, v] : vs::zip(s.i, r.y)) s.r.yi(i) = v;
+    for (auto&& [i, v] : vs::zip(s.i, r.z)) s.r.zi(i) = v;
 }
 
 template <traits::Vector_Vector_Selection S, Vector_Field R>
 void select_in_place(S&& s, R&& r)
 {
-    for (auto&& [i, v] : vs::zip(s.i.x, r.x)) s.r.x(i) = v;
-    for (auto&& [i, v] : vs::zip(s.i.y, r.y)) s.r.y(i) = v;
-    for (auto&& [i, v] : vs::zip(s.i.z, r.z)) s.r.z(i) = v;
+    for (auto&& [i, v] : vs::zip(s.i.x, r.x)) s.r.xi(i) = v;
+    for (auto&& [i, v] : vs::zip(s.i.y, r.y)) s.r.yi(i) = v;
+    for (auto&& [i, v] : vs::zip(s.i.z, r.z)) s.r.zi(i) = v;
 }
 
 template <traits::Selection S, typename R>
-auto operator<<=(S&& s, R&& r) -> decltype(select_in_place(std::forward<S>(s), std::forward<R>(r)))
+auto operator<<=(S&& s, R&& r) -> decltype((void)select_in_place(s, FWD(r)))
 {
-    return select_in_place(std::forward<S>(s), std::forward<R>(r));
+    select_in_place(s, FWD(r));
+    std::invoke(s.action);
 }
+
+namespace detail
+{
+template <Numeric R>
+constexpr auto sized_repeat(R r, int s)
+{
+    return vs::repeat_n(r, s);
+}
+
+template <Numeric R>
+constexpr auto sized_repeat(R r, int3 s)
+{
+    return vector_range{
+        vs::repeat_n(r, s[0]), vs::repeat_n(r, s[1]), vs::repeat_n(r, s[2])};
+}
+} // namespace detail
 
 template <traits::Selection S, Numeric R>
-auto operator<<=(S&& s, R r) -> decltype(select_in_place(std::forward<S>(s), vs::repeat(r)))
+auto operator<<=(S&& s, R r)
 {
-    return select_in_place(std::forward<S>(s), vs::repeat(r));
+    constexpr bool sized_index = requires(S s, R r)
+    {
+        detail::sized_repeat(r, s.i.size());
+    };
+    constexpr bool sized_range = requires(S s, R r)
+    {
+        detail::sized_repeat(r, s.r.size());
+    };
+    static_assert(sized_index || sized_range);
+    if constexpr (sized_index)
+        return FWD(s) <<= detail::sized_repeat(r, s.i.size());
+    else
+        return FWD(s) <<= detail::sized_repeat(r, s.r.size());
 }
-
 
 // support: container <<= field >> select(input_range)
 // this fills the container with the selected indicies from the field
@@ -217,27 +261,27 @@ void select_copy_into(R&& r, S&& s)
 template <Vector_Field R, traits::Vector_Scalar_Selection S>
 void select_copy_into(R&& r, S&& s)
 {
-    for (auto&& [i, v] : vs::zip(s.i, r.x)) v = s.r.x(i);
-    for (auto&& [i, v] : vs::zip(s.i, r.y)) v = s.r.y(i);
-    for (auto&& [i, v] : vs::zip(s.i, r.z)) v = s.r.z(i);
+    for (auto&& [i, v] : vs::zip(s.i, r.x)) v = s.r.xi(i);
+    for (auto&& [i, v] : vs::zip(s.i, r.y)) v = s.r.yi(i);
+    for (auto&& [i, v] : vs::zip(s.i, r.z)) v = s.r.zi(i);
 }
 
 template <Vector_Field R, traits::Vector_Vector_Selection S>
 void select_copy_into(R&& r, S&& s)
 {
-    for (auto&& [i, v] : vs::zip(s.i.x, r.x)) v = s.r.x(i);
-    for (auto&& [i, v] : vs::zip(s.i.y, r.y)) v = s.r.y(i);
-    for (auto&& [i, v] : vs::zip(s.i.z, r.z)) v = s.r.z(i);
+    for (auto&& [i, v] : vs::zip(s.i.x, r.x)) v = s.r.xi(i);
+    for (auto&& [i, v] : vs::zip(s.i.y, r.y)) v = s.r.yi(i);
+    for (auto&& [i, v] : vs::zip(s.i.z, r.z)) v = s.r.zi(i);
 }
 
 template <typename R, traits::Selection S>
-auto operator<<=(R&& r, S&& s) -> decltype(select_copy_into(std::forward<R>(r), std::forward<S>(s)))
+auto operator<<=(R&& r, S&& s) -> decltype(select_copy_into(FWD(r), FWD(s)))
 {
     // attempt to resize the output range if we can
     constexpr bool can_resize = requires(R a, S b) { a.resize(b.i.size()); };
     if constexpr (can_resize) r.resize(s.i.size());
 
-    return select_copy_into(std::forward<R>(r), std::forward<S>(s));
+    return select_copy_into(FWD(r), FWD(s));
 }
 
 } // namespace detail
@@ -245,13 +289,37 @@ auto operator<<=(R&& r, S&& s) -> decltype(select_copy_into(std::forward<R>(r), 
 template <typename R, typename I>
 auto select(R&& r, I&& i)
 {
-    return detail::selection{std::forward<R>(r), std::forward<I>(i)};
+    return detail::selection{FWD(r), FWD(i)};
 }
 
 // single argument version
 template <typename I>
 auto select(I&& i)
 {
-    return detail::selection_helper{std::forward<I>(i)};
+    return detail::selection_helper{FWD(i)};
 }
+
+// for scalars
+template <typename I>
+auto field_select(I&& i)
+{
+    return detail::selection_helper{FWD(i),
+                                    [](auto&& s) -> decltype(auto) { return (s.field); }};
+}
+
+template <typename I>
+auto obj_select(I&& i)
+{
+    return detail::selection_helper{
+        FWD(i),
+        [](auto&& s) -> decltype(auto) { return (s.obj); },
+        []<Scalar T>(T&& s) {
+            using Field = typename std::remove_cvref_t<T>::S;
+            s.field >> select(s.m.template get<traits::scalar_dim<Field>>()) <<=
+                s.obj.template get<traits::scalar_dim<Field>>();
+        }};
+}
+
+auto obj_select() { return obj_select(vs::iota(0)); }
+
 } // namespace ccs
