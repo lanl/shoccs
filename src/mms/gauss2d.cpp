@@ -2,28 +2,14 @@
 #include <cmath>
 #include <vector>
 
+#include "gauss.hpp"
+
 
 namespace ccs
 {
 
-struct gauss2d {
-    std::vector<real3> center;
-    std::vector<real3> variance;
-    std::vector<real> amplitude;
-    std::vector<real> frequency;
-
-    gauss2d() = default;
-
-    gauss2d(std::span<const real3> center,
-            std::span<const real3> variance,
-            std::span<const real> amplitude,
-            std::span<const real> frequency)
-        : center{center.begin(), center.end()},
-          variance{variance.begin(), variance.end()},
-          amplitude{amplitude.begin(), amplitude.end()},
-          frequency{frequency.begin(), frequency.end()}
-    {
-    }
+struct gauss2d : detail::gauss {
+    using detail::gauss::gauss;
 
     real operator()(real time, const real3& loc) const
     {
