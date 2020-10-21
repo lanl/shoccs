@@ -110,8 +110,7 @@ struct vector_range {
     }
 
     template <typename T>
-        requires detail::Call<X, T> || detail::Index<X, T>
-        decltype(auto) xi(T&& t) const
+        requires detail::Call<X, T> || detail::Index<X, T> decltype(auto) xi(T&& t) const
     {
         if constexpr (detail::Call<X, T>)
             return x(FWD(t));
@@ -120,8 +119,7 @@ struct vector_range {
     }
 
     template <typename T>
-        requires detail::Call<X, T> || detail::Index<X, T>
-        decltype(auto) xi(T&& t)
+        requires detail::Call<X, T> || detail::Index<X, T> decltype(auto) xi(T&& t)
     {
         if constexpr (detail::Call<X, T>)
             return x(FWD(t));
@@ -130,8 +128,7 @@ struct vector_range {
     }
 
     template <typename T>
-        requires detail::Call<Y, T> || detail::Index<Y, T>
-        decltype(auto) yi(T&& t) const
+        requires detail::Call<Y, T> || detail::Index<Y, T> decltype(auto) yi(T&& t) const
     {
         if constexpr (detail::Call<Y, T>)
             return y(FWD(t));
@@ -140,8 +137,7 @@ struct vector_range {
     }
 
     template <typename T>
-        requires detail::Call<Y, T> || detail::Index<Y, T>
-        decltype(auto) yi(T&& t)
+        requires detail::Call<Y, T> || detail::Index<Y, T> decltype(auto) yi(T&& t)
     {
         if constexpr (detail::Call<Y, T>)
             return y(FWD(t));
@@ -149,9 +145,8 @@ struct vector_range {
             return y[FWD(t)];
     }
 
-     template <typename T>
-        requires detail::Call<Z, T> || detail::Index<Z, T>
-        decltype(auto) zi(T&& t) const
+    template <typename T>
+        requires detail::Call<Z, T> || detail::Index<Z, T> decltype(auto) zi(T&& t) const
     {
         if constexpr (detail::Call<Z, T>)
             return z(FWD(t));
@@ -160,8 +155,7 @@ struct vector_range {
     }
 
     template <typename T>
-        requires detail::Call<Z, T> || detail::Index<Z, T>
-        decltype(auto) zi(T&& t)
+        requires detail::Call<Z, T> || detail::Index<Z, T> decltype(auto) zi(T&& t)
     {
         if constexpr (detail::Call<Z, T>)
             return z(FWD(t));
@@ -172,9 +166,9 @@ struct vector_range {
     template <int I>
     decltype(auto) get() const
     {
-        if constexpr(I == 0)
+        if constexpr (I == 0)
             return (x);
-        else if constexpr(I == 1)
+        else if constexpr (I == 1)
             return (y);
         else
             return (z);
@@ -183,9 +177,9 @@ struct vector_range {
     template <int I>
     decltype(auto) get()
     {
-        if constexpr(I == 0)
+        if constexpr (I == 0)
             return (x);
-        else if constexpr(I == 1)
+        else if constexpr (I == 1)
             return (y);
         else
             return (z);
@@ -232,6 +226,7 @@ struct vector_field {
     using X = scalar_field<T, 0>;
     using Y = scalar_field<T, 1>;
     using Z = scalar_field<T, 2>;
+    using Type = vector_field<T>;
 
     X x;
     Y y;
@@ -249,6 +244,58 @@ struct vector_field {
     template <Scalar_Field A>
     vector_field(A&& a) : x{a}, y{a}, z{FWD(a)}
     {
+    }
+
+    template <Vector_Field V>
+        requires(!std::same_as<std::remove_cvref_t<V>, Type>) && requires(V v, Type& t)
+    {
+        t.x = v.x;
+        t.y = v.y;
+        t.z = v.z;
+    }
+    vector_field& operator=(V&& v)
+    {
+        x = v.x;
+        y = v.y;
+        z = v.z;
+        return *this;
+    }
+
+    // lots of duplication between vector_field/range and so forth.
+    template <typename I>
+    decltype(auto) xi(I&& t) const
+    {
+        return x(FWD(t));
+    }
+
+    template <typename I>
+    decltype(auto) xi(I&& t)
+    {
+        return x(FWD(t));
+    }
+
+    template <typename I>
+    decltype(auto) yi(I&& t) const
+    {
+        return y(FWD(t));
+    }
+
+    template <typename I>
+    decltype(auto) yi(I&& t)
+    {
+        return y(FWD(t));
+    }
+
+    template <typename I>
+    decltype(auto) zi(I&& t) const
+    {
+        return z(FWD(t));
+    }
+
+    template <typename I>
+    decltype(auto) zi(I&& t)
+    {
+        return z(FWD(t));
     }
 
 #define SHOCCS_GEN_OPERATORS_(op, acc)                                                   \

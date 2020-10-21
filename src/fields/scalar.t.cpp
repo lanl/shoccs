@@ -10,7 +10,6 @@
 #include <range/v3/view/stride.hpp>
 #include <range/v3/view/take.hpp>
 
-#include <iostream>
 
 TEST_CASE("math")
 {
@@ -50,7 +49,7 @@ TEST_CASE("selection")
 
     auto xpts = std::vector<int3>{{0, 0, 0}, {1, 0, 0}, {0, 1, 0}};
     auto ypts = std::vector<int3>{{0, 3, 0}, {0, 4, 0}, {1, 0, 0}};
-    auto zpts = std::vector<int3>{{5, 4, 3}, {2, 2, 2}};
+    auto zpts = std::vector<int3>{{3, 4, 5}, {2, 2, 2}};
 
     // some intialization
     auto s = x_scalar{

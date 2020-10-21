@@ -71,7 +71,29 @@ constexpr auto transpose(int3 a)
     constexpr int bd = detail::pos<AD, AF, AS>(BD);
     constexpr int bf = detail::pos<AD, AF, AS>(dir<BD>::fast);
     constexpr int bs = detail::pos<AD, AF, AS>(dir<BD>::slow);
-    
+
     return int3{a[bd], a[bf], a[bs]};
 }
+
+template <int I>
+class bounds
+{
+    int3 x;
+
+public:
+    bounds() = default;
+    bounds(const int3& x) : x{x} {}
+
+    const int3& extents() const { return x; }
+    int3& extents() { return x; }
+
+    constexpr int index(const int3& ijk) const {
+        constexpr int D = I;
+        constexpr int S = dir<D>::slow;
+        constexpr int F = dir<D>::fast;
+        return ijk[S] * x[D] * x[F] + ijk[F] * x[D] + ijk[D];
+    }
+
+};
+
 } // namespace ccs::index

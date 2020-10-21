@@ -2,7 +2,9 @@
 #include "scalar.hpp"
 #include "scalar_field.hpp"
 #include "types.hpp"
+#include "vector.hpp"
 #include "vector_field.hpp"
+
 #include <range/v3/range/concepts.hpp>
 #include <range/v3/view/iota.hpp>
 
@@ -299,7 +301,7 @@ auto select(I&& i)
     return detail::selection_helper{FWD(i)};
 }
 
-// for scalars
+// for scalars/vector
 template <typename I>
 auto field_select(I&& i)
 {
@@ -308,15 +310,40 @@ auto field_select(I&& i)
 }
 
 template <typename I>
+auto x_field_select(I&& i)
+{
+    return detail::selection_helper{
+        FWD(i), [](Vector auto&& v) -> decltype(auto) { return (v.field.x); }};
+}
+
+template <typename I>
+auto y_field_select(I&& i)
+{
+    return detail::selection_helper{
+        FWD(i), [](Vector auto&& v) -> decltype(auto) { return (v.field.y); }};
+}
+
+template <typename I>
+auto z_field_select(I&& i)
+{
+    return detail::selection_helper{
+        FWD(i), [](Vector auto&& v) -> decltype(auto) { return (v.field.z); }};
+}
+
+template <typename I>
 auto obj_select(I&& i)
 {
     return detail::selection_helper{
         FWD(i),
         [](auto&& s) -> decltype(auto) { return (s.obj); },
-        []<Scalar T>(T&& s) {
-            using Field = typename std::remove_cvref_t<T>::S;
-            s.field >> select(s.m.template get<traits::scalar_dim<Field>>()) <<=
-                s.obj.template get<traits::scalar_dim<Field>>();
+        []<typename T>(T&& s) {
+            if constexpr (Scalar<T>) {
+                using Field = typename std::remove_cvref_t<T>::S;
+                s.field >> select(s.m.template get<traits::scalar_dim<Field>>()) <<=
+                    s.obj.template get<traits::scalar_dim<Field>>();
+            } else { // a vector
+                s.field >> select(s.m) <<= s.obj;
+            }
         }};
 }
 
