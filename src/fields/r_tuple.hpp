@@ -32,96 +32,217 @@ concept All = rs::range<T&>&& rs::viewable_range<T>;
 
 namespace detail
 {
+// Base clase for r_tuples which own the containers associated with the data
+// i.e vectors and spans
 template <typename... Args>
-struct owning_tuple {
-    using Type = owning_tuple<Args...>;
-    static constexpr int N = sizeof...(Args);
-    std::tuple<Args...> t;
+struct container_tuple {
+    using Type = container_tuple<Args...>;
+    // static constexpr int N = sizeof...(Args);
+    std::tuple<Args...> c;
 
-    owning_tuple(Args&&... args) : t{FWD(args)...} {}
+    container_tuple(Args&&... args) : c{FWD(args)...} {}
 
-    template <rs::sized_range... Ranges>
-    // requires std::constructible_from <
-    owning_tuple(Ranges&&... r) : t{Args{rs::begin(r), rs::end(r)}...}
+    template <rs::input_range... Ranges>
+    requires(std::constructible_from<Args,
+                                     decltype(rs::begin(std::declval<Ranges>())),
+                                     decltype(rs::begin(std::declval<Ranges>()))>&&...)
+        container_tuple(Ranges&&... r)
+        : c{Args{rs::begin(r), rs::end(r)}...}
     {
     }
 
     template <rs::input_range... Ranges>
-    owning_tuple& operator=(Ranges&&... r)
+    requires(std::constructible_from<Args,
+                                     decltype(rs::begin(std::declval<Ranges>())),
+                                     decltype(rs::begin(std::declval<Ranges>()))>&&...)
+        container_tuple&
+        operator=(Ranges&&... r)
     {
-        t = std::tuple{Args{rs::begin(r), rs::end(r)}...};
+        c = std::tuple{Args{rs::begin(r), rs::end(r)}...};
+        return *this;
+    }
+
+    container_tuple& container() { return *this; }
+    const container_tuple& container() const { return *this; }
+};
+
+template <typename... Args>
+container_tuple(Args&&...) -> container_tuple<std::remove_reference_t<Args>...>;
+
+// this base class encapusulates the tuple aspect.  It should be inherited before
+// as_view to ensure the tuple is initialized correctly
+template <All... Args>
+struct view_base_tuple {
+private:
+    using Type = view_base_tuple<Args...>;
+
+public:
+    std::tuple<all_t<Args>...> v;
+
+    view_base_tuple() = default;
+    // view_base_tuple(Args&&...args) : v{vs::all(FWD(args))...} {};
+
+    template <All... Ranges>
+    view_base_tuple(Ranges&&... args) : v{vs::all(FWD(args))...}
+    {
+    }
+
+    template <typename... C>
+    view_base_tuple(container_tuple<C...>& x) : v{tuple_map(vs::all, x.c)}
+    {
+    }
+
+    template <All... Ranges>
+    view_base_tuple& operator=(Ranges&&... args)
+    {
+        v = std::tuple{vs::all(args)...};
+        return *this;
+    }
+
+    template <typename... C>
+    view_base_tuple& operator=(container_tuple<C...>& x)
+    {
+        v = tuple_map(vs::all, x.c);
+        return *this;
+    }
+
+    auto& view() { return v; }
+    const auto& view() const { return v; }
+};
+
+template <typename... Args>
+view_base_tuple(Args&&...) -> view_base_tuple<Args...>;
+
+// this base class allows for treating tuples of one parameters directly as ranges
+template <All... Args>
+struct as_view {
+private:
+    using Type = as_view<Args...>;
+
+public:
+    as_view() = default;
+
+    template <typename... T>
+    requires(!(std::same_as<Type, std::remove_cvref_t<T>> && ...)) as_view(T&&...)
+    {
+    }
+
+    template <typename... T>
+    requires(!(std::same_as<Type, std::remove_cvref_t<T>> && ...)) as_view&
+    operator=(T&&...)
+    {
+        return *this;
+    }
+};
+
+template <All A>
+struct as_view<A> : all_t<A> {
+private:
+    using View = all_t<A>;
+
+public:
+    as_view() = default;
+    as_view(A&& a) : View(vs::all(FWD(a))) {}
+
+    template <All R>
+    as_view(std::tuple<R>& v) : View(vs::all(std::get<0>(v)))
+    {
+    }
+
+    as_view& operator=(A&& a)
+    {
+        static_cast<View&>(*this) = vs::all(FWD(a));
+        return *this;
+    }
+
+    template <All R>
+    as_view& operator=(std::tuple<R>& v)
+    {
+        static_cast<View&>(*this) = vs::all(std::get<0>(v));
         return *this;
     }
 };
 
 template <typename... Args>
-owning_tuple(Args&&...) -> owning_tuple<std::remove_reference_t<Args>...>;
+as_view(Args&&...) -> as_view<Args...>;
+
+// r_tuple's inherit from this base class which combines as_view/base_view_tuple
+// into a workable unified abstraction
+template <All... Args>
+struct view_tuple : view_base_tuple<Args...>, as_view<Args...> {
+private:
+    using Base_Tup = view_base_tuple<Args...>;
+    using As_View = as_view<Args...>;
+    using Type = view_tuple<Args...>;
+
+public:
+    static constexpr int N = sizeof...(Args);
+
+    view_tuple(Args&&... args) : Base_Tup{FWD(args)...}, As_View{this->view()} {}
+
+    template <rs::input_range... Ranges>
+    view_tuple(Ranges&&... r) : Base_Tup{FWD(r)...}, As_View{this->view()}
+    {
+    }
+
+    template <typename... C>
+    view_tuple(container_tuple<C...>& x) : Base_Tup{x}, As_View{this->view()}
+    {
+    }
+
+    template <typename... C>
+    view_tuple& operator=(container_tuple<C...>& x)
+    {
+        static_cast<Base_Tup&>(*this) = x;
+        static_cast<As_View&>(*this) = this->view();
+        return *this;
+    }
+};
 
 } // namespace detail
 
 template <typename... Args>
-struct r_tuple : detail::owning_tuple<Args...> {
-    using Own = detail::owning_tuple<Args...>;
+struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> {
+    using Container = detail::container_tuple<Args...>;
+    using View = detail::view_tuple<Args&...>;
     using Type = r_tuple<Args...>;
 
-    std::tuple<detail::all_t<Args&>...> r;
+    r_tuple(Args&&... args) : Container{FWD(args)...}, View{this->container()} {}
 
-    r_tuple(Args&&... args) : Own{FWD(args)...}, r{detail::tuple_map(vs::all, this->t)} {}
-};
-
-// specialize for one arg to treat as a range more easily;
-template <typename T>
-struct r_tuple<T> : detail::owning_tuple<T>, detail::all_t<T&> {
-    using Own = detail::owning_tuple<T>;
-    using Range = detail::all_t<T&>;
-    using Type = r_tuple<T>;
-
-    r_tuple(T&& t) : Own{FWD(t)}, Range{vs::all(std::get<0>(this->t))} {}
-
-    template <rs::input_range R>
-    requires(!std::same_as<Type, std::remove_cvref_t<R>>) r_tuple(R&& r)
-        : Own{FWD(r)}, Range{vs::all(std::get<0>(this->t))}
+    template <rs::input_range... R>
+    requires(!(std::same_as<Type, std::remove_cvref_t<R>> && ...)) r_tuple(R&&... r)
+        : Container{FWD(r)...}, View{this->container()}
     {
     }
 
-    template <rs::input_range R>
-    requires(!std::same_as<Type, std::remove_cvref_t<R>>) r_tuple& operator=(R&& r)
+    template <rs::input_range... R>
+    requires(!(std::same_as<Type, std::remove_cvref_t<R>> && ...)) r_tuple&
+    operator=(R&&... r)
     {
-        static_cast<Own&>(*this) = FWD(r);
-        // is there a better way to do this?
-        static_cast<Range&>(*this) = vs::all(get<0>(this->t));
+        this->container().operator=(FWD(r)...);
+        static_cast<View&>(*this) = this->container();
         return *this;
     }
 };
 
+
 template <All... Args>
-struct r_tuple<Args...> {
-    static constexpr int N = sizeof...(Args);
-    std::tuple<detail::all_t<Args>...> r;
+struct r_tuple<Args...> : detail::view_tuple<Args...> {
+    using View = detail::view_tuple<Args...>;
+    using Type = r_tuple<Args...>;
 
-    r_tuple(Args&&... args) : r{vs::all(FWD(args))...} {};
+    r_tuple(Args&&... args) : View{FWD(args)...} {};
 };
 
-// specialize for one arg to treat as a range more easily;
-
-template <All R>
-struct r_tuple<R> : detail::all_t<R> {
-    using Range = detail::all_t<R>;
-    static constexpr int N = 1;
-};
 
 template <typename... Args>
 r_tuple(Args&&...) -> r_tuple<Args...>;
 
 template <int I, typename R>
-constexpr decltype(auto) get(R&& r)
+constexpr decltype(auto) view(R&& r)
 {
-    if constexpr (r.N == 1) {
-        using Base = typename std::remove_cvref_t<R>::Range;
-        return static_cast<Base&>(r);
-    } else {
-        return std::get<I>(FWD(r).r);
-    }
+    constexpr int Idx = I < r.N ? I : r.N;
+    return std::get<Idx>(FWD(r).view());
 }
 
 } // namespace ccs

@@ -25,7 +25,7 @@ TEST_CASE("construction")
     r[1] = -1;
     REQUIRE(r[1] == -1);
 
-    REQUIRE(rs::equal(get<0>(r), x));
+    REQUIRE(rs::equal(view<0>(r), x));
 
     SECTION("owning from input range")
     {
@@ -45,7 +45,7 @@ TEST_CASE("construction")
         REQUIRE(r_owning[1] == 1);
         r_owning[1] = -1;
         REQUIRE(r_owning[1] == -1);
-        REQUIRE(rs::equal(get<0>(r_owning), x));
+        REQUIRE(rs::equal(view<0>(r_owning), x));
 
         r_owning = r;
         REQUIRE(rs::equal(r_owning, x));
@@ -60,9 +60,9 @@ TEST_CASE("construction")
 
     auto rr = r_tuple(x, y, z);
     REQUIRE(rr.N == 3);
-    REQUIRE(rs::equal(get<0>(rr), x));
-    REQUIRE(rs::equal(get<1>(rr), y));
-    REQUIRE(rs::equal(get<2>(rr), z));
+    REQUIRE(rs::equal(view<0>(rr), x));
+    REQUIRE(rs::equal(view<1>(rr), y));
+    REQUIRE(rs::equal(view<2>(rr), z));
 
     {
         auto xx = x;
@@ -70,8 +70,8 @@ TEST_CASE("construction")
         auto zz = z;
         auto r_owning = r_tuple{MOVE(xx), MOVE(yy), MOVE(zz)};
         REQUIRE(r_owning.N == 3);
-        REQUIRE(rs::equal(get<0>(rr), get<0>(r_owning)));
-        REQUIRE(rs::equal(get<1>(rr), get<1>(r_owning)));
-        REQUIRE(rs::equal(get<2>(rr), get<2>(r_owning)));
+        REQUIRE(rs::equal(view<0>(rr), view<0>(r_owning)));
+        REQUIRE(rs::equal(view<1>(rr), view<1>(r_owning)));
+        REQUIRE(rs::equal(view<2>(rr), view<2>(r_owning)));
     }
 }
