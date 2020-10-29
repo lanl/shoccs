@@ -10,3 +10,6 @@ add_unit_test(scalar "fields" fields)
 add_unit_test(vector "fields" fields)
 add_unit_test(r_tuple "field" fields)
 add_unit_test(result_r_tuple "field" fields)
+
+add_executable(r_tuple_seg_fault r_tuple_seg_fault.cpp)
+target_link_libraries(r_tuple_seg_fault fields)

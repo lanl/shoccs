@@ -1,5 +1,7 @@
 #pragma once
 
+#include "indexing.hpp"
+#include "lazy_tuple_math.hpp"
 #include "r_tuple_fwd.hpp"
 #include <tuple>
 
@@ -35,9 +37,12 @@ namespace detail
 // Base clase for r_tuples which own the containers associated with the data
 // i.e vectors and spans
 template <typename... Args>
-struct container_tuple {
+struct container_tuple : lazy::container_math_crtp<container_tuple<Args...>> {
+private:
+    friend class container_math_access;
     using Type = container_tuple<Args...>;
-    // static constexpr int N = sizeof...(Args);
+
+public:
     std::tuple<Args...> c;
 
     container_tuple(Args&&... args) : c{FWD(args)...} {}
@@ -169,11 +174,15 @@ as_view(Args&&...) -> as_view<Args...>;
 // r_tuple's inherit from this base class which combines as_view/base_view_tuple
 // into a workable unified abstraction
 template <All... Args>
-struct view_tuple : view_base_tuple<Args...>, as_view<Args...> {
+struct view_tuple : view_base_tuple<Args...>,
+                    as_view<Args...>,
+                    lazy::view_math_crtp<view_tuple<Args...>> {
 private:
     using Base_Tup = view_base_tuple<Args...>;
     using As_View = as_view<Args...>;
     using Type = view_tuple<Args...>;
+
+    friend class view_math_access;
 
 public:
     static constexpr int N = sizeof...(Args);
@@ -215,6 +224,24 @@ struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> 
     {
     }
 
+    // need to define custom copy and move construction/assignment here
+    r_tuple(const r_tuple& r) : Container{r.container()}, View{this->container()} {}
+    r_tuple& operator=(const r_tuple& r)
+    {
+        this->container() = r.container();
+        static_cast<View&>(*this) = this->container();
+        return *this;
+    }
+
+    r_tuple(r_tuple&& r) : Container{MOVE(r.container())}, View{this->container()} {}
+
+    r_tuple& operator=(r_tuple&& r)
+    {
+        this->container() = MOVE(r.container());
+        static_cast<View&>(*this) = this->container();
+        return *this;
+    }
+
     template <rs::input_range... R>
     requires(!(std::same_as<Type, std::remove_cvref_t<R>> && ...)) r_tuple&
     operator=(R&&... r)
@@ -225,7 +252,6 @@ struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> 
     }
 };
 
-
 template <All... Args>
 struct r_tuple<Args...> : detail::view_tuple<Args...> {
     using View = detail::view_tuple<Args...>;
@@ -234,15 +260,62 @@ struct r_tuple<Args...> : detail::view_tuple<Args...> {
     r_tuple(Args&&... args) : View{FWD(args)...} {};
 };
 
-
 template <typename... Args>
 r_tuple(Args&&...) -> r_tuple<Args...>;
 
 template <int I, typename R>
 constexpr decltype(auto) view(R&& r)
 {
-    constexpr int Idx = I < r.N ? I : r.N;
+    constexpr int Idx = I < r.N ? I : r.N - 1;
     return std::get<Idx>(FWD(r).view());
 }
+
+template <typename R, int I>
+class directional_field : public r_tuple<R>, public index::bounds<I>
+{
+    using Type = directional_field<R, I>;
+    using View = r_tuple<R>;
+    using Bounds = index::bounds<I>;
+
+public:
+    directional_field() = default;
+
+    template <typename T>
+    requires std::constructible_from<View, T> directional_field(T&& t, const int3& bounds)
+        : View{FWD(t)}, Bounds{bounds}
+    {
+    }
+
+    template <typename T>
+    requires std::constructible_from<View, T>
+    directional_field(lit<I>, T&& t, const int3& bounds) : View{FWD(t)}, Bounds{bounds}
+    {
+    }
+};
+
+template <typename R, int I>
+directional_field(lit<I>, R&&, const int3&) -> directional_field<R, I>;
+
+template <typename T, int I>
+using owning_field = directional_field<std::vector<T>, I>;
+
+using x_field = owning_field<real, 0>;
+using y_field = owning_field<real, 1>;
+using z_field = owning_field<real, 2>;
+
+template <typename R, int I, typename... Args>
+class directional_composite
+    : public r_tuple<r_tuple<directional_field<R, I>>, r_tuple<Args...>>
+{
+    using Type = directional_composite<R, I, Args...>;
+    using Domain = r_tuple<directional_field<R, I>>;
+    using Object = r_tuple<Args...>;
+
+public:
+    // directional_composite() = default;
+};
+
+template <typename R, int I, typename... Args>
+directional_composite(R&&, Args&&...) -> directional_composite<R, I, Args...>;
 
 } // namespace ccs

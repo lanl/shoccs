@@ -2,6 +2,7 @@
 
 #include "indexing.hpp"
 #include <cppcoro/generator.hpp>
+#include <range/v3/view/take_exactly.hpp>
 
 // note that these are not currently sized ranges
 
@@ -52,4 +53,5 @@ cppcoro::generator<int3> index_view(int3 extents, int i)
         }
     }
 }
+
 } // namespace ccs
