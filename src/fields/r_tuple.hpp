@@ -67,6 +67,13 @@ public:
         return *this;
     }
 
+    template<int I>
+    const auto& get() const { return std::get<I>(c); }
+
+    template<int I>
+    auto& get() { return std::get<I>(c); }
+
+
     container_tuple& container() { return *this; }
     const container_tuple& container() const { return *this; }
 };
@@ -156,14 +163,14 @@ public:
 
     as_view& operator=(A&& a)
     {
-        static_cast<View&>(*this) = vs::all(FWD(a));
+        View::operator=(vs::all(FWD(a)));
         return *this;
     }
 
     template <All R>
     as_view& operator=(std::tuple<R>& v)
     {
-        static_cast<View&>(*this) = vs::all(std::get<0>(v));
+        View::operator=(vs::all(std::get<0>(v)));
         return *this;
     }
 };
@@ -202,8 +209,8 @@ public:
     template <typename... C>
     view_tuple& operator=(container_tuple<C...>& x)
     {
-        static_cast<Base_Tup&>(*this) = x;
-        static_cast<As_View&>(*this) = this->view();
+        Base_Tup::operator=(x);
+        As_View::operator=(this->view());
         return *this;
     }
 };
@@ -228,17 +235,20 @@ struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> 
     r_tuple(const r_tuple& r) : Container{r.container()}, View{this->container()} {}
     r_tuple& operator=(const r_tuple& r)
     {
-        this->container() = r.container();
-        static_cast<View&>(*this) = this->container();
+        Container::operator=(r.container());
+        View::operator=(this->container());
         return *this;
     }
 
-    r_tuple(r_tuple&& r) : Container{MOVE(r.container())}, View{this->container()} {}
-
-    r_tuple& operator=(r_tuple&& r)
+    r_tuple(r_tuple&& r) noexcept
+        : Container{MOVE(r.container())}, View{this->container()}
     {
-        this->container() = MOVE(r.container());
-        static_cast<View&>(*this) = this->container();
+    }
+
+    r_tuple& operator=(r_tuple&& r) noexcept
+    {
+        Container::operator=(MOVE(r.container()));
+        View::operator=(this->container());
         return *this;
     }
 
@@ -246,8 +256,8 @@ struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> 
     requires(!(std::same_as<Type, std::remove_cvref_t<R>> && ...)) r_tuple&
     operator=(R&&... r)
     {
-        this->container().operator=(FWD(r)...);
-        static_cast<View&>(*this) = this->container();
+        Container::operator=(FWD(r)...);
+        View::operator=(this->container());
         return *this;
     }
 };
@@ -317,5 +327,24 @@ public:
 
 template <typename R, int I, typename... Args>
 directional_composite(R&&, Args&&...) -> directional_composite<R, I, Args...>;
+
+template <typename U, typename V, typename W, typename... Args>
+class tuple_composite : public r_tuple<r_tuple<directional_field<U, 0>,
+                                               directional_field<V, 1>,
+                                               directional_field<W, 2>>,
+                                       r_tuple<Args...>>
+{
+    using Type = tuple_composite<U, V, W, Args...>;
+    using Domain = r_tuple<directional_field<U, 0>,
+                           directional_field<V, 1>,
+                           directional_field<W, 2>>;
+    using Object = r_tuple<Args...>;
+
+public:
+    // directional_composite() = default;
+};
+
+template <typename U, typename V, typename W, typename... Args>
+tuple_composite(U&&, V&&, W&&, Args&&...) -> tuple_composite<U, V, W, Args...>;
 
 } // namespace ccs

@@ -12,6 +12,8 @@
 
 #include <vector>
 
+#include <iostream>
+
 TEST_CASE("construction")
 {
     using namespace ccs;
@@ -30,6 +32,9 @@ TEST_CASE("construction")
 
     SECTION("owning from input range")
     {
+        using T = r_tuple<std::vector<real>>;
+        REQUIRE(std::same_as<decltype(std::declval<T>().template get<0>()),
+                             std::vector<real>&>);
         // try different sizes to flush out memory issues
         for (int i = 10; i < 1024; i += 9) {
             auto xx = r_tuple<std::vector<real>>{vs::iota(0, i)};
@@ -198,19 +203,49 @@ using D = ccs::directional_field<std::vector<ccs::real>, I>;
 TEST_CASE("directional_composite")
 {
     using namespace ccs;
-    using T = std::vector<real>;
-    //using N = r_tuple<D<0>>;
+    constexpr int3 extents{2, 4, 2};
 
-    // REQUIRE(!All<D<0>, D<1>>);
-    auto d = D<0>{vs::iota(0, 16), int3{2, 4, 2}};
-    REQUIRE(d[0] == 0);
-    auto x = r_tuple{MOVE(d)};
-    auto v = view<0>(x);
-    REQUIRE(v[0] == 0);
-    // REQUIRE(v[15] == 15);
+    SECTION("1 tuple")
+    {
+        using N = r_tuple<D<0>>;
 
-    // auto y = x + 1;
+        REQUIRE(!All<D<0>>);
+        REQUIRE(All<D<0>&>);
+        auto d = D<0>{vs::iota(0, 16), extents};
+        REQUIRE(d[0] == 0);
+        N x = r_tuple{MOVE(d)};
+        auto v = view<0>(x);
+        REQUIRE(x[0] == 0);
+        REQUIRE(v[0] == 0);
+        REQUIRE(v[15] == 15);
 
-    // REQUIRE(x[0] == 1);
-    // REQUIRE(x[15] == 16);
+        auto y = (x + 1) + 0;
+        const auto& z = y.get<0>();
+        REQUIRE(rs::equal(z, vs::iota(1, 17)));
+        REQUIRE(z.extents() == extents);
+    }
+
+    SECTION("3 tuple")
+    {
+        using N = r_tuple<D<0>, D<1>, D<2>>;
+
+        N x{D<0>{vs::iota(0, 16), extents},
+            D<1>{vs::iota(16, 32), extents},
+            D<2>{vs::iota(32, 48), extents}};
+
+        REQUIRE(rs::equal(x.get<0>(), vs::iota(0, 16)));
+        REQUIRE(rs::equal(x.get<2>(), vs::iota(32, 48)));
+
+        auto y = (x + 0) + 1 + 0;
+
+        REQUIRE(rs::equal(y.get<0>(), vs::iota(1, 17)));
+        REQUIRE(rs::equal(y.get<1>(), vs::iota(17,33)));
+        REQUIRE(rs::equal(y.get<2>(), vs::iota(33, 49)));
+       
+        REQUIRE(y.get<0>().extents() == extents);
+        REQUIRE(y.get<1>().extents() == extents);
+        REQUIRE(y.get<2>().extents() == extents);
+
+        //N z = y;
+    }
 }

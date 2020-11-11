@@ -81,15 +81,31 @@ private:
         traits::From_View<U> friend constexpr auto
         operator+(U&& u, V v)
     {
-        return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto v)
+        constexpr bool nested = requires(U u, V v)
         {
-            return std::invoke(traits::create_from_view<U>,
-                               u,
-                               vs::zip_with(std::plus{},
-                                            view<Is>(u),
-                                            vs::repeat_n(v, view<Is>(u).size()))...);
+            u.template get<0>();
+            u.template get<0>() + v;
+        };
+
+        if constexpr (nested) {
+            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto v)
+            {
+                return std::invoke(traits::create_from_view<U>,
+                                   u,
+                                   operator+(u.template get<Is>(), v)...);
+            }
+            (std::make_index_sequence<u.N>{}, FWD(u), v);
+        } else {
+            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto v)
+            {
+                return std::invoke(traits::create_from_view<U>,
+                                   u,
+                                   vs::zip_with(std::plus{},
+                                                view<Is>(u),
+                                                vs::repeat_n(v, view<Is>(u).size()))...);
+            }
+            (std::make_index_sequence<u.N>{}, FWD(u), v);
         }
-        (std::make_index_sequence<u.N>{}, FWD(u), v);
     }
 
     template <typename U, Numeric V>
