@@ -8,6 +8,30 @@ namespace ccs
 template <typename...>
 struct r_tuple;
 
+template <typename, int>
+class directional_field;
+
+namespace detail
+{
+template <typename...>
+struct container_tuple;
+
+namespace traits
+{
+template <typename>
+struct is_container_tuple : std::false_type {
+};
+
+template <typename... Args>
+struct is_container_tuple<container_tuple<Args...>> : std::true_type {
+};
+
+template <typename T>
+concept Container_Tuple = is_container_tuple<std::remove_cvref_t<T>>::value;
+} // namespace traits
+
+} // namespace detail
+
 namespace traits
 {
 template <typename>
@@ -21,15 +45,24 @@ struct is_r_tuple<r_tuple<Args...>> : std::true_type {
 template <typename T>
 concept R_Tuple = is_r_tuple<std::remove_cvref_t<T>>::value;
 
+template <typename>
+struct is_directional_field : std::false_type {
+};
+
+template <typename T, int I>
+struct is_directional_field<directional_field<T, I>> : std::true_type {
+};
+
+template <typename T>
+concept Directional_Field = is_directional_field<std::remove_cvref_t<T>>::value;
+
 template <typename...>
 struct from_view {
 };
 
 template <template <typename...> typename U, typename... Args>
 struct from_view<U<Args...>> {
-    static constexpr auto create = [](auto&&, auto&&... args) {
-        return U{FWD(args)...};
-    };
+    static constexpr auto create = [](auto&&, auto&&... args) { return U{FWD(args)...}; };
 };
 
 template <template <typename...> typename U,

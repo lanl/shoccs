@@ -5,10 +5,20 @@
 #include "r_tuple_fwd.hpp"
 #include <tuple>
 
+#include <range/v3/algorithm/copy.hpp>
 #include <range/v3/view/all.hpp>
+#include <range/v3/view/common.hpp>
 
 namespace ccs
 {
+
+template <int I, typename R>
+constexpr decltype(auto) view(R&& r)
+{
+    constexpr int Idx = I < r.N ? I : r.N - 1;
+    return std::get<Idx>(FWD(r).view());
+}
+
 namespace detail
 {
 template <typename T>
@@ -27,6 +37,19 @@ constexpr auto tuple_map(F&& f, T&& t)
     }
     (std::make_index_sequence<std::tuple_size_v<std::remove_cvref_t<T>>>{});
 }
+
+template <typename C, rs::input_range R>
+void resize_and_copy(C& container, R&& r)
+{
+    constexpr bool can_resize_member = requires(C c, R r) { c.resize(r.size()); };
+    constexpr bool can_resize_rs = requires(C c, R r) { c.resize(rs::size(r)); };
+    if constexpr (can_resize_member)
+        container.resize(r.size());
+    else if constexpr (can_resize_rs)
+        container.resize(rs::size(r));
+
+    rs::copy(FWD(r), rs::begin(container));
+}
 } // namespace detail
 
 template <typename T>
@@ -34,6 +57,30 @@ concept All = rs::range<T&>&& rs::viewable_range<T>;
 
 namespace detail
 {
+
+template <typename... Args, typename T>
+auto container_from_container(const T& t)
+{
+    return [&t]<auto... Is>(std::index_sequence<Is...>)
+    {
+        return std::tuple<Args...>{
+            Args{rs::begin(t.template get<Is>()), rs::end(t.template get<Is>())}...};
+    }
+    (std::make_index_sequence<sizeof...(Args)>{});
+}
+
+template <typename... Args, typename T>
+auto container_from_rtuple(const T& t)
+{
+    return [&t]<auto... Is>(std::index_sequence<Is...>)
+    {
+        auto x = std::tuple{vs::common(view<Is>(t))...};
+        return std::tuple<Args...>{
+            Args{rs::begin(std::get<Is>(x)), rs::end(std::get<Is>(x))}...};
+    }
+    (std::make_index_sequence<sizeof...(Args)>{});
+}
+
 // Base clase for r_tuples which own the containers associated with the data
 // i.e vectors and spans
 template <typename... Args>
@@ -43,36 +90,86 @@ private:
     using Type = container_tuple<Args...>;
 
 public:
+    static constexpr auto container_size = sizeof...(Args);
+
     std::tuple<Args...> c;
 
+    container_tuple() = default;
     container_tuple(Args&&... args) : c{FWD(args)...} {}
 
+    // allow for constructing and assigning from input_ranges
     template <rs::input_range... Ranges>
-    requires(std::constructible_from<Args,
-                                     decltype(rs::begin(std::declval<Ranges>())),
-                                     decltype(rs::begin(std::declval<Ranges>()))>&&...)
-        container_tuple(Ranges&&... r)
-        : c{Args{rs::begin(r), rs::end(r)}...}
+    container_tuple(Ranges&&... r) : c{Args{rs::begin(r), rs::end(r)}...}
     {
     }
 
     template <rs::input_range... Ranges>
-    requires(std::constructible_from<Args,
-                                     decltype(rs::begin(std::declval<Ranges>())),
-                                     decltype(rs::begin(std::declval<Ranges>()))>&&...)
-        container_tuple&
-        operator=(Ranges&&... r)
+    container_tuple& operator=(Ranges&&... r)
     {
-        c = std::tuple{Args{rs::begin(r), rs::end(r)}...};
+        static_assert(sizeof...(Args) == sizeof...(Ranges));
+
+        [this]<auto... Is>(std::index_sequence<Is...>, auto&&... r)
+        {
+            (resize_and_copy(std::get<Is>(c), FWD(r)), ...);
+        }
+        (std::make_index_sequence<sizeof...(Ranges)>{}, FWD(r)...);
+
         return *this;
     }
 
-    template<int I>
-    const auto& get() const { return std::get<I>(c); }
+    // allow for constructing and assigning from container tuples of different types
+    template <traits::Container_Tuple T>
+    requires(!std::same_as<Type, T>) container_tuple(const T& t)
+        : c{container_from_container<Args...>(t)}
+    {
+        static_assert(container_size == t.container_size);
+    }
 
-    template<int I>
-    auto& get() { return std::get<I>(c); }
+    template <traits::Container_Tuple T>
+    requires(!std::same_as<Type, T>) container_tuple& operator=(const T& t)
+    {
+        static_assert(container_size == t.container_size);
 
+        [ this, &t ]<auto... Is>(std::index_sequence<Is...>)
+        {
+            (resize_and_copy(std::get<Is>(c), t.template get<Is>()), ...);
+        }
+        (std::make_index_sequence<container_size>{});
+
+        return *this;
+    }
+
+    // allow for constructing and assigning from r_tuples
+    template <::ccs::traits::R_Tuple T>
+    requires requires(T t)
+    {
+        container_from_rtuple<Args...>(t);
+    }
+    container_tuple(T&& t) : c{container_from_rtuple<Args...>(t)} {}
+
+    template <::ccs::traits::R_Tuple T>
+    container_tuple& operator=(const T& t)
+    {
+        [ this, &t ]<auto... Is>(std::index_sequence<Is...>)
+        {
+            (resize_and_copy(std::get<Is>(c), view<Is>(t)), ...);
+        }
+        (std::make_index_sequence<container_size>{});
+
+        return *this;
+    }
+
+    template <int I>
+    const auto& get() const
+    {
+        return std::get<I>(c);
+    }
+
+    template <int I>
+    auto& get()
+    {
+        return std::get<I>(c);
+    }
 
     container_tuple& container() { return *this; }
     const container_tuple& container() const { return *this; }
@@ -194,15 +291,16 @@ private:
 public:
     static constexpr int N = sizeof...(Args);
 
-    view_tuple(Args&&... args) : Base_Tup{FWD(args)...}, As_View{this->view()} {}
+    view_tuple() = default;
+    view_tuple(Args&&... args) : Base_Tup{FWD(args)...}, As_View{Base_Tup::view()} {}
 
     template <rs::input_range... Ranges>
-    view_tuple(Ranges&&... r) : Base_Tup{FWD(r)...}, As_View{this->view()}
+    view_tuple(Ranges&&... r) : Base_Tup{FWD(r)...}, As_View{Base_Tup::view()}
     {
     }
 
     template <typename... C>
-    view_tuple(container_tuple<C...>& x) : Base_Tup{x}, As_View{this->view()}
+    view_tuple(container_tuple<C...>& x) : Base_Tup{x}, As_View{Base_Tup::view()}
     {
     }
 
@@ -223,6 +321,8 @@ struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> 
     using View = detail::view_tuple<Args&...>;
     using Type = r_tuple<Args...>;
 
+    r_tuple() = default;
+
     r_tuple(Args&&... args) : Container{FWD(args)...}, View{this->container()} {}
 
     template <rs::input_range... R>
@@ -231,6 +331,20 @@ struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> 
     {
     }
 
+    template <traits::R_Tuple R>
+    r_tuple(R&& r) : Container{FWD(r)}, View{this->container()}
+    {
+    }
+
+    template <traits::R_Tuple R>
+    r_tuple& operator=(R&& r)
+    {
+        Container::operator=(FWD(r));
+        View::operator=(this->container());
+        return *this;
+    }
+
+#if 0
     // need to define custom copy and move construction/assignment here
     r_tuple(const r_tuple& r) : Container{r.container()}, View{this->container()} {}
     r_tuple& operator=(const r_tuple& r)
@@ -251,10 +365,9 @@ struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> 
         View::operator=(this->container());
         return *this;
     }
-
+#endif
     template <rs::input_range... R>
-    requires(!(std::same_as<Type, std::remove_cvref_t<R>> && ...)) r_tuple&
-    operator=(R&&... r)
+    requires(!(traits::R_Tuple<R> && ...)) r_tuple& operator=(R&&... r)
     {
         Container::operator=(FWD(r)...);
         View::operator=(this->container());
@@ -268,17 +381,12 @@ struct r_tuple<Args...> : detail::view_tuple<Args...> {
     using Type = r_tuple<Args...>;
 
     r_tuple(Args&&... args) : View{FWD(args)...} {};
+
+    r_tuple() = default;
 };
 
 template <typename... Args>
 r_tuple(Args&&...) -> r_tuple<Args...>;
-
-template <int I, typename R>
-constexpr decltype(auto) view(R&& r)
-{
-    constexpr int Idx = I < r.N ? I : r.N - 1;
-    return std::get<Idx>(FWD(r).view());
-}
 
 template <typename R, int I>
 class directional_field : public r_tuple<R>, public index::bounds<I>
@@ -301,6 +409,24 @@ public:
     directional_field(lit<I>, T&& t, const int3& bounds) : View{FWD(t)}, Bounds{bounds}
     {
     }
+
+    template <traits::Directional_Field T>
+    requires(!std::same_as<Type, std::remove_cvref_t<T>>) directional_field(T&& t)
+        : View{FWD(t).as_r_tuple()}, Bounds{FWD(t).extents()}
+    {
+    }
+
+    template <traits::Directional_Field T>
+    requires(!std::same_as<Type, std::remove_cvref_t<T>>) directional_field&
+    operator=(T&& t)
+    {
+        View::operator=(FWD(t).as_r_tuple());
+        Bounds::operator=(FWD(t).extents());
+        return *this;
+    }
+
+    r_tuple<R>& as_r_tuple() { return *this; }
+    const r_tuple<R>& as_r_tuple() const { return *this; }
 };
 
 template <typename R, int I>

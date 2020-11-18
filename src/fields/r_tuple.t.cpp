@@ -14,6 +14,23 @@
 
 #include <iostream>
 
+TEST_CASE("concepts")
+{
+    using namespace ccs;
+    using T = std::vector<real>;
+
+    REQUIRE(All<T&>);
+    REQUIRE(!All<T>);
+
+    REQUIRE(!All<detail::container_tuple<T>&>);
+    REQUIRE(!All<detail::container_tuple<T>>);
+
+    
+    REQUIRE(All<r_tuple<T>&>);
+    REQUIRE(!All<r_tuple<T>>);
+
+}
+
 TEST_CASE("construction")
 {
     using namespace ccs;
@@ -28,6 +45,7 @@ TEST_CASE("construction")
     r[1] = -1;
     REQUIRE(r[1] == -1);
 
+    
     REQUIRE(rs::equal(view<0>(r), x));
 
     SECTION("owning from input range")
@@ -64,6 +82,18 @@ TEST_CASE("construction")
         REQUIRE(x0 != 1000);
     }
 
+    SECTION("owning from non-owning 3-tuple")
+    {
+        auto r_owning =
+            r_tuple{std::vector<real>{}, std::vector<real>{}, std::vector<real>{}};
+        auto a = r_tuple{x, y, z};
+
+        r_owning = a;
+        REQUIRE(rs::equal(view<0>(r_owning), x));
+        REQUIRE(rs::equal(view<1>(r_owning), y));
+        REQUIRE(rs::equal(view<2>(r_owning), z));
+    }
+
     auto rr = r_tuple(x, y, z);
     REQUIRE(rr.N == 3);
     REQUIRE(rs::equal(view<0>(rr), x));
@@ -89,8 +119,11 @@ TEST_CASE("container math")
 
     auto x = r_tuple<T>{vs::iota(0, 10)};
     x += 5;
-
     REQUIRE(rs::equal(x, vs::iota(5, 15)));
+
+    r_tuple<T> y = r_tuple{vs::iota(0, 10)};
+    y += 5;
+    REQUIRE(rs::equal(x, y));
 
     auto xx = r_tuple<T, T>{vs::iota(-5, 3), vs::iota(-10, 1)};
     auto yy = r_tuple{vs::iota(-5, 3), vs::iota(-10, 1)};
@@ -166,6 +199,28 @@ TEST_CASE("view math with tuples")
 
     REQUIRE(g.size() == h.size());
     REQUIRE(rs::equal(g, h));
+
+    {
+        auto xx = r_tuple<T>{x + y};
+        REQUIRE(rs::equal(z, xx));
+
+        auto yy = r_tuple<T>{};
+        yy = x + y;
+        REQUIRE(rs::equal(yy, xx));
+    }
+
+    {
+        auto xx = r_tuple<T, T, T>{x + y, z + x + x + y, z + z + x};
+        REQUIRE(rs::equal(view<0>(xx), z));
+        REQUIRE(rs::equal(view<1>(xx), g));
+        REQUIRE(rs::equal(view<2>(xx), h));
+
+        auto yy = r_tuple<T, T, T>{};
+        yy = r_tuple{x + y, z + x + x + y, z + z + x};
+        REQUIRE(rs::equal(view<0>(yy), z));
+        REQUIRE(rs::equal(view<1>(yy), g));
+        REQUIRE(rs::equal(view<2>(yy), h));
+    }
 }
 
 TEST_CASE("directional")
@@ -196,6 +251,8 @@ TEST_CASE("directional")
 
     auto v = r_tuple{vs::iota(16, 32)} + z;
     REQUIRE(rs::equal(u, v));
+
+    auto xx = directional_field<T, 0>{r_tuple{vs::iota(16, 32)} + z};
 }
 
 template <int I>
@@ -214,17 +271,17 @@ TEST_CASE("directional_composite")
         auto d = D<0>{vs::iota(0, 16), extents};
         REQUIRE(d[0] == 0);
         N x = r_tuple{MOVE(d)};
-        auto v = view<0>(x);
+        const auto& v = x.get<0>();
         REQUIRE(x[0] == 0);
         REQUIRE(v[0] == 0);
         REQUIRE(v[15] == 15);
 
-        auto y = (x + 1) + 0;
-        const auto& z = y.get<0>();
-        REQUIRE(rs::equal(z, vs::iota(1, 17)));
-        REQUIRE(z.extents() == extents);
+        //auto y = (x + 1) + 0;
+        //const auto& z = y.get<0>();
+        //REQUIRE(rs::equal(z, vs::iota(1, 17)));
+        //REQUIRE(z.extents() == extents);
     }
-
+#if 0
     SECTION("3 tuple")
     {
         using N = r_tuple<D<0>, D<1>, D<2>>;
@@ -239,13 +296,15 @@ TEST_CASE("directional_composite")
         auto y = (x + 0) + 1 + 0;
 
         REQUIRE(rs::equal(y.get<0>(), vs::iota(1, 17)));
-        REQUIRE(rs::equal(y.get<1>(), vs::iota(17,33)));
+        REQUIRE(rs::equal(y.get<1>(), vs::iota(17, 33)));
         REQUIRE(rs::equal(y.get<2>(), vs::iota(33, 49)));
-       
+
         REQUIRE(y.get<0>().extents() == extents);
         REQUIRE(y.get<1>().extents() == extents);
         REQUIRE(y.get<2>().extents() == extents);
 
-        //N z = y;
+        // N z;
+        // z = y;
     }
+#endif
 }
