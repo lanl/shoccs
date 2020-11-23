@@ -329,6 +329,9 @@ TEST_CASE("directional_composite")
         REQUIRE(rs::equal(x.get<2>(), vs::iota(32, 48)));
 
         auto y = (x + 0) + 1 + 0;
+        REQUIRE(traits::Owning_R_Tuple<decltype(y)>);
+        REQUIRE(traits::Directional_Field<decltype(y.get<0>())>);
+        REQUIRE(!traits::Owning_R_Tuple<decltype(y.get<0>().as_r_tuple())>);
 
         REQUIRE(rs::equal(y.get<0>(), vs::iota(1, 17)));
         REQUIRE(rs::equal(y.get<1>(), vs::iota(17, 33)));
