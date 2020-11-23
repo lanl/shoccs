@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include <concepts>
+#include <range/v3/range/concepts.hpp>
 
 namespace ccs
 {
@@ -28,6 +29,10 @@ struct is_container_tuple<container_tuple<Args...>> : std::true_type {
 
 template <typename T>
 concept Container_Tuple = is_container_tuple<std::remove_cvref_t<T>>::value;
+
+template <typename T, typename U>
+concept Other_Container_Tuple = Container_Tuple<T>&& Container_Tuple<U> &&
+                                (!std::same_as<U, std::remove_cvref_t<T>>);
 } // namespace traits
 
 } // namespace detail
@@ -44,6 +49,12 @@ struct is_r_tuple<r_tuple<Args...>> : std::true_type {
 
 template <typename T>
 concept R_Tuple = is_r_tuple<std::remove_cvref_t<T>>::value;
+
+template <typename T>
+concept Non_Tuple_Input_Range = rs::input_range<T> && (!R_Tuple<T>);
+
+template <typename T>
+concept Owning_R_Tuple = R_Tuple<T> && requires(T t) { t.template get<0>(); };
 
 template <typename>
 struct is_directional_field : std::false_type {
@@ -131,3 +142,13 @@ concept From_View = requires
 
 } // namespace traits
 } // namespace ccs
+
+// need to specialize this bool inorder for r_tuples to have the correct behavior
+namespace ranges
+{
+template <typename... Args>
+inline constexpr bool enable_view<ccs::r_tuple<Args...>> = false;
+
+template <typename T, int I>
+inline constexpr bool enable_view<ccs::directional_field<T, I>> = false;
+} // namespace ranges

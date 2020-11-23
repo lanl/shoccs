@@ -21,6 +21,17 @@ using D = directional_field<T, I>;
 int main()
 {
     {
+        using U = r_tuple<T>;
+        std::cout << "Concept Check\n"
+                  << "R_Tuple<r_tuple<T>/ &/ &&>?: " << traits::R_Tuple<U> << "/"
+                  << traits::R_Tuple<U&> << "/" << traits::R_Tuple<U&&> << "\n\n"
+                  << "input_range<U/U&/U&&>: " << rs::input_range<U> << "/"
+                  << rs::input_range<U&> << "/" << rs::input_range<U&&> << "\n\n"
+                  << "Non_Tuple_Input_Range: " << traits::Non_Tuple_Input_Range<U> << "/"
+                  << traits::Non_Tuple_Input_Range<U&> << "/"
+                  << traits::Non_Tuple_Input_Range<U&&> << "\n\n";
+    }
+    {
         std::cout << "Move with container_tuple\n";
         auto x = detail::container_tuple<T>{vs::iota(0, 10)};
         std::cout << "x.size()" << std::get<0>(x.c).size() << '\n';
@@ -68,7 +79,6 @@ int main()
         std::cout
             << std::same_as<std::remove_cvref_t<decltype(c)>, std::tuple<D<0>>> << '\n';
     }
-
 
     {
         auto y = r_tuple{D<0>{vs::iota(0, 16), int3{2, 4, 2}}};

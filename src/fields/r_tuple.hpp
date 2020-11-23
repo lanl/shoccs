@@ -9,6 +9,8 @@
 #include <range/v3/view/all.hpp>
 #include <range/v3/view/common.hpp>
 
+#include <iostream>
+
 namespace ccs
 {
 
@@ -58,13 +60,25 @@ concept All = rs::range<T&>&& rs::viewable_range<T>;
 namespace detail
 {
 
+using ::ccs::traits::Non_Tuple_Input_Range;
+
 template <typename... Args, typename T>
 auto container_from_container(const T& t)
 {
     return [&t]<auto... Is>(std::index_sequence<Is...>)
     {
-        return std::tuple<Args...>{
-            Args{rs::begin(t.template get<Is>()), rs::end(t.template get<Is>())}...};
+        // prefer to delegate to direct construction rather than building
+        // from ranges.
+        constexpr bool direct = requires(T t)
+        {
+            std::tuple<Args...>{Args{t.template get<Is>()}...};
+        };
+
+        if constexpr (direct)
+            return std::tuple<Args...>{Args{t.template get<Is>()}...};
+        else
+            return std::tuple<Args...>{
+                Args{rs::begin(t.template get<Is>()), rs::end(t.template get<Is>())}...};
     }
     (std::make_index_sequence<sizeof...(Args)>{});
 }
@@ -118,21 +132,27 @@ public:
     }
 
     // allow for constructing and assigning from container tuples of different types
-    template <traits::Container_Tuple T>
-    requires(!std::same_as<Type, T>) container_tuple(const T& t)
-        : c{container_from_container<Args...>(t)}
+    template <traits::Other_Container_Tuple<Type> T>
+    container_tuple(const T& t) : c{container_from_container<Args...>(t)}
     {
         static_assert(container_size == t.container_size);
     }
 
-    template <traits::Container_Tuple T>
-    requires(!std::same_as<Type, T>) container_tuple& operator=(const T& t)
+    template <traits::Other_Container_Tuple<Type> T>
+    container_tuple& operator=(const T& t)
     {
         static_assert(container_size == t.container_size);
 
         [ this, &t ]<auto... Is>(std::index_sequence<Is...>)
         {
-            (resize_and_copy(std::get<Is>(c), t.template get<Is>()), ...);
+            constexpr bool direct = requires(T t)
+            {
+                ((std::get<Is>(c) = t.template get<Is>()), ...);
+            };
+            if constexpr (direct)
+                ((std::get<Is>(c) = t.template get<Is>()), ...);
+            else
+                (resize_and_copy(std::get<Is>(c), t.template get<Is>()), ...);
         }
         (std::make_index_sequence<container_size>{});
 
@@ -326,13 +346,17 @@ struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> 
     r_tuple(Args&&... args) : Container{FWD(args)...}, View{this->container()} {}
 
     template <rs::input_range... R>
-    requires(!(std::same_as<Type, std::remove_cvref_t<R>> && ...)) r_tuple(R&&... r)
-        : Container{FWD(r)...}, View{this->container()}
+    r_tuple(R&&... r) : Container{FWD(r)...}, View{this->container()}
     {
     }
 
     template <traits::R_Tuple R>
     r_tuple(R&& r) : Container{FWD(r)}, View{this->container()}
+    {
+    }
+
+    template <traits::Owning_R_Tuple R>
+    r_tuple(R&& r) : Container{FWD(r).container()}, View{this->container()}
     {
     }
 
@@ -344,7 +368,14 @@ struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> 
         return *this;
     }
 
-#if 0
+    template <traits::Owning_R_Tuple R>
+    r_tuple& operator=(R&& r)
+    {
+        Container::operator=(FWD(r).container());
+        View::operator=(this->container());
+        return *this;
+    }
+
     // need to define custom copy and move construction/assignment here
     r_tuple(const r_tuple& r) : Container{r.container()}, View{this->container()} {}
     r_tuple& operator=(const r_tuple& r)
@@ -365,9 +396,9 @@ struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> 
         View::operator=(this->container());
         return *this;
     }
-#endif
-    template <rs::input_range... R>
-    requires(!(traits::R_Tuple<R> && ...)) r_tuple& operator=(R&&... r)
+
+    template <traits::Non_Tuple_Input_Range... R>
+    r_tuple& operator=(R&&... r)
     {
         Container::operator=(FWD(r)...);
         View::operator=(this->container());

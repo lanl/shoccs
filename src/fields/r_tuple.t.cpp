@@ -21,14 +21,26 @@ TEST_CASE("concepts")
 
     REQUIRE(All<T&>);
     REQUIRE(!All<T>);
+    REQUIRE(!All<T&&>);
 
     REQUIRE(!All<detail::container_tuple<T>&>);
     REQUIRE(!All<detail::container_tuple<T>>);
 
-    
     REQUIRE(All<r_tuple<T>&>);
     REQUIRE(!All<r_tuple<T>>);
+    REQUIRE(!All<r_tuple<T>&&>);
 
+    REQUIRE(traits::Owning_R_Tuple<r_tuple<T>>);
+    REQUIRE(!traits::Owning_R_Tuple<r_tuple<T&>>);
+
+    using U = directional_field<T, 0>;
+    REQUIRE(All<U&>);
+    REQUIRE(!All<U>);
+    REQUIRE(!All<U&&>);
+
+    REQUIRE(All<r_tuple<U>&>);
+    REQUIRE(!All<r_tuple<U>>);
+    REQUIRE(!All<r_tuple<U>&&>);
 }
 
 TEST_CASE("construction")
@@ -41,11 +53,11 @@ TEST_CASE("construction")
 
     auto r = r_tuple(x);
     REQUIRE(std::same_as<decltype(r), r_tuple<std::vector<real>&>>);
+    REQUIRE(!traits::Owning_R_Tuple<decltype(r)>);
     REQUIRE(r[1] == 1);
     r[1] = -1;
     REQUIRE(r[1] == -1);
 
-    
     REQUIRE(rs::equal(view<0>(r), x));
 
     SECTION("owning from input range")
@@ -244,6 +256,11 @@ TEST_CASE("directional")
     REQUIRE(z.extents() == int3{2, 4, 2});
     REQUIRE(rs::equal(z, vs::zip_with(std::plus{}, y, vs::repeat(3))));
 
+    auto yy = directional_field<T, 0>{};
+    yy = z;
+    REQUIRE(z.extents() == yy.extents());
+    REQUIRE(rs::equal(z, yy));
+
     auto u = z + r_tuple{vs::iota(16, 32)};
     REQUIRE(u[0] == 19);
     REQUIRE(u.extents() == int3{2, 4, 2});
@@ -276,12 +293,30 @@ TEST_CASE("directional_composite")
         REQUIRE(v[0] == 0);
         REQUIRE(v[15] == 15);
 
-        //auto y = (x + 1) + 0;
-        //const auto& z = y.get<0>();
-        //REQUIRE(rs::equal(z, vs::iota(1, 17)));
-        //REQUIRE(z.extents() == extents);
+        auto y = (x + 1) + 0;
+
+        {
+            const auto& z = y.get<0>();
+            REQUIRE(rs::equal(z, vs::iota(1, 17)));
+            REQUIRE(z.extents() == extents);
+        }
+
+        {
+            N xx{y};
+            const auto& z = xx.get<0>();
+            REQUIRE(rs::equal(z, vs::iota(1, 17)));
+            REQUIRE(z.extents() == extents);
+        }
+
+        {
+            N xx{};
+            xx = y;
+            const auto& z = xx.get<0>();
+            REQUIRE(rs::equal(z, vs::iota(1, 17)));
+            REQUIRE(z.extents() == extents);
+        }
     }
-#if 0
+
     SECTION("3 tuple")
     {
         using N = r_tuple<D<0>, D<1>, D<2>>;
@@ -303,8 +338,27 @@ TEST_CASE("directional_composite")
         REQUIRE(y.get<1>().extents() == extents);
         REQUIRE(y.get<2>().extents() == extents);
 
-        // N z;
-        // z = y;
+        {
+            N z{y};
+            REQUIRE(rs::equal(z.get<0>(), vs::iota(1, 17)));
+            REQUIRE(rs::equal(z.get<1>(), vs::iota(17, 33)));
+            REQUIRE(rs::equal(z.get<2>(), vs::iota(33, 49)));
+
+            REQUIRE(z.get<0>().extents() == extents);
+            REQUIRE(z.get<1>().extents() == extents);
+            REQUIRE(z.get<2>().extents() == extents);
+        }
+
+        {
+            N z{};
+            z = y;
+            REQUIRE(rs::equal(z.get<0>(), vs::iota(1, 17)));
+            REQUIRE(rs::equal(z.get<1>(), vs::iota(17, 33)));
+            REQUIRE(rs::equal(z.get<2>(), vs::iota(33, 49)));
+
+            REQUIRE(z.get<0>().extents() == extents);
+            REQUIRE(z.get<1>().extents() == extents);
+            REQUIRE(z.get<2>().extents() == extents);
+        }
     }
-#endif
 }
