@@ -52,13 +52,6 @@ void resize_and_copy(C& container, R&& r)
 
     rs::copy(FWD(r), rs::begin(container));
 }
-} // namespace detail
-
-template <typename T>
-concept All = rs::range<T&>&& rs::viewable_range<T>;
-
-namespace detail
-{
 
 using ::ccs::traits::Non_Tuple_Input_Range;
 
@@ -84,7 +77,7 @@ auto container_from_container(const T& t)
 }
 
 template <typename... Args, typename T>
-auto container_from_rtuple(const T& t)
+auto container_from_view(const T& t)
 {
     return [&t]<auto... Is>(std::index_sequence<Is...>)
     {
@@ -160,14 +153,14 @@ public:
     }
 
     // allow for constructing and assigning from r_tuples
-    template <::ccs::traits::R_Tuple T>
+    template <traits::View_Tuple T>
     requires requires(T t)
     {
-        container_from_rtuple<Args...>(t);
+        container_from_view<Args...>(t);
     }
-    container_tuple(T&& t) : c{container_from_rtuple<Args...>(t)} {}
+    container_tuple(T&& t) : c{container_from_view<Args...>(FWD(t))} {}
 
-    template <::ccs::traits::R_Tuple T>
+    template <traits::View_Tuple T>
     container_tuple& operator=(const T& t)
     {
         [ this, &t ]<auto... Is>(std::index_sequence<Is...>)
@@ -331,12 +324,71 @@ public:
         As_View::operator=(this->view());
         return *this;
     }
+
+    view_tuple& as_view_tuple() { return *this; }
+    const view_tuple& as_view_tuple() const { return *this; }
 };
 
 } // namespace detail
 
+// r_tuple for non-viewable components
 template <typename... Args>
-struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> {
+struct r_tuple : detail::container_tuple<Args...>,
+                 lazy::view_math_crtp<r_tuple<Args...>> {
+private:
+    friend class view_math_access;
+
+public:
+    using Container = detail::container_tuple<Args...>;
+    using Type = r_tuple<Args...>;
+    static constexpr int N = sizeof...(Args);
+
+    r_tuple() = default;
+
+    r_tuple(Args&&... args) : Container{FWD(args)...} {}
+
+    r_tuple(detail::tag, Args&&... args) : Container{FWD(args)...} {}
+
+    template <rs::input_range... R>
+    r_tuple(R&&... r) : Container{FWD(r)...}
+    {
+    }
+
+    template <traits::R_Tuple R>
+    r_tuple(R&& r) : Container{FWD(r).as_view_tuple()}
+    {
+    }
+
+    template <traits::Owning_R_Tuple R>
+    r_tuple(R&& r) : Container{FWD(r).container()}
+    {
+    }
+
+    template <traits::R_Tuple R>
+    r_tuple& operator=(R&& r)
+    {
+        Container::operator=(FWD(r).as_view_tuple());
+        return *this;
+    }
+
+    template <traits::Owning_R_Tuple R>
+    r_tuple& operator=(R&& r)
+    {
+        Container::operator=(FWD(r).container());
+        return *this;
+    }
+
+    // need to define custom copy and move construction/assignment here
+    r_tuple(const r_tuple& r) = default;
+    r_tuple& operator=(const r_tuple& r) = default;
+    r_tuple(r_tuple&& r) = default;
+    r_tuple& operator=(r_tuple&& r) = default;
+};
+
+// r_tuple for viewable ref components
+template <typename... Args>
+requires(!(All<Args> || ...) && (All<Args&> && ...)) struct r_tuple<Args...>
+    : detail::container_tuple<Args...>, detail::view_tuple<Args&...> {
     using Container = detail::container_tuple<Args...>;
     using View = detail::view_tuple<Args&...>;
     using Type = r_tuple<Args...>;
@@ -345,13 +397,18 @@ struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> 
 
     r_tuple(Args&&... args) : Container{FWD(args)...}, View{this->container()} {}
 
+    r_tuple(detail::tag, Args&&... args)
+        : Container{FWD(args)...}, View{this->container()}
+    {
+    }
+
     template <rs::input_range... R>
     r_tuple(R&&... r) : Container{FWD(r)...}, View{this->container()}
     {
     }
 
     template <traits::R_Tuple R>
-    r_tuple(R&& r) : Container{FWD(r)}, View{this->container()}
+    r_tuple(R&& r) : Container{FWD(r).as_view_tuple()}, View{this->container()}
     {
     }
 
@@ -363,7 +420,7 @@ struct r_tuple : detail::container_tuple<Args...>, detail::view_tuple<Args&...> 
     template <traits::R_Tuple R>
     r_tuple& operator=(R&& r)
     {
-        Container::operator=(FWD(r));
+        Container::operator=(FWD(r).as_view_tuple());
         View::operator=(this->container());
         return *this;
     }
@@ -413,11 +470,16 @@ struct r_tuple<Args...> : detail::view_tuple<Args...> {
 
     r_tuple(Args&&... args) : View{FWD(args)...} {};
 
+    r_tuple(detail::tag, Args&&... args) : View{FWD(args)...} {};
+
     r_tuple() = default;
 };
 
 template <typename... Args>
 r_tuple(Args&&...) -> r_tuple<Args...>;
+
+template <typename... Args>
+r_tuple(detail::tag, Args&&...) -> r_tuple<Args...>;
 
 template <typename R, int I>
 class directional_field : public r_tuple<R>, public index::bounds<I>

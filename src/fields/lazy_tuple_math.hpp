@@ -8,6 +8,8 @@
 #include <range/v3/view/zip_with.hpp>
 #include <tuple>
 
+#include <iostream>
+
 namespace ccs::lazy
 {
 
@@ -88,6 +90,7 @@ private:
         };
 
         if constexpr (nested) {
+            //std::cout << "calling nested addition\n";
             return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto v)
             {
                 return std::invoke(traits::create_from_view<U>,
@@ -96,6 +99,7 @@ private:
             }
             (std::make_index_sequence<u.N>{}, FWD(u), v);
         } else {
+            //std::cout << "calling ranges addition\n";
             return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto v)
             {
                 return std::invoke(traits::create_from_view<U>,

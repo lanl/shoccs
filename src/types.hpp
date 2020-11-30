@@ -33,3 +33,29 @@ template<int N>
 using lit = std::integral_constant<int, N>;
 
 } // namespace ccs
+
+
+#ifndef NDEBUG
+#include <string>
+#include <typeinfo>
+#include <memory>
+#include <cxxabi.h>
+namespace debug {
+
+
+inline std::string demangle(const char* name)
+{
+    int status {};
+    auto res = std::unique_ptr<char>{abi::__cxa_demangle(name, NULL, NULL, &status)};
+
+    return status == 0 ? res.get() : name;
+}
+
+template<typename T>
+std::string type(const T& t)
+{
+    return demangle(typeid(t).name());
+}
+
+}
+#endif

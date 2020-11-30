@@ -4,8 +4,14 @@
 #include <concepts>
 #include <range/v3/range/concepts.hpp>
 
+#include <iostream>
+
 namespace ccs
 {
+
+template <typename T>
+concept All = rs::range<T&>&& rs::viewable_range<T>;
+
 template <typename...>
 struct r_tuple;
 
@@ -14,8 +20,18 @@ class directional_field;
 
 namespace detail
 {
+
+// some operations (such as the construction of nested r_tuples)
+// will require an extra argument to chose the right templated
+// function (ie prefering a constructor over a converting constructor)
+struct tag {
+};
+
 template <typename...>
 struct container_tuple;
+
+template <All...>
+struct view_tuple;
 
 namespace traits
 {
@@ -33,6 +49,18 @@ concept Container_Tuple = is_container_tuple<std::remove_cvref_t<T>>::value;
 template <typename T, typename U>
 concept Other_Container_Tuple = Container_Tuple<T>&& Container_Tuple<U> &&
                                 (!std::same_as<U, std::remove_cvref_t<T>>);
+
+template <typename>
+struct is_view_tuple : std::false_type {
+};
+
+template <typename... Args>
+struct is_view_tuple<view_tuple<Args...>> : std::true_type {
+};
+
+template <typename T>
+concept View_Tuple = is_view_tuple<std::remove_cvref_t<T>>::value;
+
 } // namespace traits
 
 } // namespace detail
@@ -54,7 +82,10 @@ template <typename T>
 concept Non_Tuple_Input_Range = rs::input_range<T> && (!R_Tuple<T>);
 
 template <typename T>
-concept Owning_R_Tuple = R_Tuple<T> && requires(T t) { t.template get<0>(); };
+concept Owning_R_Tuple = R_Tuple<T>&& requires(T t)
+{
+    t.template get<0>();
+};
 
 template <typename>
 struct is_directional_field : std::false_type {
@@ -73,7 +104,12 @@ struct from_view {
 
 template <template <typename...> typename U, typename... Args>
 struct from_view<U<Args...>> {
-    static constexpr auto create = [](auto&&, auto&&... args) { return U{FWD(args)...}; };
+    static constexpr auto create = [](auto&&, auto&&... args) {
+        //std::cout << "Invoking create with U<Args> = " << debug::type(U<Args...>{})
+        //          << '\n'
+        //          << "\tto create type: " << debug::type(U{args...}) << '\n';
+        return U{::ccs::detail::tag{}, FWD(args)...};
+    };
 };
 
 template <template <typename...> typename U,
@@ -83,7 +119,7 @@ template <template <typename...> typename U,
           typename... VArgs>
 struct from_view<U<UArgs...>, V<VArgs...>> {
     static constexpr auto create = [](auto&&, auto&&, auto&&... args) {
-        return U{FWD(args)...};
+        return U{::ccs::detail::tag{}, FWD(args)...};
     };
 };
 

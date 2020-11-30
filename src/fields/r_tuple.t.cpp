@@ -274,7 +274,7 @@ TEST_CASE("directional")
 
 template <int I>
 using D = ccs::directional_field<std::vector<ccs::real>, I>;
-TEST_CASE("directional_composite")
+TEST_CASE("tuple of directional")
 {
     using namespace ccs;
     constexpr int3 extents{2, 4, 2};
@@ -285,6 +285,12 @@ TEST_CASE("directional_composite")
 
         REQUIRE(!All<D<0>>);
         REQUIRE(All<D<0>&>);
+
+        {
+            N x = r_tuple{D<0>{vs::iota(0, 16), extents}};
+            REQUIRE(traits::Owning_R_Tuple<decltype(x)>);
+        }
+
         auto d = D<0>{vs::iota(0, 16), extents};
         REQUIRE(d[0] == 0);
         N x = r_tuple{MOVE(d)};
@@ -362,6 +368,107 @@ TEST_CASE("directional_composite")
             REQUIRE(z.get<0>().extents() == extents);
             REQUIRE(z.get<1>().extents() == extents);
             REQUIRE(z.get<2>().extents() == extents);
+        }
+    }
+}
+
+TEST_CASE("nested tuple of directional")
+{
+    using namespace ccs;
+    constexpr int3 extents{2, 4, 2};
+
+    SECTION("1 tuple")
+    {
+        using N = r_tuple<r_tuple<D<0>>>;
+
+        N x{r_tuple{D<0>{vs::iota(0, 16), extents}}};
+        REQUIRE(traits::Owning_R_Tuple<decltype(x)>);
+        auto& x0 = x.get<0>();
+        REQUIRE(traits::Owning_R_Tuple<decltype(x0)>);
+        auto& x1 = x0.get<0>();
+        REQUIRE(traits::Directional_Field<decltype(x1)>);
+        REQUIRE(traits::Owning_R_Tuple<decltype(x1.as_r_tuple())>);
+
+        const auto& v = x.get<0>().get<0>();
+        REQUIRE(x[0] == 0);
+        REQUIRE(v[0] == 0);
+        REQUIRE(v[15] == 15);
+
+        auto y = (x + 1);
+        REQUIRE(traits::Owning_R_Tuple<decltype(y)>);
+        auto& y0 = y.get<0>();
+        REQUIRE(traits::Owning_R_Tuple<decltype(y0)>);
+        REQUIRE(traits::Directional_Field<decltype(y0.get<0>())>);
+        REQUIRE(!traits::Owning_R_Tuple<decltype(y0.get<0>().as_r_tuple())>);
+
+        {
+            const auto& z = y.get<0>().get<0>();
+            REQUIRE(rs::equal(z, vs::iota(1, 17)));
+            REQUIRE(z.extents() == extents);
+        }
+
+        {
+            N xx{y};
+            const auto& z = xx.get<0>().get<0>();
+            REQUIRE(rs::equal(z, vs::iota(1, 17)));
+            REQUIRE(z.extents() == extents);
+        }
+
+        {
+            N xx{};
+            xx = y;
+            const auto& z = xx.get<0>().get<0>();
+            REQUIRE(rs::equal(z, vs::iota(1, 17)));
+            REQUIRE(z.extents() == extents);
+        }
+    }
+
+    SECTION("3 tuple")
+    {
+        using M = r_tuple<D<0>, D<1>, D<2>>;
+        using N = r_tuple<M>;
+
+        N x{r_tuple{D<0>{vs::iota(0, 16), extents},
+                    D<1>{vs::iota(16, 32), extents},
+                    D<2>{vs::iota(32, 48), extents}}};
+
+        REQUIRE(traits::Owning_R_Tuple<decltype(x)>);
+        auto& x0 = x.get<0>();
+        REQUIRE(traits::Owning_R_Tuple<decltype(x0)>);
+        auto& x1 = x0.get<2>();
+        REQUIRE(traits::Directional_Field<decltype(x1)>);
+        REQUIRE(traits::Owning_R_Tuple<decltype(x1.as_r_tuple())>);
+
+        auto y = (x + 0) + 1 + 0;
+        REQUIRE(traits::Owning_R_Tuple<decltype(y)>);
+        const auto& y0 = y.get<0>();
+        REQUIRE(traits::Owning_R_Tuple<decltype(y0)>);
+        REQUIRE(traits::Directional_Field<decltype(y0.get<1>())>);
+        REQUIRE(!traits::Owning_R_Tuple<decltype(y0.get<1>().as_r_tuple())>);
+
+        {
+            N z{y};
+            const auto& zz = z.get<0>();
+            REQUIRE(rs::equal(zz.get<0>(), vs::iota(1, 17)));
+            REQUIRE(rs::equal(zz.get<1>(), vs::iota(17, 33)));
+            REQUIRE(rs::equal(zz.get<2>(), vs::iota(33, 49)));
+
+            REQUIRE(zz.get<0>().extents() == extents);
+            REQUIRE(zz.get<1>().extents() == extents);
+            REQUIRE(zz.get<2>().extents() == extents);
+        }
+
+        {
+            N z{};
+            z = y;
+            const auto& zz = z.get<0>();
+            REQUIRE(rs::equal(zz.get<0>(), vs::iota(1, 17)));
+            REQUIRE(rs::equal(zz.get<1>(), vs::iota(17, 33)));
+            REQUIRE(rs::equal(zz.get<2>(), vs::iota(33, 49)));
+
+            REQUIRE(zz.get<0>().extents() == extents);
+            REQUIRE(zz.get<1>().extents() == extents);
+            REQUIRE(zz.get<2>().extents() == extents);
         }
     }
 }
