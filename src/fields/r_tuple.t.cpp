@@ -6,13 +6,12 @@
 
 #include <range/v3/algorithm/equal.hpp>
 #include <range/v3/view/all.hpp>
+#include <range/v3/view/concat.hpp>
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/take.hpp>
 #include <range/v3/view/zip_with.hpp>
 
 #include <vector>
-
-#include <iostream>
 
 TEST_CASE("concepts")
 {
@@ -41,6 +40,10 @@ TEST_CASE("concepts")
     REQUIRE(All<r_tuple<U>&>);
     REQUIRE(!All<r_tuple<U>>);
     REQUIRE(!All<r_tuple<U>&&>);
+
+    using V = decltype(vs::iota(0, 10));
+    REQUIRE(All<V>);
+    REQUIRE(All<r_tuple<V>>);
 }
 
 TEST_CASE("construction")
@@ -59,6 +62,43 @@ TEST_CASE("construction")
     REQUIRE(r[1] == -1);
 
     REQUIRE(rs::equal(view<0>(r), x));
+
+    SECTION("owning from size")
+    {
+        using T = std::vector<real>;
+        auto q = r_tuple<T>{4};
+        REQUIRE(q.size() == 4u);
+
+        r_tuple<T> t = r_tuple{4};
+        REQUIRE(t.size() == 4u);
+
+        auto qq = r_tuple<T, T, T>{4, 5, 6};
+        REQUIRE(rs::size(view<0>(qq)) == 4u);
+        REQUIRE(rs::size(view<1>(qq)) == 5u);
+        REQUIRE(qq.get<2>().size() == 6u);
+
+        r_tuple<T, T, T> tt = r_tuple{7, 8, 9};
+        REQUIRE(rs::size(view<0>(tt)) == 7u);
+        REQUIRE(rs::size(view<1>(tt)) == 8u);
+        REQUIRE(tt.get<2>().size() == 9u);
+    }
+
+    SECTION("Nested owning from size")
+    {
+        using T = std::vector<real>;
+        using U = r_tuple<r_tuple<T>>;
+
+        auto u = U{10};
+        REQUIRE(u.size() == 10u);
+
+        using V = r_tuple<r_tuple<T, T, T>>;
+        V v{detail::tag{}, r_tuple{11, 12, 13}};
+
+        const auto& g = v.get<0>();
+        REQUIRE(rs::size(view<0>(g)) == 11u);
+        REQUIRE(rs::size(view<1>(g)) == 12u);
+        REQUIRE(g.get<2>().size() == 13u);
+    }
 
     SECTION("owning from input range")
     {
@@ -121,6 +161,11 @@ TEST_CASE("construction")
         REQUIRE(rs::equal(view<0>(rr), view<0>(r_owning)));
         REQUIRE(rs::equal(view<1>(rr), view<1>(r_owning)));
         REQUIRE(rs::equal(view<2>(rr), view<2>(r_owning)));
+    }
+
+    {
+        auto x = r_tuple{vs::concat(r_tuple{vs::iota(0, 16)}, vs::iota(16, 21))};
+        REQUIRE(rs::equal(x, vs::iota(0, 21)));
     }
 }
 
@@ -246,6 +291,12 @@ TEST_CASE("directional")
     REQUIRE(x[1] == 1);
     REQUIRE(rs::equal(x, r));
 
+    {
+        auto y = directional_field<T, 0>{int3{2, 4, 2}};
+        REQUIRE(y.size() == 16u);
+        REQUIRE(y.extents() == int3{2, 4, 2});
+    }
+
     auto y = x + x;
     REQUIRE(y[1] == 2);
     REQUIRE(y.extents() == int3{2, 4, 2});
@@ -289,6 +340,10 @@ TEST_CASE("tuple of directional")
         {
             N x = r_tuple{D<0>{vs::iota(0, 16), extents}};
             REQUIRE(traits::Owning_R_Tuple<decltype(x)>);
+
+            N y{extents};
+            REQUIRE(y.size() == 16u);
+            REQUIRE(y.get<0>().extents() == extents);
         }
 
         auto d = D<0>{vs::iota(0, 16), extents};
@@ -369,6 +424,13 @@ TEST_CASE("tuple of directional")
             REQUIRE(z.get<1>().extents() == extents);
             REQUIRE(z.get<2>().extents() == extents);
         }
+
+        {
+            N q{extents, extents, extents};
+            REQUIRE(q.get<0>().extents() == extents);
+            REQUIRE(q.get<1>().extents() == extents);
+            REQUIRE(q.get<2>().extents() == extents);
+        }
     }
 }
 
@@ -380,6 +442,10 @@ TEST_CASE("nested tuple of directional")
     SECTION("1 tuple")
     {
         using N = r_tuple<r_tuple<D<0>>>;
+
+        {
+            N x{detail::tag(), extents};
+        }
 
         N x{r_tuple{D<0>{vs::iota(0, 16), extents}}};
         REQUIRE(traits::Owning_R_Tuple<decltype(x)>);
@@ -428,6 +494,10 @@ TEST_CASE("nested tuple of directional")
         using M = r_tuple<D<0>, D<1>, D<2>>;
         using N = r_tuple<M>;
 
+        {
+            N x{detail::tag(), r_tuple{extents, extents, extents}};
+        }
+
         N x{r_tuple{D<0>{vs::iota(0, 16), extents},
                     D<1>{vs::iota(16, 32), extents},
                     D<2>{vs::iota(32, 48), extents}}};
@@ -470,5 +540,118 @@ TEST_CASE("nested tuple of directional")
             REQUIRE(zz.get<1>().extents() == extents);
             REQUIRE(zz.get<2>().extents() == extents);
         }
+    }
+}
+
+TEST_CASE("Scalar Directional")
+{
+    using namespace ccs;
+    using T = std::vector<real>;
+
+    constexpr int3 extents{4, 2, 2};
+
+    // default construction
+    scalar_directional<T, 0> x{};
+
+    // sized construction
+    {
+        auto y = scalar_y<T>{r_tuple{extents}, r_tuple{16, 17, 18}};
+        REQUIRE(y.get<0>().get<0>().extents() == extents);
+        REQUIRE(view<0>(y.get<1>()).size() == 16u);
+        REQUIRE(view<1>(y.get<1>()).size() == 17u);
+        REQUIRE(view<2>(y.get<1>()).size() == 18u);
+    }
+
+    auto y = scalar_directional<T, 0>{
+        r_tuple{directional_field<T, 0>{vs::iota(0, 16), extents}},
+        r_tuple{vs::iota(0, 16), vs::iota(16, 32), vs::iota(32, 48)}};
+
+    x = y;
+
+    REQUIRE(rs::equal(vs::iota(16, 32), x.get<1>().get<1>()));
+    REQUIRE(rs::equal(vs::iota(32, 48), view<2>(x.get<1>())));
+
+    auto z = (0 + x) + 1;
+    REQUIRE(traits::Owning_R_Tuple<decltype(z)>);
+
+    scalar_x<T> zz{z};
+
+    {
+        auto& z0 = z.get<0>();
+        REQUIRE(traits::Owning_R_Tuple<decltype(z0)>);
+        auto& d = z0.get<0>();
+        REQUIRE(traits::Directional_Field<decltype(d)>);
+        REQUIRE(!traits::Owning_R_Tuple<decltype(d.as_r_tuple())>);
+        REQUIRE(rs::equal(d, vs::iota(1, 17)));
+        REQUIRE(d.extents() == extents);
+    }
+
+    {
+        const auto& z1 = z.get<1>();
+        REQUIRE(!traits::Owning_R_Tuple<decltype(z1)>);
+        REQUIRE(rs::equal(view<0>(z1), vs::iota(1, 17)));
+        REQUIRE(rs::equal(view<1>(z1), vs::iota(17, 33)));
+        REQUIRE(rs::equal(view<2>(z1), vs::iota(33, 49)));
+    }
+}
+
+TEST_CASE("Scalar")
+{
+    using namespace ccs;
+    using T = std::vector<real>;
+
+    constexpr int3 extents{4, 2, 2};
+
+    // default construction
+    scalar<T> x{};
+
+    // sized construction
+    {
+        auto y = scalar<T>{r_tuple{extents, extents, extents}, r_tuple{24, 26, 28}};
+    }
+
+    auto y = scalar<T>{r_tuple{directional_field<T, 0>{vs::iota(0, 16), extents},
+                               directional_field<T, 1>{vs::iota(16, 32), extents},
+                               directional_field<T, 2>{vs::iota(32, 48), extents}},
+                       r_tuple{vs::iota(0, 16), vs::iota(16, 32), vs::iota(32, 48)}};
+
+    x = y;
+
+    REQUIRE(rs::equal(vs::iota(16, 32), x.get<1>().get<1>()));
+    REQUIRE(rs::equal(vs::iota(32, 48), view<2>(x.get<1>())));
+
+    auto z = (0 + x) + 1 + y;
+    REQUIRE(traits::Owning_R_Tuple<decltype(z)>);
+
+    {
+        auto& z0 = z.get<0>();
+        REQUIRE(traits::Owning_R_Tuple<decltype(z0)>);
+        const auto& a = z0.get<0>();
+        const auto& b = z0.get<1>();
+        const auto& c = z0.get<2>();
+        REQUIRE(traits::Directional_Field<decltype(a)>);
+        REQUIRE(!traits::Owning_R_Tuple<decltype(a.as_r_tuple())>);
+        REQUIRE(
+            rs::equal(a, vs::zip_with(std::plus{}, vs::iota(1, 17), vs::iota(0, 16))));
+        REQUIRE(
+            rs::equal(b, vs::zip_with(std::plus{}, vs::iota(17, 33), vs::iota(16, 32))));
+        REQUIRE(
+            rs::equal(c, vs::zip_with(std::plus{}, vs::iota(33, 49), vs::iota(32, 48))));
+
+        REQUIRE(a.extents() == extents);
+        REQUIRE(b.extents() == extents);
+        REQUIRE(c.extents() == extents);
+    }
+
+    {
+        scalar<T> zz{z};
+        const auto& z1 = zz.get<1>();
+        REQUIRE(traits::Owning_R_Tuple<decltype(z1)>);
+        REQUIRE(rs::equal(view<0>(z1),
+                          vs::zip_with(std::plus{}, vs::iota(1, 17), vs::iota(0, 16))));
+        REQUIRE(rs::equal(view<1>(z1),
+                          vs::zip_with(std::plus{}, vs::iota(17, 33), vs::iota(16, 32))));
+        REQUIRE(rs::equal(view<2>(z1),
+                          vs::zip_with(std::plus{}, vs::iota(33, 49), vs::iota(32, 48))));
     }
 }

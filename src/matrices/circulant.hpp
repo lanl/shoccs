@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fields/result_field.hpp"
+#include "fields/r_tuple.hpp"
 #include "types.hpp"
 
 #include <cassert>
@@ -43,7 +43,7 @@ private:
         assert(rng.size() >= static_cast<unsigned>(mat.rows()));
         assert(mat.size() > 0);
 
-        return result_range{ranges::views::zip_with(
+        return r_tuple{ranges::views::zip_with(
             [](auto&& a, auto&& b) { return ranges::inner_product(a, b, 0.0); },
             ranges::views::repeat_n(mat.v, mat.rows()),
             rng | ranges::views::drop(mat.offset()) |

@@ -6,7 +6,7 @@
 #include "types.hpp"
 #include "zeros.hpp"
 
-#include "fields/result_field.hpp"
+#include "fields/r_tuple.hpp"
 
 #include <concepts>
 #include <range/v3/view/concat.hpp>
@@ -78,7 +78,7 @@ private:
     template <ranges::random_access_range R>
     friend constexpr auto operator*(const block& mat, R&& rng)
     {
-        return result_range{vs::concat(
+        return r_tuple{vs::concat(
             mat.z[0] * rng,
             vs::for_each(vs::zip(mat.blocks, mat.z | vs::drop(1)), [rng](auto&& t) {
                 auto&& [m, z] = t;

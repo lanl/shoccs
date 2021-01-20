@@ -29,10 +29,10 @@ struct selection {
 };
 
 template <typename R, typename I>
-selection(R&&, I &&) -> selection<R, I, std::identity>;
+selection(R&&, I&&) -> selection<R, I, std::identity>;
 
 template <typename R, typename I, typename A>
-selection(R&&, I&&, A &&) -> selection<R, I, A>;
+selection(R&&, I&&, A&&) -> selection<R, I, A>;
 
 template <typename I, typename P, typename A>
 struct selection_helper {
@@ -41,13 +41,13 @@ struct selection_helper {
     A action;
 };
 template <typename I>
-selection_helper(I &&) -> selection_helper<I, std::identity, std::identity>;
+selection_helper(I&&) -> selection_helper<I, std::identity, std::identity>;
 
 template <typename I, typename P>
-selection_helper(I&&, P &&) -> selection_helper<I, P, std::identity>;
+selection_helper(I&&, P&&) -> selection_helper<I, P, std::identity>;
 
 template <typename I, typename P, typename A>
-selection_helper(I&&, P&&, A &&) -> selection_helper<I, P, A>;
+selection_helper(I&&, P&&, A&&) -> selection_helper<I, P, A>;
 
 namespace traits
 {

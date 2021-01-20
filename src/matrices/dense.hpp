@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fields/result_field.hpp"
+#include "fields/r_tuple.hpp"
 #include "types.hpp"
 #include <vector>
 
@@ -42,7 +42,7 @@ private:
     {
         assert(rng.size() >= static_cast<unsigned>(mat.columns()));
 
-        return result_range{ranges::views::zip_with(
+        return r_tuple{ranges::views::zip_with(
             [](auto&& a, auto&& b) { return ranges::inner_product(a, b, 0.0); },
             ranges::views::chunk(mat.v, mat.columns()),
             ranges::views::repeat_n(rng, mat.rows()))};

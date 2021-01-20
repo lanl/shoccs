@@ -2,9 +2,11 @@
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_vector.hpp>
 
 #include <range/v3/view/all.hpp>
 #include <range/v3/view/iota.hpp>
+#include <range/v3/algorithm/equal.hpp>
 
 TEST_CASE("Identity")
 {
@@ -21,7 +23,7 @@ TEST_CASE("Identity")
 
     REQUIRE(res.size() == 5u);
 
-    for (int i = 0; i < 5; i++) REQUIRE(rng[i] == res[i]);
+    REQUIRE(rs::equal(rng, res));
 }
 
 TEST_CASE("Non Square1")

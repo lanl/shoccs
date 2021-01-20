@@ -4,14 +4,24 @@
 #include <concepts>
 #include <range/v3/range/concepts.hpp>
 
-#include <iostream>
-
 namespace ccs
 {
 
+// Concept for being able to apply vs::all.  Need to exclude int3 as
+// an "Allable" range to trigger proper tuple construction calls
 template <typename T>
-concept All = rs::range<T&>&& rs::viewable_range<T>;
+concept All = rs::range<T&>&& rs::viewable_range<T> &&
+              (!std::same_as<int3, std::remove_cvref_t<T>>);
 
+// have a more limited definition of input_range so that
+// int3 extents are not considered an input_range
+namespace traits
+{
+template <typename T>
+concept range = rs::input_range<T> && (!std::same_as<int3, std::remove_cvref_t<T>>);
+}
+
+// Forward decls for main types
 template <typename...>
 struct r_tuple;
 
@@ -27,12 +37,14 @@ namespace detail
 struct tag {
 };
 
+// forward decls for component types
 template <typename...>
 struct container_tuple;
 
-template <All...>
+template <typename...>
 struct view_tuple;
 
+// traits and concepts for component types
 namespace traits
 {
 template <typename>
@@ -62,9 +74,9 @@ template <typename T>
 concept View_Tuple = is_view_tuple<std::remove_cvref_t<T>>::value;
 
 } // namespace traits
-
 } // namespace detail
 
+// traits and concepts for main types
 namespace traits
 {
 template <typename>
@@ -98,72 +110,69 @@ struct is_directional_field<directional_field<T, I>> : std::true_type {
 template <typename T>
 concept Directional_Field = is_directional_field<std::remove_cvref_t<T>>::value;
 
+// utilities for pulling out direction
+template <typename>
+struct direction {
+};
+
+template <typename T, int I>
+struct direction<directional_field<T, I>> {
+    static constexpr auto dim = I;
+};
+
+template <Directional_Field D>
+constexpr auto direction_v = direction<std::remove_cvref_t<D>>::dim;
+
+template <typename U, typename V>
+concept Same_Direction = Directional_Field<U>&& Directional_Field<V> &&
+                         (direction_v<U> == direction_v<V>);
+
 template <typename...>
 struct from_view {
 };
 
-template <template <typename...> typename U, typename... Args>
-struct from_view<U<Args...>> {
+// single argument views
+template <R_Tuple U>
+struct from_view<U> {
     static constexpr auto create = [](auto&&, auto&&... args) {
-        //std::cout << "Invoking create with U<Args> = " << debug::type(U<Args...>{})
-        //          << '\n'
-        //          << "\tto create type: " << debug::type(U{args...}) << '\n';
-        return U{::ccs::detail::tag{}, FWD(args)...};
+        return r_tuple{::ccs::detail::tag{}, FWD(args)...};
     };
 };
 
-template <template <typename...> typename U,
-          typename... UArgs,
-          template <typename...>
-          typename V,
-          typename... VArgs>
-struct from_view<U<UArgs...>, V<VArgs...>> {
-    static constexpr auto create = [](auto&&, auto&&, auto&&... args) {
-        return U{::ccs::detail::tag{}, FWD(args)...};
-    };
-};
-
-template <template <typename, int> typename U, typename UArgs, int I>
-struct from_view<U<UArgs, I>> {
+template <Directional_Field U>
+struct from_view<U> {
     static constexpr auto create = [](auto&& u, auto&&... args) {
-        return U{lit<I>{}, FWD(args)..., u.extents()};
+        return directional_field{lit<direction_v<U>>{}, FWD(args)..., u.extents()};
     };
 };
 
-template <template <typename, int> typename U,
-          typename UArgs,
-          int I,
-          template <typename, int>
-          typename V,
-          typename VArgs>
-struct from_view<U<UArgs, I>, V<VArgs, I>> {
+// Combination views
+template <R_Tuple U, R_Tuple V>
+struct from_view<U, V> {
+    static constexpr auto create = [](auto&&, auto&&, auto&&... args) {
+        return r_tuple{::ccs::detail::tag{}, FWD(args)...};
+    };
+};
+
+template <Directional_Field U, Same_Direction<U> V>
+struct from_view<U, V> {
     static constexpr auto create = [](auto&& u, auto&&, auto&&... args) {
-        return U{lit<I>{}, FWD(args)..., u.extents()};
+        return directional_field{lit<direction_v<U>>{}, FWD(args)..., u.extents()};
     };
 };
 
 // combine directional fields and 1-tuples
-template <template <typename, int> typename U,
-          typename UArgs,
-          int I,
-          template <typename>
-          typename V,
-          typename VArgs>
-struct from_view<U<UArgs, I>, V<VArgs>> {
+template <Directional_Field U, R_Tuple V>
+struct from_view<U, V> {
     static constexpr auto create = [](auto&& u, auto&&, auto&&... args) {
-        return U{lit<I>{}, FWD(args)..., u.extents()};
+        return directional_field{lit<direction_v<U>>{}, FWD(args)..., u.extents()};
     };
 };
 
-template <template <typename, int> typename U,
-          typename UArgs,
-          int I,
-          template <typename>
-          typename V,
-          typename VArgs>
-struct from_view<V<VArgs>, U<UArgs, I>> {
+template <R_Tuple V, Directional_Field U>
+struct from_view<V, U> {
     static constexpr auto create = [](auto&&, auto&& u, auto&&... args) {
-        return U{lit<I>{}, FWD(args)..., u.extents()};
+        return directional_field{lit<direction_v<U>>{}, FWD(args)..., u.extents()};
     };
 };
 
@@ -179,11 +188,16 @@ concept From_View = requires
 } // namespace traits
 } // namespace ccs
 
-// need to specialize this bool inorder for r_tuples to have the correct behavior
+// need to specialize this bool inorder for r_tuples to have the correct behavior.
+// This is somewhat tricky and is hopefully tested by all the "concepts" tests in
+// r_tuple.t.cpp
 namespace ranges
 {
 template <typename... Args>
 inline constexpr bool enable_view<ccs::r_tuple<Args...>> = false;
+
+template <::ccs::All T>
+inline constexpr bool enable_view<ccs::r_tuple<T>> = true;
 
 template <typename T, int I>
 inline constexpr bool enable_view<ccs::directional_field<T, I>> = false;

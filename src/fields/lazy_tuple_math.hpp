@@ -8,8 +8,6 @@
 #include <range/v3/view/zip_with.hpp>
 #include <tuple>
 
-#include <iostream>
-
 namespace ccs::lazy
 {
 
@@ -90,7 +88,6 @@ private:
         };
 
         if constexpr (nested) {
-            //std::cout << "calling nested addition\n";
             return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto v)
             {
                 return std::invoke(traits::create_from_view<U>,
@@ -99,7 +96,6 @@ private:
             }
             (std::make_index_sequence<u.N>{}, FWD(u), v);
         } else {
-            //std::cout << "calling ranges addition\n";
             return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto v)
             {
                 return std::invoke(traits::create_from_view<U>,
@@ -117,15 +113,31 @@ private:
         traits::From_View<U> friend constexpr auto
         operator+(V v, U&& u)
     {
-        return []<auto... Is>(std::index_sequence<Is...>, auto v, auto&& u)
+        constexpr bool nested = requires(U u, V v)
         {
-            return std::invoke(traits::create_from_view<U>,
-                               u,
-                               vs::zip_with(std::plus{},
-                                            vs::repeat_n(v, view<Is>(u).size()),
-                                            view<Is>(u))...);
+            u.template get<0>();
+            v + u.template get<0>();
+        };
+
+        if constexpr (nested) {
+            return []<auto... Is>(std::index_sequence<Is...>, auto v, auto&& u)
+            {
+                return std::invoke(traits::create_from_view<U>,
+                                   u,
+                                   operator+(v, u.template get<Is>())...);
+            }
+            (std::make_index_sequence<u.N>{}, v, FWD(u));
+        } else {
+            return []<auto... Is>(std::index_sequence<Is...>, auto v, auto&& u)
+            {
+                return std::invoke(traits::create_from_view<U>,
+                                   u,
+                                   vs::zip_with(std::plus{},
+                                                vs::repeat_n(v, view<Is>(u).size()),
+                                                view<Is>(u))...);
+            }
+            (std::make_index_sequence<u.N>{}, v, FWD(u));
         }
-        (std::make_index_sequence<u.N>{}, v, FWD(u));
     }
 
     template <typename U, typename V>
@@ -136,14 +148,33 @@ private:
     }
     friend constexpr auto operator+(U&& u, V&& v)
     {
-        return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto&& v)
+        constexpr bool nested = requires(U u, V v)
         {
-            return std::invoke(traits::create_from_view<U, V>,
-                               u,
-                               v,
-                               vs::zip_with(std::plus{}, view<Is>(u), view<Is>(v))...);
+            u.template get<0>();
+            v.template get<0>();
+            u.template get<0>() + v.template get<0>();
+        };
+
+        if constexpr (nested) {
+            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto&& v)
+            {
+                return std::invoke(traits::create_from_view<U, V>,
+                                   u,
+                                   v,
+                                   operator+(u.template get<Is>(), v.template get<Is>())...);
+            }
+            (std::make_index_sequence<u.N>{}, v, FWD(u));
+        } else {
+            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto&& v)
+            {
+                return std::invoke(
+                    traits::create_from_view<U, V>,
+                    u,
+                    v,
+                    vs::zip_with(std::plus{}, view<Is>(u), view<Is>(v))...);
+            }
+            (std::make_index_sequence<std::max(u.N, v.N)>{}, FWD(u), FWD(v));
         }
-        (std::make_index_sequence<std::max(u.N, v.N)>{}, FWD(u), FWD(v));
     }
 };
 

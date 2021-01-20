@@ -2,7 +2,6 @@
 
 #include "circulant.hpp"
 #include "dense.hpp"
-#include "fields/result_field.hpp"
 #include "types.hpp"
 
 #include <range/v3/view/concat.hpp>
@@ -42,7 +41,7 @@ private:
     {
         auto x = rng | vs::drop(mat.row_start);
         int right_offset = mat.rows() - mat.right_boundary.columns();
-        return result_range{vs::concat(
+        return r_tuple{vs::concat(
             mat.left_boundary * x,
             mat.interior * x,
             mat.right_boundary * (x | vs::drop(right_offset)))};
