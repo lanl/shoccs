@@ -349,7 +349,7 @@ void euler_vortex::operator()(std::vector<real_t>& rhs, double time)
         dot(cart.ndims(), sz, -1.0, div_span, rs);
 }
 
-system_stats euler_vortex::stats(double time)
+SystemStats euler_vortex::stats(double time)
 {
         this->stats_(stats0,
                      time >= stats_begin_accumulate,

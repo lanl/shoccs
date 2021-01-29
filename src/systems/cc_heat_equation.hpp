@@ -16,7 +16,7 @@ class cc_heat_equation : public system
 
         double diffusivity;
 
-        system_stats stats0;           // the stats associated with the previous timestep
+        SystemStats stats0;           // the stats associated with the previous timestep
         double stats_begin_accumulate; // time when accumululated errors begin;
 
     public:
@@ -33,7 +33,7 @@ class cc_heat_equation : public system
         // evaluates the rhs of the system at a particular time
         void operator()(std::vector<double>& rhs, double time) override;
 
-        system_stats stats(double time) override;
+        SystemStats stats(double time) override;
 
         int_t rhs_size() const override;
 

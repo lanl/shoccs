@@ -1,7 +1,10 @@
-#include "field_io.hpp"
+#include "FieldIO.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+
+#include "StepController.hpp"
+#include "fields/SystemField.hpp"
 
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/transform.hpp>
@@ -11,7 +14,7 @@ namespace ccs
 namespace fs = std::filesystem;
 
 // const fs::path io_dir{"io"};
-
+#if 0
 field_io::field_io(xdmf&& xwriter,
                    field_data&& fwriter,
                    interval<int> step_interval,
@@ -84,5 +87,6 @@ void field_io::write(int step, real time, real dt)
 
     ++current_step;
 }
-
+#endif
+void FieldIO::write(const SystemField&, const StepController&, real) {}
 } // namespace ccs

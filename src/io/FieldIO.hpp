@@ -7,9 +7,12 @@
 
 #include "interval.hpp"
 #include "types.hpp"
+#include "fields/SystemField.hpp"
 
 namespace ccs
 {
+// Forward decls
+class StepController;
 
 class xdmf
 {
@@ -47,8 +50,9 @@ public:
     std::ostream& write(std::ostream& stream, const double* data);
 };
 
-class field_io
+class FieldIO
 {
+#if 0
     // the string member are the variable names and the pointers are to the data
     std::vector<std::tuple<std::string, const double*>> v;
     xdmf xdmf_writer;
@@ -60,10 +64,11 @@ class field_io
     int suffix_length{6};
     int current_step{0};
     bool wont_write{true};
-
+#endif
 public:
-    field_io() = default;
+    FieldIO() = default;
 
+#if 0
     // this constructor takes r-value reference to writers to emphasize that we're
     // taking over
     field_io(xdmf&& xwriter,
@@ -71,11 +76,11 @@ public:
              interval<int> step_interval = interval<int>{},
              interval<double> time_interval = interval<double>{},
              std::string io_dir = std::string{"io_dir"});
-
     // register a variable name and pointer to be written
     void add(const std::string& name, const double* data);
+#endif
 
-    void write(int step, double time, double dt);
+    void write(const SystemField& field, const StepController& controller, real dt);
 };
 
 } // namespace ccs

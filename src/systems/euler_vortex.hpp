@@ -20,7 +20,7 @@ class euler_vortex : public system
         real_t eps;                   // vortex strength
         real_t M0;                    // background Mach number
 
-        system_stats stats0;           // the stats associated with the previous timestep
+        SystemStats stats0;           // the stats associated with the previous timestep
         real_t stats_begin_accumulate; // time when accumululated errors begin;
 
     public:
@@ -38,7 +38,7 @@ class euler_vortex : public system
         // evaluates the rhs of the system at a particular time
         void operator()(std::vector<real_t>& rhs, real_t time) override;
 
-        system_stats stats(real_t time) override;
+        SystemStats stats(real_t time) override;
 
         int_t rhs_size() const override;
 

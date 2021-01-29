@@ -3,6 +3,7 @@
 #include <array>
 #include <concepts>
 #include <span>
+#include <limits>
 
 #define FWD(x) static_cast<decltype(x)>(x)
 #define MOVE(x) static_cast<std::remove_reference_t<decltype(x)>&&>(x)
@@ -31,6 +32,11 @@ namespace vs = ranges::views;
 
 template<int N>
 using lit = std::integral_constant<int, N>;
+
+struct SystemStats {};
+
+template<typename T = real>
+constexpr auto null_v = std::numeric_limits<T>::max();
 
 } // namespace ccs
 

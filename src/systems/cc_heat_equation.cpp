@@ -110,7 +110,7 @@ void cc_heat_equation::operator()(std::vector<double>& rhs, double time)
         cut_mesh.fill_void(cart.ndims() - 1, rhs, 0.0);
 }
 
-system_stats cc_heat_equation::stats(double time)
+SystemStats cc_heat_equation::stats(double time)
 {
         this->stats_(stats0,
                      time >= stats_begin_accumulate,

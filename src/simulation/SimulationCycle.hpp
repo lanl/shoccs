@@ -1,23 +1,27 @@
 #pragma once
 
-#include "io/field_io.hpp"
-#include "systems/system.hpp"
-#include "temporal/integrate.hpp"
-#include "timestep_controls.hpp"
+#include "types.hpp"
+
+#include "systems/System.hpp"
+#include "StepController.hpp"
+#include "temporal/Integrator.hpp"
+#include "io/FieldIO.hpp"
+
 
 namespace ccs
 {
-class simulation_cycle
+class SimulationCycle
 {
-    system sys;
-    integrator integrate;
-    field_io io;
-    timestep_controls tc;
-    loggers logs;
+    System system;
+    StepController controller;
+    Integrator integrator;
+    FieldIO io;
 
 public:
-    simulation_cycle() = default;
+    SimulationCycle() = default;
 
+#if 0
+    simulation_cycle()
     simulation_cycle(std::unique_ptr<integrate>&& integrator,
                              std::unique_ptr<system>&& sys,
                              field_io&& io,
@@ -30,10 +34,7 @@ public:
           logs{std::move(logs)}
     {
     }
-
-    result_t run();
-
-    std::vector<double> solution() const;
-    std::vector<double> error() const;
+#endif
+    real3 run();
 };
-} // namespace pdg
+} // namespace ccs

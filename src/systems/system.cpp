@@ -1,50 +1,72 @@
-#include "system.hpp"
+#include "System.hpp"
 
-#include <cassert>
-
-namespace pdg
+namespace ccs
 {
 
-system::system(cart_mesh&& cart, mesh&& cut_mesh)
-    : cart{std::move(cart)}, cut_mesh{std::move(cut_mesh)}
+std::function<void(SystemField&)> System::operator()(const StepController& controller)
 {
+    return std::visit(
+        [&controller](auto&& current_system) {
+            return std::function<void(SystemField&)>{
+                [&controller, &current_system](SystemField& field) {
+                    current_system(field, controller);
+                }};
+        },
+        system);
 }
 
-double system::timestep_size(double cfl, double max_step_size) const
+std::function<void(SystemView_Mutable)> System::rhs(SystemView_Const field, real time)
 {
-        return std::min(this->system_timestep_size(cfl), max_step_size);
+    return std::visit(
+        [field, time](auto&& current_system) {
+            return std::function<void(SystemView_Mutable)>{
+                [&current_system, field, time](SystemView_Mutable view) {
+                    current_system.rhs(field, time, view);
+                }};
+        },
+        system);
 }
 
-void system::prestep() { u0 = u; }
-
-void system::update(std::vector<double>& rhs, double dtf)
+void System::update_boundary(SystemView_Mutable view, real time)
 {
-        for (int i = 0, end = u.size(); i < end; ++i) u[i] = u0[i] + dtf * rhs[i];
-
-        // This is where we could apply boundary conditions..., but they get applied in ()
+    std::visit([view, time](
+                   auto&& current_system) { current_system.update_boundary(view, time); },
+               system);
 }
 
-std::vector<double> system::operator()(double time)
+std::optional<real> System::timestep_size(const SystemField& field,
+                                          const StepController& controller) const
 {
-        std::vector<double> rhs(u.size());
-        (*this)(rhs, time);
-        return rhs;
+    const auto predicted_dt = std::visit(
+        [&field, &controller](auto&& current_system) {
+            return current_system.timestep_size(field, controller);
+        },
+        system);
+    // the controller may adjust or invalidate this timestep size
+    return controller.check_timestep_size(predicted_dt);
 }
 
-bool system::valid(const system_stats& stats)
+bool System::valid(const SystemStats& stats) const
 {
-        return stats.u_min > -100.0 && stats.u_max < 100.0 && stats.Linf < 100.0;
+    return std::visit([&stats](auto&& sys) { return sys.valid(stats); }, system);
 }
 
-void system::log(std::optional<logger>& lg,
-                 const system_stats& sstats,
-                 int step,
-                 double time) const
+SystemStats System::stats(const SystemField& u0,
+                          const SystemField& u1,
+                          const StepController& controller) const
 {
-        if (lg)
-                (*lg).write(time, step, sstats.u_max, sstats.u_min, sstats.Linf);
+    return std::visit(
+        [&u0, &u1, &controller](auto&& sys) { return sys.stats(u0, u1, controller); },
+        system);
 }
 
-std::vector<double> system::current_solution() const { return u; }
-std::vector<double> system::current_error() const { return error; }
-} // namespace pdg
+void System::log(const SystemStats& stats, const StepController& controller)
+{
+    return std::visit(
+        [&stats, &controller](auto&& current_system) {
+            current_system.log(stats, controller);
+        },
+        system);
+}
+
+} // namespace ccs

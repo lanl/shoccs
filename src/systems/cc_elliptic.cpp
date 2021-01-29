@@ -53,7 +53,7 @@ void cc_elliptic::operator()(std::vector<double>& rhs, double time)
         }
 }
 
-system_stats cc_elliptic::stats(double time)
+SystemStats cc_elliptic::stats(double time)
 {
         auto f = [this, time](const auto& loc) {
                 return ms->laplacian(

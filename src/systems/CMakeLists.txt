@@ -1,3 +1,4 @@
-add_library(pde-system
-  system.cpp vc_scalar_wave.cpp cc_heat_equation.cpp cc_elliptic.cpp euler_vortex.cpp)
-target_link_libraries(pde-system PUBLIC ranges pde-mms pde-utils)
+add_library(shoccs-system
+  System.cpp EmptySystem.cpp ScalarWave.cpp)
+target_include_directories(shoccs-system PUBLIC ..)
+target_link_libraries(shoccs-system PUBLIC fields shoccs-io spdlog::spdlog)

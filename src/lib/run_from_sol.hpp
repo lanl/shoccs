@@ -1,16 +1,11 @@
-#include "types.hpp"
+#pragma once
+
+#include <optional>
 #include <sol/forward.hpp>
+
+#include "types.hpp"
 
 namespace ccs
 {
-auto simulation_run(const sol::table& lua)
-{
-    auto builder = simulation_builder();
-
-    if (auto sim = MOVE(builder).build(lua); sim) {
-        return sim->run();
-    } else {
-        return errors;
-    }
-}
+std::optional<real3> simulation_run(const sol::table& lua);
 } // namespace ccs

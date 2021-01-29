@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fields/SystemField.hpp"
+#include "types.hpp"
 
 namespace ccs
 {
@@ -11,16 +12,10 @@ class StepController;
 namespace integrators
 {
 
-class RK4
-{
-    SystemField rk_rhs;
-    SystemField system_rhs;
-
-public:
-    RK4() = default;
-
+struct EmptyIntegrator {
     void operator()(
         System&, const SystemField&, SystemView_Mutable, const StepController&, real);
 };
 } // namespace integrators
+
 } // namespace ccs

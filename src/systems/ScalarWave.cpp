@@ -1,14 +1,17 @@
-#include "vc_scalar_wave.hpp"
+#include "ScalarWave.hpp"
 
-#include <cassert>
 #include <cmath>
 #include <numbers>
+#include <spdlog/spdlog.h>
+
+namespace ccs::systems
+{
+// system variables to be used in this system
+enum class vars : int { u };
 
 constexpr real twoPI = 2 * std::numbers::pi_v<real>;
 
-namespace ccs
-{
-
+#if 0
 // negative gradient - coefficients of gradient
 template <int I>
 struct neg_G {
@@ -131,20 +134,55 @@ vc_scalar_wave::vc_scalar_wave(cart_mesh&& cart_,
     // io.add("U", &u[0]);
     // io.add("Error", &error[0]);
 }
+#endif
 
-real vc_scalar_wave::system_timestep_size(real cfl) const
+real ScalarWave::timestep_size(const SystemField&, const StepController&) const
 {
-    return cfl * std::min(m.h());
+    // will need some notion of mesh size to implement this
+    // return cfl * std::min(m.h());
+    return null_v<real>;
 }
 
 // Evaluate the rhs of the system using the current u
 // this shouldn't be a std::vector<double>... This should be encapsulated in some
 // kind of field, vector/scalar field seems inadequate.  What would a system field look
 // like? It could contain vector and scalar fields.  Should it be owning (vectors) or
-// non-owning (spans)? If system_field be a templated entity than the call operator can't
+// non-owning (spans)? If SystemField be a templated entity than the call operator can't
 // be virtual (perhaps tag_invoke)?
-void vc_scalar_wave::operator()(std::vector<double>& rhs, double time)
+void ScalarWave::operator()(SystemField& field, const StepController& controller)
 {
+    // ensure the SystemField is the right size
+    if (controller.simulation_step() == 0) {
+    //if (field.nfields() == 1 && field.extents() == int3{} && field.solid().size() != 0) {
+        // adjust the sizes
+        field.nfields(1).extents(int3{}).solid(0).object_boundaries(int3{});
+    }
+    // extract the field components to initialize
+    auto&& [u] = field(vars::u);
+
+    const auto time = controller.simuation_time();
+
+    // At this point we should loop over the Cartesion mesh and set the solution values
+    // Need Cartesian mesh locations
+    u | field_select() <<=
+        location_view<>(m) | vs::transform(solution{center, radius, 0});
+    // Need Rx, Ry, Rz locations
+    // Need transorm operations
+}
+
+SystemStats
+ScalarWave::stats(const SystemField&, const SystemField&, const StepController&) const
+{
+    // this->stats_(stats0, time >= stats_begin_accumulate, time, solution{center,
+    // radius}); return stats0;
+    return {};
+}
+
+bool ScalarWave::valid(const SystemStats&) const { return false; }
+
+void ScalarWave::rhs(SystemView_Const, real, SystemView_Mutable)
+{
+#if 0
     // prepare bc's
     f_bvalues <<=
         geom.Rxyz() >> vs::transform([s = solution{center, radius, time}](auto&& info) {
@@ -153,31 +191,14 @@ void vc_scalar_wave::operator()(std::vector<double>& rhs, double time)
 
     grad(u, du, u_bvalues, du_bvalues, dxyz);
     rhs = contract(grad_G * dxyz, std::plus{});
+#endif
 }
 
-system_stats vc_scalar_wave::stats(double time)
+void ScalarWave::update_boundary(SystemView_Mutable, real) {}
+
+void ScalarWave::log(const SystemStats&, const StepController&)
 {
-    this->stats_(stats0, time >= stats_begin_accumulate, time, solution{center, radius});
-    return stats0;
+    if (auto logger = spdlog::get("system"); logger) { logger->info("ScalarWave"); }
 }
 
-int_t vc_scalar_wave::rhs_size() const { return cart.total_size(); }
-
-std::unique_ptr<system> build_system(cart_mesh&& cart,
-                                     mesh&& cut_mesh,
-                                     discrete_operator&& grad,
-                                     field_io& io,
-                                     std::array<double, 3> center,
-                                     double radius,
-                                     double stats_begin_accumulate)
-{
-    return std::make_unique<vc_scalar_wave>(std::move(cart),
-                                            std::move(cut_mesh),
-                                            std::move(grad),
-                                            io,
-                                            center,
-                                            radius,
-                                            stats_begin_accumulate);
-}
-
-} // namespace ccs
+} // namespace ccs::systems
