@@ -2,6 +2,7 @@
 
 #include "StepController.hpp"
 #include "fields/SystemField.hpp"
+#include "operators/Gradient.hpp"
 #include "types.hpp"
 
 namespace ccs::systems
@@ -11,29 +12,28 @@ namespace ccs::systems
 class ScalarWave
 {
     // required data structure
-    //ccs::op::gradient grad;
+    operators::Gradient gradient;
+
+    // how should one initialize these?  Do they need the mesh or do they
+    // only require some reduced set of information
+    SystemField u_rhs;
+    SystemField grad_G;
+    SystemField du;
+
     // required data
-    //std::vector<double> grad_c;
-    //std::vector<double> grad_u;
+    // std::vector<double> grad_c;
+    // std::vector<double> grad_u;
 
-    //std::array<double, 3> center; // center of the circular wave
-    //double radius;
+    real3 center; // center of the circular wave
+    real radius;
 
-    //SystemStats stats0;           // the stats associated with the previous timestep
-    //double stats_begin_accumulate; // time when accumululated errors begin;
+    // SystemStats stats0;           // the stats associated with the previous timestep
+    // double stats_begin_accumulate; // time when accumululated errors begin;
 
 public:
     ScalarWave() = default;
 
-#if 0
-    vc_scalar_wave(cart_mesh&& cart,
-                   mesh&& cut_mesh,
-                   discrete_operator&& grad,
-                   field_io& io,
-                   std::array<double, 3> center,
-                   double radius,
-                   double stats_begin_accumulate);
-#endif
+    ScalarWave(real3 center, real radius);
 
     void operator()(SystemField& s, const StepController&);
 
@@ -48,7 +48,7 @@ public:
 
     void update_boundary(SystemView_Mutable, real time);
 
-    void log(const SystemStats&, const StepController&);   
+    void log(const SystemStats&, const StepController&);
 };
 
 } // namespace ccs::systems

@@ -48,7 +48,7 @@ struct gauss1d : detail::gauss {
     }
 
     // This is a scalar field
-    real divergence(real time, const real3& loc) const { return 0.0; }
+    real divergence(real, const real3&) const { return 0.0; }
 
     real laplacian(real time, const real3& loc) const
     {

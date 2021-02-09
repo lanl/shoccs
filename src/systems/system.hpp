@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EmptySystem.hpp"
+#include "InviscidVortex.hpp"
 #include "ScalarWave.hpp"
 #include "StepController.hpp"
 #include "types.hpp"
@@ -45,7 +46,8 @@ namespace ccs
 // the system of pdes to solve is in this class
 class System
 {
-    std::variant<systems::EmptySystem,systems::ScalarWave> system;
+    std::variant<systems::EmptySystem, systems::ScalarWave, systems::InviscidVortex>
+        system;
 
 public:
     System() = default;

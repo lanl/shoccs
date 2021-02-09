@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Scalar.hpp"
+#include "Vector.hpp"
 #include "lazy_field_math.hpp"
 #include "r_tuple.hpp"
 #include <utility>
@@ -15,7 +17,8 @@ class SystemField : lazy::ViewMath<SystemField<T>>, lazy::ContainerMath<SystemFi
     friend class lazy::ViewAccess;
     friend class lazy::ContainerAccess;
 
-    std::vector<T> fields;
+    std::vector<Scalar<T>> scalars_;
+    std::vector<Vector<T>> vectors_;
 
 public:
     using type = SystemField<T>;
@@ -53,11 +56,19 @@ public:
     }
 
     // api for resizing should only be available for true containers
-    int nfields() const { return fields.size(); }
+    int nscalars() const { return scalars_.size(); }
 
-    SystemField& nfields(int n)
+    SystemField& nscalars(int n)
     {
-        fields.resize(n);
+        scalars_.resize(n);
+        return *this;
+    }
+
+    int nvectors() const { return vectors_.size(); }
+
+    SystemField& nvectors(int n)
+    {
+        vectors_.resize(n);
         return *this;
     }
 
@@ -65,51 +76,62 @@ public:
 
     SystemField& extents(int3) { return *this; }
 
-    const auto& solid() { return fields; }
+    const auto& solid() { return scalars_; }
 
     SystemField& solid(int) { return *this; }
 
     SystemField& object_boundaries(int3) { return *this; }
 
     template <std::integral... Is>
-    auto operator()(Is&&... i) const
+    auto scalars(Is&&... i) const
     {
         // use `forward_as_tuple` to get a tuple of references
-        return std::forward_as_tuple(fields[i]...);
+        return std::forward_as_tuple(scalars_[i]...);
     }
 
     template <typename... Is>
-    requires(std::is_enum_v<Is>&&...) auto operator()(Is&&... i) const
+    requires(std::is_enum_v<Is>&&...) auto scalars(Is&&... i) const
     {
-        return (*this)(
+        return scalars(
             static_cast<std::underlying_type_t<std::remove_cvref_t<Is>>>(FWD(i))...);
     }
 
     template <std::integral... Is>
-    auto operator()(Is&&... i)
+    auto scalars(Is&&... i)
     {
-        return std::forward_as_tuple(fields[i]...);
+        return std::forward_as_tuple(scalars_[i]...);
     }
 
     template <typename... Is>
-    requires(std::is_enum_v<Is>&&...) auto operator()(Is&&... i)
+    requires(std::is_enum_v<Is>&&...) auto scalars(Is&&... i)
     {
-        return (*this)(
+        return scalars(
             static_cast<std::underlying_type_t<std::remove_cvref_t<Is>>>(FWD(i))...);
     }
 
     constexpr void swap(SystemField& other) noexcept
     {
         using std::swap;
-        swap(this->fields, other.fields);
+        swap(this->scalars_, other.scalars_);
+        swap(this->vectors_, other.vectors_);
     }
 
     friend constexpr void swap(SystemField& a, SystemField& b) noexcept { a.swap(b); }
 };
+
 } // namespace field
 
 using SystemField = field::SystemField<std::vector<real>>;
 using SystemView_Mutable = field::SystemField<std::span<real>>;
 using SystemView_Const = field::SystemField<std::span<const real>>;
+
+namespace field
+{
+template <typename U, typename V>
+constexpr auto dot(U&&, V&&)
+{
+    return ::ccs::SystemField{};
+}
+} // namespace field
 
 } // namespace ccs

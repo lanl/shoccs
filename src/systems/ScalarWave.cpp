@@ -1,17 +1,20 @@
 #include "ScalarWave.hpp"
-
+#include "fields/Selector.hpp"
+#include "fields/views.hpp"
+#include "real3_operators.hpp"
 #include <cmath>
 #include <numbers>
 #include <spdlog/spdlog.h>
 
+#include <range/v3/view/transform.hpp>
+
 namespace ccs::systems
 {
 // system variables to be used in this system
-enum class vars : int { u };
+enum class scalars : int { u };
 
 constexpr real twoPI = 2 * std::numbers::pi_v<real>;
 
-#if 0
 // negative gradient - coefficients of gradient
 template <int I>
 struct neg_G {
@@ -24,12 +27,13 @@ struct neg_G {
     }
 };
 
-struct sol {
+struct solution {
     real3 center;
     real radius;
     real time;
 
-    real operator()(const mesh_object_info& info) const { return (*this)(info.position); }
+    //    real operator()(const mesh_object_info& info) const { return
+    //    (*this)(info.position); }
 
     real operator()(const real3& location) const
     {
@@ -44,103 +48,31 @@ struct sol {
     }
 };
 
-vc_scalar_wave::vc_scalar_wave(cart_mesh&& cart_,
-                               mesh&& cut_mesh_,
-                               discrete_operator&& grad_,
-                               field_io& io,
-                               std::array<double, 3> center_,
-                               double radius_,
-                               double stats_begin_accumulate_)
-    : system{std::move(cart_), std::move(cut_mesh_)},
-      grad{std::move(grad_)},
-      center{center_},
-      radius{radius_},
-      stats0{},
-      stats_begin_accumulate{stats_begin_accumulate_}
+ScalarWave::ScalarWave( // cart_mesh&& cart_,
+                        // mesh&& cut_mesh_,
+                        // discrete_operator&& grad_,
+                        // field_io& io,
+    real3 center_,
+    real radius_) //,
+                  // double stats_begin_accumulate_)
+    : gradient{}, u_rhs{}, grad_G{}, du{}, center{center_}, radius{radius_}
 {
-    // allocate mesh wide data
-    x_field u0{m.extents()};
-    x_field u{m.extents()};
-    x_field error{m.extents()}; // or should this be a result_field?
-    v_field grad_u{m.extents()};
-    v_vield coeffs{m.extents()};
-    x_field du{m.extents()}; // dummy for neumann bc's
 
-    // initialize all data sin 2pi(G-t)
-    u.field = location_view<0>(m) | vs::transform(solution{center, radius, 0});
-    // or what about
-    u >> field_select() <<=
-        location_view<0>(m) | vs::transform(solution{center, radius, 0});
-    // if we had domain boundaries to set, it would be something like:
-    u.field >> select(index_view<0>(m, 0)) <<=
-        location_view<0>(m, 0) >> vs::transform(solution{center, radius, 0});
-    // or
-    u >> field_select(index_view<0>(0)) <<= location_view<0>(m, 0)) >>
-        vs::transform(solution{center, radius, 0});
-    u >> obj_select() <<= geom.Rxyz() >> vs::transform(solution{center, radius, 0});
-
-    // or could we do the whole thing in one shot?
-    u = scalar_proxy{location_view<0>(m) | vs::transform(solution{center, radius, 0}),
-                     geom.Rxyz() >> vs::transform(solution{center, radius, 0})};
-    // or something like
-    u = scalar{arg_{...}, arg_{...}}
-    // don't really need this if we make such things automatic in the field/
-    u >> select(geom.Sx()) <<= 0;
-    // there could be multiple objects represented by the object range, we could set all
-    // bc's with something like
-    u >> obj_select() <<= geom.Rxyz() >> vs::transform([](auto&& info) {
-                              if (info.shape_id == 1)
-                                  return x;
-                              else
-                                  return y;
-                          });
-    // and this would automatically set the field values to the boundary values using the
-    // solid points in the domain.  But for a scalar associated with a particular direction
-    // it would only make sense to set the solid points (boundary points) associated with
-    // that direction.
-
-    // or if we already want a scalar quantity to have a mapping of solid points, could we
-    // also have a mapping of the mesh-object-info struct?  In that case obj_select, could
-    // take a predication that would be used to filter out the points in the obj..
-    u >> obj_select([](auto&& info) { return info.shape_id == 1; });
-    // but setting the values would still require applying the filter to geom.Rxyz and
-    // then doing a transform.  Maybe this isn't worthwhile.
-
-    // precompute the coefficients grad(psi) and zero the solid points
-    coeffs.x = location_view<0>(m) | vs::transform(neg_G<0>{center, radius});
-    coeffs.y = location_view<1>(m) | vs::transform(neg_G<1>{center, radius});
-    coeffs.z = location_view<2>(m) | vs::transform(neg_G<2>{center, radius});
-    coeffs >> select(geom.Sxyz()) <<= 0;
-    // Representing this as a vector we would want somthing like:
-    coeffs = {vector_range{location_view_all(m)} >>
-                  vector_range{vs::transform(neg_G<0>{center, radius, time}),
-                               vs::transform(neg_G<1>{center, radius, time}),
-                               vs::transform(neg_G<2>{center, radius, time})},
-              0};
-    // or
-    coeffs.field = 
-    coeffs >> obj_select() << 0;
-    // or
-    coeffs >> obj_select() <<=
-        geom.Rxyz() >> v_transform(neg_G<0>{center, radius, time}, ...)
-
-    // there should be some processing of boundary conditions and operator generation here
-    // only valid bc's for this problem are outflow around the domain and inflow from the
-    // embedded object
-
-    // register 'u' and 'error' with io.  The current setup of capturing this pointer
-    // means we can't invalidate the vector via moves at any point.  Ranges likes to
-    // do this so we use iterators instead (for now)
-    // io.add("U", &u[0]);
-    // io.add("Error", &error[0]);
-}
+#if 0
+    // this is a large bite to make this work
+    grad_G | selector::D =
+        mesh::location | r_tuple{vs::transform(neg_G<0>{center, radius}),
+                                 vs::transform(neg_G<1>{center, radius}),
+                                 vs::transform(neg_G<2>{center, radius})};
 #endif
+    grad_G | selector::Rxyz = 0;
+}
 
 real ScalarWave::timestep_size(const SystemField&, const StepController&) const
 {
     // will need some notion of mesh size to implement this
     // return cfl * std::min(m.h());
-    return null_v<real>;
+    return null_v<>;
 }
 
 // Evaluate the rhs of the system using the current u
@@ -153,20 +85,22 @@ void ScalarWave::operator()(SystemField& field, const StepController& controller
 {
     // ensure the SystemField is the right size
     if (controller.simulation_step() == 0) {
-    //if (field.nfields() == 1 && field.extents() == int3{} && field.solid().size() != 0) {
+        // if (field.nfields() == 1 && field.extents() == int3{} && field.solid().size()
+        // != 0) {
         // adjust the sizes
-        field.nfields(1).extents(int3{}).solid(0).object_boundaries(int3{});
+        field.nscalars(1).nvectors(0).extents(int3{}).solid(0).object_boundaries(int3{});
     }
     // extract the field components to initialize
-    auto&& [u] = field(vars::u);
+    auto&& [u] = field.scalars(scalars::u);
 
-    const auto time = controller.simuation_time();
+    const auto time = controller.simulation_time();
 
-    // At this point we should loop over the Cartesion mesh and set the solution values
-    // Need Cartesian mesh locations
-    u | field_select() <<=
-        location_view<>(m) | vs::transform(solution{center, radius, 0});
-    // Need Rx, Ry, Rz locations
+    auto sol = mesh::location | vs::transform(solution{center, radius, time});
+    u | selector::D = sol;
+    u | selector::Rxyz = sol;
+
+    // something like the above would require that the mesh/geometry/object information
+    // be embedded in the system_field and accessible by its components.
     // Need transorm operations
 }
 
@@ -180,21 +114,29 @@ ScalarWave::stats(const SystemField&, const SystemField&, const StepController&)
 
 bool ScalarWave::valid(const SystemStats&) const { return false; }
 
-void ScalarWave::rhs(SystemView_Const, real, SystemView_Mutable)
+void ScalarWave::rhs(SystemView_Const field, real, SystemView_Mutable field_rhs)
 {
-#if 0
-    // prepare bc's
-    f_bvalues <<=
-        geom.Rxyz() >> vs::transform([s = solution{center, radius, time}](auto&& info) {
-            return s(info.position);
-        });
+    // here we assume that the boundary values have been properly set in u
+    // but what to do do about neumann bc's?  Should we store them in du?
+    // Or should we just have a separate field for them?  Keep them separate for now
 
-    grad(u, du, u_bvalues, du_bvalues, dxyz);
-    rhs = contract(grad_G * dxyz, std::plus{});
-#endif
+    // for multivariate systems, will need to extract the variables and apply different
+    // operators on them
+    auto&& [u] = field.scalars(scalars::u);
+    // grad should d/dx, d/dy, d/dz on F and Rx, Ry, Rz, respectively
+    u_rhs = gradient(u, du);
+    // compute grad_G . u_rhs and store in v_rhs
+    field_rhs = dot(grad_G, u_rhs);
 }
 
-void ScalarWave::update_boundary(SystemView_Mutable, real) {}
+void ScalarWave::update_boundary(SystemView_Mutable u, real time)
+{
+    // update object boundaries
+    auto sol = mesh::location | vs::transform(solution{center, radius, time});
+    u | selector::Rxyz = sol;
+
+    // update domain boundaries
+}
 
 void ScalarWave::log(const SystemStats&, const StepController&)
 {
