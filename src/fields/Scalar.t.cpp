@@ -38,8 +38,13 @@ TEST_CASE("selection")
     REQUIRE(rs::equal(ry, s | selector::Ry));
     REQUIRE(rs::equal(rz, s | selector::Rz));
 
-    static_assert(field::tuple::All<std::remove_cvref_t<decltype(s | selector::D)>>);
-    static_assert(field::tuple::All<decltype(s | selector::D)>);
+    //static_assert(field::tuple::All<std::remove_cvref_t<decltype(s | selector::D)>>);
+    using T = decltype(s | selector::D);
+    static_assert(field::tuple::All<ranges::ref_view<std::vector<int>>>);
+    static_assert(rs::range<T>);
+    static_assert(rs::semiregular<T>);
+    static_assert(rs::enable_view<T>);
+    static_assert(field::tuple::All<T>);
 
     auto t = s | selector::D;
     REQUIRE(rs::equal(t | vs::transform([](auto&& x) { return x * x * x; }),

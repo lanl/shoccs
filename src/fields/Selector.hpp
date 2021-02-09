@@ -2,8 +2,27 @@
 
 #include "types.hpp"
 #include <functional>
+#include <range/v3/range/concepts.hpp>
 #include <range/v3/view/all.hpp>
 #include <range/v3/view/empty.hpp>
+
+#include "Tuple_fwd.hpp"
+
+namespace ccs::selector
+{
+template <field::tuple::All T>
+struct Selection;
+}
+
+namespace ranges
+{
+template <typename T>
+inline constexpr bool enable_view<ccs::selector::Selection<T>> = true;
+
+//template <ccs::field::tuple::All T>
+//inline constexpr bool enable_view<ccs::selector::Selection<T>> = true;
+
+} // namespace ranges
 
 namespace ccs
 {
@@ -17,15 +36,20 @@ constexpr decltype(auto) view(R&&);
 
 namespace selector
 {
+using field::tuple::All;
+
 template <typename T>
 using all_t = decltype(vs::all(std::declval<T>()));
 
-template <typename U>
+template <All U>
 struct Selection : all_t<U> {
 private:
     using View = all_t<U>;
 
 public:
+
+    Selection() = default; // need default constructible for viewable_range
+
     constexpr Selection(U&& u) : View(vs::all(FWD(u))) {}
 
     template <typename T>
@@ -73,3 +97,13 @@ inline constexpr auto Rxyz = detail::SelectorFunc{std::identity{}};
 } // namespace selector
 
 } // namespace ccs
+
+// namespace ranges
+// {
+// template <typename T>
+// inline constexpr bool enable_view<ccs::selector::Selection<T>> = false;
+
+// template <ccs::field::tuple::All T>
+// inline constexpr bool enable_view<ccs::selector::Selection<T>> = true;
+
+//} // namespace ranges

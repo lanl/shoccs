@@ -82,7 +82,7 @@ template <typename T>
 concept Non_Tuple_Input_Range = rs::input_range<T> && (!R_Tuple<T>);
 
 template <typename T>
-concept Owning_R_Tuple = R_Tuple<T>&& requires(T t)
+concept Owning_Tuple = R_Tuple<T>&& requires(T t)
 {
     t.template get<0>();
 };

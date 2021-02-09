@@ -410,7 +410,7 @@ struct Tuple : container_tuple<Args...>, view_tuple<Args&...> {
     {
     }
 
-    template <traits::Owning_R_Tuple R>
+    template <traits::Owning_Tuple R>
     Tuple(R&& r) : Container{FWD(r).container()}, View{this->container()}
     {
     }
@@ -423,7 +423,7 @@ struct Tuple : container_tuple<Args...>, view_tuple<Args&...> {
         return *this;
     }
 
-    template <traits::Owning_R_Tuple R>
+    template <traits::Owning_Tuple R>
     Tuple& operator=(R&& r)
     {
         Container::operator=(FWD(r).container());
