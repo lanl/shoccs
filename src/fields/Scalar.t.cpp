@@ -38,6 +38,7 @@ TEST_CASE("selection")
     REQUIRE(rs::equal(ry, s | selector::Ry));
     REQUIRE(rs::equal(rz, s | selector::Rz));
 
+    static_assert(field::tuple::All<std::remove_cvref_t<decltype(s | selector::D)>>);
     static_assert(field::tuple::All<decltype(s | selector::D)>);
 
     auto t = s | selector::D;
