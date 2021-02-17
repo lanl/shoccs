@@ -17,7 +17,7 @@ class SystemField : lazy::ViewMath<SystemField<T>>, lazy::ContainerMath<SystemFi
     friend class lazy::ViewAccess;
     friend class lazy::ContainerAccess;
 
-    std::vector<Scalar<T>> scalars_;
+    std::vector<SimpleScalar<T>> scalars_;
     std::vector<Vector<T>> vectors_;
 
 public:

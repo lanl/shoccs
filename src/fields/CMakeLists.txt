@@ -11,6 +11,7 @@ target_link_libraries(fields INTERFACE range-v3::range-v3 cppcoro)
 add_unit_test(Tuple "field" fields)
 add_unit_test(TupleMath "field" fields)
 add_unit_test(Scalar "field" fields)
+add_unit_test(Vector "field" fields)
 
 #add_executable(r_tuple_seg_fault r_tuple_seg_fault.cpp)
 #target_link_libraries(r_tuple_seg_fault fields)

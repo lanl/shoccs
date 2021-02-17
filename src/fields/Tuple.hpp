@@ -8,8 +8,12 @@
 #include <tuple>
 
 #include <range/v3/algorithm/copy.hpp>
+#include <range/v3/algorithm/copy_n.hpp>
+#include <range/v3/algorithm/fill.hpp>
 #include <range/v3/view/all.hpp>
 #include <range/v3/view/common.hpp>
+
+#include <exception>
 
 namespace ccs::field::tuple
 {
@@ -47,12 +51,19 @@ void resize_and_copy(C& container, R&& r)
 {
     constexpr bool can_resize_member = requires(C c, R r) { c.resize(r.size()); };
     constexpr bool can_resize_rs = requires(C c, R r) { c.resize(rs::size(r)); };
-    if constexpr (can_resize_member)
+    constexpr bool compare_sizes = requires(C c, R r) { rs::size(c) < rs::size(r); };
+    if constexpr (can_resize_member) {
         container.resize(r.size());
-    else if constexpr (can_resize_rs)
+        rs::copy(FWD(r), rs::begin(container));
+    } else if constexpr (can_resize_rs) {
         container.resize(rs::size(r));
-
-    rs::copy(FWD(r), rs::begin(container));
+        rs::copy(FWD(r), rs::begin(container));
+    } else if constexpr (compare_sizes) {
+        auto min_sz = std::min(rs::size(container), rs::size(r));
+        rs::copy_n(rs::begin(FWD(r)), min_sz, rs::begin(container));
+    } else {
+        rs::copy(FWD(r), rs::begin(container));
+    }
 }
 
 // Construct and return a new container from an input container.  Preference
@@ -121,7 +132,7 @@ public:
     container_tuple(Args&&... args) : c{FWD(args)...} {}
 
     template <typename... T>
-    requires(std::constructible_from<Args, T>&&...) container_tuple(T&&... args)
+    requires(std::constructible_from<Args, T>&&...) explicit container_tuple(T&&... args)
         : c(FWD(args)...)
     {
     }
@@ -188,6 +199,22 @@ public:
         [ this, &t ]<auto... Is>(std::index_sequence<Is...>)
         {
             (resize_and_copy(std::get<Is>(c), view<Is>(t)), ...);
+        }
+        (std::make_index_sequence<container_size>{});
+
+        return *this;
+    }
+
+    template <Numeric T>
+    container_tuple& operator=(T t)
+    {
+        [ this, t ]<auto... Is>(std::index_sequence<Is...>)
+        {
+            constexpr bool direct = requires(T t) { ((std::get<Is>(c) = t), ...); };
+            if constexpr (direct)
+                ((std::get<Is>(c) = t), ...);
+            else
+                (rs::fill(std::get<Is>(c), t), ...);
         }
         (std::make_index_sequence<container_size>{});
 
@@ -264,17 +291,53 @@ public:
     {
     }
 
-    template <All... Ranges>
-    view_base_tuple& operator=(Ranges&&... args)
-    {
-        v = std::tuple{vs::all(args)...};
-        return *this;
-    }
-
     template <typename... C>
     view_base_tuple& operator=(container_tuple<C...>& x)
     {
         v = tuple_map(vs::all, x.c);
+        return *this;
+    }
+
+    // This overload is only reached when called on a Tuple that does not
+    // have a corresponding container.  Thus, this call results in a copy operation
+    // rather than simply resetting the view to the container
+    template <All... Ranges>
+    view_base_tuple& operator=(Ranges&&... args)
+    {
+        [this]<auto... Is>(std::index_sequence<Is...>, auto&&... r)
+        {
+            (resize_and_copy(std::get<Is>(v), r), ...);
+        }
+        (std::make_index_sequence<sizeof...(Args)>{}, FWD(args)...);
+        // v = std::tuple{vs::all(args)...};
+        return *this;
+    }
+
+    template <traits::TupleType R>
+    requires(sizeof...(Args) ==
+             std::tuple_size_v<std::remove_cvref_t<R>>) view_base_tuple&
+    operator=(R&& r)
+    {
+        [this]<auto... Is>(std::index_sequence<Is...>, auto&& r)
+        {
+            (resize_and_copy(std::get<Is>(v), std::get<Is>(FWD(r).view())), ...);
+        }
+        (std::make_index_sequence<sizeof...(Args)>{}, FWD(r));
+        return *this;
+    }
+
+    template <Numeric T>
+    view_base_tuple& operator=(T t)
+    {
+        [ this, t ]<auto... Is>(std::index_sequence<Is...>)
+        {
+            constexpr bool direct = requires(T t) { ((std::get<Is>(v) = t), ...); };
+            if constexpr (direct)
+                ((std::get<Is>(v) = t), ...);
+            else
+                (rs::fill(std::get<Is>(v), t), ...);
+        }
+        (std::make_index_sequence<sizeof...(Args)>{});
         return *this;
     }
 
@@ -371,6 +434,27 @@ public:
         return *this;
     }
 
+    template <Numeric T>
+    view_tuple& operator=(T t)
+    {
+        Base_Tup::operator=(t);
+        return *this;
+    }
+
+    template <traits::TupleType R>
+    view_tuple& operator=(R&& r)
+    {
+        Base_Tup::operator=(FWD(r));
+        return *this;
+    }
+
+    template <traits::Non_Tuple_Input_Range... R>
+    view_tuple& operator=(R&&... r)
+    {
+        Base_Tup::operator=(FWD(r)...);
+        return *this;
+    }
+
     view_tuple& as_view_tuple() { return *this; }
     const view_tuple& as_view_tuple() const { return *this; }
 };
@@ -387,7 +471,8 @@ struct Tuple : container_tuple<Args...>, view_tuple<Args&...> {
     Tuple(Args&&... args) : Container{FWD(args)...}, View{this->container()} {}
 
     template <typename... T>
-    requires(std::constructible_from<Args, T>&&...) Tuple(T&&... args)
+    requires((sizeof...(T) == sizeof...(Args)) &&
+             (std::constructible_from<Args, T> && ...)) explicit Tuple(T&&... args)
         : Container{FWD(args)...}, View{this->container()}
     {
     }
@@ -395,7 +480,8 @@ struct Tuple : container_tuple<Args...>, view_tuple<Args&...> {
     Tuple(tag, Args&&... args) : Container{FWD(args)...}, View{this->container()} {}
 
     template <typename... T>
-    requires(std::constructible_from<Args, T>&&...) Tuple(tag, T&&... args)
+    requires((sizeof...(T) == sizeof...(Args)) &&
+             (std::constructible_from<Args, T> && ...)) explicit Tuple(tag, T&&... args)
         : Container{FWD(args)...}, View{this->container()}
     {
     }
@@ -405,7 +491,7 @@ struct Tuple : container_tuple<Args...>, view_tuple<Args&...> {
     {
     }
 
-    template <traits::R_Tuple R>
+    template <traits::TupleType R>
     Tuple(R&& r) : Container{FWD(r).as_view_tuple()}, View{this->container()}
     {
     }
@@ -415,7 +501,7 @@ struct Tuple : container_tuple<Args...>, view_tuple<Args&...> {
     {
     }
 
-    template <traits::R_Tuple R>
+    template <traits::TupleType R>
     Tuple& operator=(R&& r)
     {
         Container::operator=(FWD(r).as_view_tuple());
@@ -428,6 +514,13 @@ struct Tuple : container_tuple<Args...>, view_tuple<Args&...> {
     {
         Container::operator=(FWD(r).container());
         View::operator=(this->container());
+        return *this;
+    }
+
+    template <Numeric T>
+    Tuple& operator=(T t)
+    {
+        Container::operator=(t);
         return *this;
     }
 
@@ -456,6 +549,16 @@ struct Tuple : container_tuple<Args...>, view_tuple<Args&...> {
         View::operator=(this->container());
         return *this;
     }
+
+    template <typename Fn>
+    requires(sizeof...(Args) > 1) friend constexpr auto operator|(Tuple& t, Fn f)
+    {
+        return [f]<auto... Is>(std::index_sequence<Is...>, auto& t)
+        {
+            return Tuple{f(view<Is>(t))...};
+        }
+        (std::make_index_sequence<sizeof...(Args)>{}, t);
+    }
 };
 
 template <All... Args>
@@ -468,6 +571,38 @@ struct Tuple<Args...> : view_tuple<Args...> {
     Tuple(tag, Args&&... args) : View{FWD(args)...} {};
 
     Tuple() = default;
+
+    template <Numeric T>
+    Tuple& operator=(T t)
+    {
+        View::operator=(t);
+        return *this;
+    }
+
+    template <traits::Non_Tuple_Input_Range... R>
+    Tuple& operator=(R&&... r)
+    {
+        View::operator=(FWD(r)...);
+        return *this;
+    }
+
+    template <traits::TupleType R>
+    requires(sizeof...(Args) == std::tuple_size_v<std::remove_cvref_t<R>>) Tuple&
+    operator=(R&& r)
+    {
+        View::operator=(FWD(r));
+        return *this;
+    }
+
+    template <typename Fn>
+    requires(sizeof...(Args) > 1) friend constexpr auto operator|(Tuple& t, Fn f)
+    {
+        return [f]<auto... Is>(std::index_sequence<Is...>, auto& t)
+        {
+            return Tuple{f(view<Is>(t))...};
+        }
+        (std::make_index_sequence<sizeof...(Args)>{}, t);
+    }
 };
 
 template <typename... Args>

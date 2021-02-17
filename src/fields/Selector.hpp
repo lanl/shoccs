@@ -2,82 +2,98 @@
 
 #include "types.hpp"
 #include <functional>
+#include <range/v3/algorithm/copy.hpp>
 #include <range/v3/range/concepts.hpp>
 #include <range/v3/view/all.hpp>
+#include <range/v3/view/cartesian_product.hpp>
 #include <range/v3/view/empty.hpp>
 
+#include "Scalar_fwd.hpp"
 #include "Tuple_fwd.hpp"
 
 namespace ccs::selector
 {
-template <field::tuple::All T>
-struct Selection;
-}
-
-namespace ranges
-{
-template <typename T>
-inline constexpr bool enable_view<ccs::selector::Selection<T>> = true;
-
-//template <ccs::field::tuple::All T>
-//inline constexpr bool enable_view<ccs::selector::Selection<T>> = true;
-
-} // namespace ranges
-
-namespace ccs
-{
-
-namespace field::tuple
-{
-
-template <int I, typename R>
-constexpr decltype(auto) view(R&&);
-}
-
-namespace selector
-{
-using field::tuple::All;
-
-template <typename T>
-using all_t = decltype(vs::all(std::declval<T>()));
-
-template <All U>
-struct Selection : all_t<U> {
-private:
-    using View = all_t<U>;
-
-public:
-
-    Selection() = default; // need default constructible for viewable_range
-
-    constexpr Selection(U&& u) : View(vs::all(FWD(u))) {}
-
-    template <typename T>
-    Selection& operator=(T&&)
-    {
-        return *this;
-    }
-};
-
-template <typename U>
-Selection(U&&) -> Selection<U>;
 
 namespace detail
 {
-template <typename Func>
-struct SelectorFunc {
+template <typename L, typename R>
+constexpr auto makeSelection(L l, R r);
+}
 
-    Func fn;
+template <typename L, field::tuple::traits::TupleType R>
+struct Selection : R {
+    L location;
 
-    constexpr SelectorFunc(Func fn) : fn{MOVE(fn)} {}
+    Selection() = default; // default construction needed for semi-regular concept
 
-    template <typename U>
-    constexpr auto operator()(U&& u) const
+    constexpr Selection(L l, R r) : R{MOVE(r)}, location{MOVE(l)} {}
+
+    template <Numeric N>
+    Selection& operator=(N n)
     {
-        return Selection{fn(FWD(u))};
+        R::operator=(n);
+        return *this;
     }
 
-    template <typename U>
+    template <typename Fn>
+    requires(!Numeric<Fn> && requires(Selection s, Fn f) { s | f; }) Selection&
+    operator=(Fn f)
+    {
+        auto rng = *this | f;
+        R::operator=(rng);
+        return *this;
+    }
+
+    template <typename Fn>
+    requires(!Numeric<Fn> && field::tuple::traits::ThreeTuple<R>) friend constexpr auto
+    operator|(Selection& selection, Fn f)
+    {
+        return field::Tuple{
+            detail::makeSelection(field::tuple::view<0>(selection.location),
+                                  field::Tuple{field::tuple::view<0>(selection)}) |
+                f,
+            detail::makeSelection(field::tuple::view<1>(selection.location),
+                                  field::Tuple{field::tuple::view<1>(selection)}) |
+                f,
+            detail::makeSelection(field::tuple::view<2>(selection.location),
+                                  field::Tuple{field::tuple::view<2>(selection)}) |
+                f};
+    }
+};
+
+#if 0
+template <typename R>
+Selection(R&&) -> Selection<std::remove_reference_t<R>>;
+
+template <typename R>
+Selection(R) -> Selection<R>;
+#endif
+namespace detail
+{
+template <typename L, typename R>
+constexpr auto makeSelection(L l, R r)
+{
+    return Selection<L, R>{MOVE(l), MOVE(r)};
+}
+
+template <typename LocationFn, typename TupleFn>
+struct SelectorFunc {
+
+    LocationFn location_fn;
+    TupleFn tuple_fn;
+
+    constexpr SelectorFunc(LocationFn l, TupleFn t)
+        : location_fn{MOVE(l)}, tuple_fn{MOVE(t)}
+    {
+    }
+
+    template <field::tuple::traits::ScalarType U>
+    constexpr auto operator()(U&& u) const
+    {
+        return Selection{location_fn(FWD(u)), tuple_fn(FWD(u))};
+    }
+
+    template <field::tuple::traits::ScalarType U>
     friend constexpr auto operator|(U&& u, SelectorFunc selector)
     {
         return selector(FWD(u));
@@ -86,24 +102,50 @@ struct SelectorFunc {
 } // namespace detail
 
 inline constexpr auto D = detail::SelectorFunc{
-    [](auto&& x) { return field::tuple::view<0>(FWD(x).template get<0>()); }};
+    [](auto&& x) {
+        auto l = x.location();
+        return vs::cartesian_product(l->x, l->y, l->z);
+    },
+    [](auto&& x) {
+        return field::Tuple{field::tuple::view<0>(FWD(x).template get<0>())};
+    }};
+
 inline constexpr auto Rx = detail::SelectorFunc{
-    [](auto&& x) { return field::tuple::view<0>(FWD(x).template get<1>()); }};
+    [](auto&& x) {
+        auto l = x.location();
+        return vs::all(l->rx);
+    },
+    [](auto&& x) {
+        return field::Tuple{field::tuple::view<0>(FWD(x).template get<1>())};
+    }};
+
 inline constexpr auto Ry = detail::SelectorFunc{
-    [](auto&& x) { return field::tuple::view<1>(FWD(x).template get<1>()); }};
+    [](auto&& x) {
+        auto l = x.location();
+        return vs::all(l->ry);
+    },
+    [](auto&& x) {
+        return field::Tuple{field::tuple::view<1>(FWD(x).template get<1>())};
+    }};
+
 inline constexpr auto Rz = detail::SelectorFunc{
-    [](auto&& x) { return field::tuple::view<2>(FWD(x).template get<1>()); }};
-inline constexpr auto Rxyz = detail::SelectorFunc{std::identity{}};
-} // namespace selector
+    [](auto&& x) {
+        auto l = x.location();
+        return vs::all(l->rz);
+    },
+    [](auto&& x) {
+        return field::Tuple{field::tuple::view<2>(FWD(x).template get<1>())};
+    }};
 
-} // namespace ccs
-
-// namespace ranges
-// {
-// template <typename T>
-// inline constexpr bool enable_view<ccs::selector::Selection<T>> = false;
-
-// template <ccs::field::tuple::All T>
-// inline constexpr bool enable_view<ccs::selector::Selection<T>> = true;
-
-//} // namespace ranges
+inline constexpr auto Rxyz = detail::SelectorFunc{
+    [](auto&& x) {
+        auto l = x.location();
+        return field::Tuple{l->rx, l->ry, l->rz};
+    },
+    [](auto&& x) {
+        // Note that simply re
+        return field::Tuple{field::tuple::view<0>(FWD(x).template get<1>()),
+                            field::tuple::view<1>(FWD(x).template get<1>()),
+                            field::tuple::view<2>(FWD(x).template get<1>())};
+    }};
+} // namespace ccs::selector

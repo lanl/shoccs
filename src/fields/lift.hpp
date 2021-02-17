@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Scalar.hpp"
-#include <range/v3/view/transform.hpp>
+#include "Scalar_fwd.hpp"
+#include <range/v3/view/zip_with.hpp>
 
 namespace ccs::field
 {
@@ -9,11 +9,16 @@ namespace ccs::field
 template <typename Fn>
 constexpr auto lift(Fn fn)
 {
-    return [t = vs::transform(fn)](auto&& rng) {
-        return Scalar{tuple::Tuple{rng | selector::D | t},
-                      tuple::Tuple{rng | selector::Rx | t,
-                                   rng | selector::Ry | t,
-                                   rng | selector::Rz | t}};
+    return [fn](auto&&... rngs) {
+        constexpr auto location = [](auto&& first, auto&&...) {
+            return first.location();
+        };
+
+        return Scalar(location(rngs...),
+                      Tuple{vs::zip_with(fn, selector::D(rngs)...)},
+                      Tuple{vs::zip_with(fn, selector::Rx(rngs)...),
+                            vs::zip_with(fn, selector::Ry(rngs)...),
+                            vs::zip_with(fn, selector::Rz(rngs)...)});
     };
 }
 } // namespace ccs::field

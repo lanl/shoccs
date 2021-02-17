@@ -76,13 +76,13 @@ struct is_Tuple<Tuple<Args...>> : std::true_type {
 };
 
 template <typename T>
-concept R_Tuple = is_Tuple<std::remove_cvref_t<T>>::value;
+concept TupleType = is_Tuple<std::remove_cvref_t<T>>::value;
 
 template <typename T>
-concept Non_Tuple_Input_Range = rs::input_range<T> && (!R_Tuple<T>);
+concept Non_Tuple_Input_Range = rs::input_range<T> && (!TupleType<T>);
 
 template <typename T>
-concept Owning_Tuple = R_Tuple<T>&& requires(T t)
+concept Owning_Tuple = TupleType<T>&& requires(T t)
 {
     t.template get<0>();
 };
@@ -93,7 +93,7 @@ struct from_view {
 };
 
 // single argument views
-template <traits::R_Tuple U>
+template <traits::TupleType U>
 struct from_view<U> {
     static constexpr auto create = [](auto&&, auto&&... args) {
         return Tuple{tag{}, FWD(args)...};
@@ -101,7 +101,7 @@ struct from_view<U> {
 };
 
 // Combination views
-template <traits::R_Tuple U, traits::R_Tuple V>
+template <traits::TupleType U, traits::TupleType V>
 struct from_view<U, V> {
     static constexpr auto create = [](auto&&, auto&&, auto&&... args) {
         return Tuple{tag{}, FWD(args)...};
@@ -123,6 +123,29 @@ namespace ccs::field
 {
 using tuple::Tuple;
 }
+
+// specialize tuple_size
+namespace std
+{
+template <typename... Args>
+struct tuple_size<ccs::field::Tuple<Args...>>
+    : std::integral_constant<size_t, sizeof...(Args)> {
+};
+} // namespace std
+
+// add concepts for commonly used tuple sizes
+namespace ccs::field::tuple::traits
+{
+template <typename T, auto N>
+concept NTuple = TupleType<T>&& std::tuple_size_v<std::remove_cvref_t<T>> == N;
+
+template <typename T>
+concept OneTuple = NTuple<T, 1u>;
+
+template <typename T>
+concept ThreeTuple = NTuple<T, 3u>;
+
+} // namespace ccs::field::tuple::traits
 
 // need to specialize this bool inorder for r_tuples to have the correct behavior.
 // This is somewhat tricky and is hopefully tested by all the "concepts" tests in

@@ -2,6 +2,8 @@
 
 #include "types.hpp"
 
+#include "views.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <range/v3/algorithm/equal.hpp>
@@ -9,6 +11,7 @@
 #include <range/v3/view/concat.hpp>
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/take.hpp>
+#include <range/v3/view/transform.hpp>
 #include <range/v3/view/zip_with.hpp>
 
 #include <vector>
@@ -29,6 +32,12 @@ TEST_CASE("concepts")
     REQUIRE(All<Tuple<T>&>);
     REQUIRE(!All<Tuple<T>>);
     REQUIRE(!All<Tuple<T>&&>);
+
+    REQUIRE(std::tuple_size_v<Tuple<int, int, real>> == 3u);
+    REQUIRE(traits::OneTuple<Tuple<int>>);
+    REQUIRE(!traits::OneTuple<Tuple<int, int>>);
+    REQUIRE(traits::ThreeTuple<Tuple<int, int, real>>);
+    REQUIRE(!traits::ThreeTuple<Tuple<int>>);
 
     REQUIRE(traits::Owning_Tuple<Tuple<T>>);
     REQUIRE(!traits::Owning_Tuple<Tuple<T&>>);
@@ -170,8 +179,126 @@ TEST_CASE("construction")
     }
 }
 
+TEST_CASE("numeric assignment with owning tuple")
+{
+    using namespace ccs;
+    using namespace ccs::field;
+
+    const auto zeros = vs::repeat_n(0, 3);
+    auto x = Tuple{std::vector{1, 2, 3}};
+    x = 0;
+    REQUIRE(rs::size(x) == 3u);
+    REQUIRE(rs::equal(x, zeros));
+
+    auto y = Tuple{std::vector{1, 2, 3}, std::vector{4, 5, 6}};
+    REQUIRE(rs::equal(view<1>(y), std::vector{4, 5, 6}));
+    y = 0;
+    REQUIRE(rs::equal(view<0>(y), zeros));
+    REQUIRE(rs::equal(view<1>(y), zeros));
+}
+
+TEST_CASE("numeric assignment with non-owning tuple")
+{
+    using namespace ccs;
+    using namespace ccs::field;
+
+    const auto zeros = vs::repeat_n(0, 3);
+    auto v = std::vector{1, 2, 3};
+
+    auto x = Tuple{v};
+    x = 0;
+    REQUIRE(rs::size(x) == 3u);
+    REQUIRE(rs::equal(x, zeros));
+    REQUIRE(rs::equal(x, v));
+
+    auto u = std::vector{1, 2, 3};
+    auto w = std::vector{4, 5, 6};
+    auto y = Tuple{u, w};
+    REQUIRE(rs::equal(view<1>(y), w));
+    y = 0;
+    REQUIRE(rs::equal(view<0>(y), zeros));
+    REQUIRE(rs::equal(view<1>(y), zeros));
+    REQUIRE(rs::equal(view<1>(y), w));
+}
+
+TEST_CASE("Pipe syntax for Owning OneTuples")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+
+    auto x = Tuple{std::vector{1, 2, 3}};
+    auto y = x | vs::transform([](auto&& i) { return i * i; });
+    REQUIRE(rs::equal(y, std::vector{1, 4, 9}));
+
+    auto z = Tuple<std::vector<int>>{};
+    z = y | vs::transform([](auto&& i) { return i * i; });
+    REQUIRE(rs::equal(z, std::vector{1, 16, 81}));
+}
+
+TEST_CASE("Pipe syntax for Non-Owning OneTuples")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+
+    auto x = Tuple{std::vector{1, 2, 3}};
+    auto y = x | vs::transform([](auto&& i) { return i * i; });
+    REQUIRE(rs::equal(y, std::vector{1, 4, 9}));
+
+    // copying should resize the vector when needed
+    auto zz = std::vector<int>(3);
+
+    auto z = Tuple{zz};
+    z = y | vs::transform([](auto&& i) { return i * i; });
+    REQUIRE(rs::size(zz) == rs::size(y));
+    REQUIRE(rs::equal(zz, std::vector{1, 16, 81}));
+    REQUIRE(rs::equal(z, zz));
+}
+
+TEST_CASE("Pipe syntax for ThreeTuples")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+
+    auto x = Tuple{std::vector{1, 2, 3}, std::vector{4, 5}, std::vector{4, 3, 2, 1}};
+    auto y = x | vs::transform([](auto&& i) { return i * i; });
+    REQUIRE(traits::ThreeTuple<decltype(y)>);
+    REQUIRE(rs::equal(view<0>(y), std::vector{1, 4, 9}));
+    REQUIRE(rs::equal(view<1>(y), std::vector{16, 25}));
+    REQUIRE(rs::equal(view<2>(y), std::vector{16, 9, 4, 1}));
+
+    auto z = Tuple<std::vector<int>, std::vector<int>, std::vector<int>>{};
+    z = y | vs::transform([](auto&& i) { return i + i; });
+    REQUIRE(rs::equal(view<0>(z), std::vector{2, 8, 18}));
+    REQUIRE(rs::equal(view<1>(z), std::vector{32, 50}));
+    REQUIRE(rs::equal(view<2>(z), std::vector{32, 18, 8, 2}));
+}
+
+TEST_CASE("Pipe syntax for Non-Owning ThreeTuples")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+
+    auto x = Tuple{std::vector{1, 2, 3}, std::vector{4, 5}, std::vector{4, 3, 2, 1}};
+    auto y = x | vs::transform([](auto&& i) { return i * i; });
+    REQUIRE(traits::ThreeTuple<decltype(y)>);
+    REQUIRE(rs::equal(view<0>(y), std::vector{1, 4, 9}));
+    REQUIRE(rs::equal(view<1>(y), std::vector{16, 25}));
+    REQUIRE(rs::equal(view<2>(y), std::vector{16, 9, 4, 1}));
+
+    auto a = std::vector<int>(3);
+    auto b = std::vector<int>(2);
+    auto c = std::vector<int>(4);
+    auto z = Tuple{a, b, c};
+    REQUIRE(traits::Non_Tuple_Input_Range<decltype(
+                view<0>(y | vs::transform([](auto&& i) { return i + i; })))>);
+    z = y | vs::transform([](auto&& i) { return i + i; });
+    REQUIRE(rs::equal(view<0>(z), std::vector{2, 8, 18}));
+    REQUIRE(rs::equal(view<1>(z), std::vector{32, 50}));
+    REQUIRE(rs::equal(view<2>(z), std::vector{32, 18, 8, 2}));
+}
 
 #if 0
+
 TEST_CASE("directional")
 {
     using namespace ccs;
