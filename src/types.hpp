@@ -2,8 +2,9 @@
 
 #include <array>
 #include <concepts>
-#include <span>
 #include <limits>
+#include <span>
+#include <tuple>
 
 #define FWD(x) static_cast<decltype(x)>(x)
 #define MOVE(x) static_cast<std::remove_reference_t<decltype(x)>&&>(x)
@@ -27,41 +28,48 @@ using span = std::span<T>;
 template <typename T>
 concept Numeric = std::integral<T> || std::floating_point<T>;
 
+template <typename T>
+concept TupleLike = requires(T t)
+{
+    std::get<0>(t);
+    std::tuple_size_v<std::remove_cvref_t<T>>;
+};
+
 namespace rs = ranges;
 namespace vs = ranges::views;
 
-template<int N>
+template <int N>
 using lit = std::integral_constant<int, N>;
 
-struct SystemStats {};
+struct SystemStats {
+};
 
-template<typename T = real>
+template <typename T = real>
 constexpr auto null_v = std::numeric_limits<T>::max();
 
 } // namespace ccs
 
-
 #ifndef NDEBUG
+#include <cxxabi.h>
+#include <memory>
 #include <string>
 #include <typeinfo>
-#include <memory>
-#include <cxxabi.h>
-namespace debug {
-
+namespace debug
+{
 
 inline std::string demangle(const char* name)
 {
-    int status {};
+    int status{};
     auto res = std::unique_ptr<char>{abi::__cxa_demangle(name, NULL, NULL, &status)};
 
     return status == 0 ? res.get() : name;
 }
 
-template<typename T>
+template <typename T>
 std::string type(const T& t)
 {
     return demangle(typeid(t).name());
 }
 
-}
+} // namespace debug
 #endif

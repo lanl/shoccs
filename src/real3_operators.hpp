@@ -4,19 +4,42 @@
 
 namespace ccs
 {
+namespace detail
+{
+template <TupleLike T>
+constexpr auto tuple_sz = std::tuple_size_v<std::remove_cvref_t<T>>;
+}
 
 #define SHOCCS_GEN_OPERATORS(op, acc)                                                    \
-    constexpr real3 op(const real3& a, const real3& b)                                   \
+    template <TupleLike U, TupleLike V>                                                  \
+    requires(detail::tuple_sz<U> ==                                                      \
+             detail::tuple_sz<V>) constexpr std::array<real, detail::tuple_sz<U>>        \
+    op(U&& u, V&& v)                                                                     \
     {                                                                                    \
-        return {a[0] acc b[0], a[1] acc b[1], a[2] acc b[2]};                            \
+        return []<auto... Is>(std::index_sequence<Is...>, auto&& a, auto&& b)            \
+        {                                                                                \
+            return std::array<real, detail::tuple_sz<U>>{                                \
+                (std::get<Is>(a) acc std::get<Is>(b))...};                               \
+        }                                                                                \
+        (std::make_index_sequence<detail::tuple_sz<U>>{}, FWD(u), FWD(v));               \
     }                                                                                    \
-    constexpr real3 op(const real3& a, Numeric auto n)                                   \
+    template <TupleLike U>                                                               \
+    constexpr std::array<real, detail::tuple_sz<U>> op(U&& u, Numeric auto v)            \
     {                                                                                    \
-        return {a[0] acc n, a[1] acc n, a[2] acc n};                                     \
+        return [b = v]<auto... Is>(std::index_sequence<Is...>, auto&& a)                 \
+        {                                                                                \
+            return std::array<real, detail::tuple_sz<U>>{(std::get<Is>(a) acc b)...};    \
+        }                                                                                \
+        (std::make_index_sequence<detail::tuple_sz<U>>{}, FWD(u));                       \
     }                                                                                    \
-    constexpr real3 op(Numeric auto n, const real3& a)                                   \
+    template <TupleLike U>                                                               \
+    constexpr std::array<real, detail::tuple_sz<U>> op(Numeric auto v, U&& u)            \
     {                                                                                    \
-        return {n acc a[0], n acc a[1], n acc a[2]};                                     \
+        return [b = v]<auto... Is>(std::index_sequence<Is...>, auto&& a)                 \
+        {                                                                                \
+            return std::array<real, detail::tuple_sz<U>>{(b acc std::get<Is>(a))...};    \
+        }                                                                                \
+        (std::make_index_sequence<detail::tuple_sz<U>>{}, FWD(u));                       \
     }
 
 SHOCCS_GEN_OPERATORS(operator*, *)
@@ -26,11 +49,20 @@ SHOCCS_GEN_OPERATORS(operator-, -)
 
 #undef SHOCCS_GEN_OPERATORS
 
-constexpr real dot(const real3& a, const real3& b)
+template <TupleLike U, TupleLike V>
+requires(detail::tuple_sz<U> == detail::tuple_sz<V>) constexpr real dot(U&& u, V&& v)
 {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    return []<auto... Is>(std::index_sequence<Is...>, auto&& a, auto&& b)
+    {
+        return ((std::get<Is>(a) * std::get<Is>(b)) + ...);
+    }
+    (std::make_index_sequence<detail::tuple_sz<U>>{}, FWD(u), FWD(v));
 }
 
-inline real length(const real3& a) { return std::sqrt(dot(a, a)); }
+template <TupleLike U>
+real length(U&& u)
+{
+    return std::sqrt(dot(u, u));
+}
 
 } // namespace ccs
