@@ -60,7 +60,8 @@ namespace debug
 inline std::string demangle(const char* name)
 {
     int status{};
-    auto res = std::unique_ptr<char>{abi::__cxa_demangle(name, NULL, NULL, &status)};
+    auto res = std::unique_ptr<char, void (*)(void*)>{
+        abi::__cxa_demangle(name, NULL, NULL, &status), std::free};
 
     return status == 0 ? res.get() : name;
 }

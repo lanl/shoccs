@@ -21,9 +21,10 @@ struct neg_G {
     real3 center;
     real radius;
 
-    real operator()(const real3& location) const
+    template <typename T>
+    real operator()(T&& location) const
     {
-        return -(location[I] - center[I]) / length(location - center);
+        return -(std::get<I>(location) - std::get<I>(center)) / length(location - center);
     }
 };
 
@@ -59,13 +60,11 @@ ScalarWave::ScalarWave( // cart_mesh&& cart_,
     : gradient{}, u_rhs{}, grad_G{}, du{}, center{center_}, radius{radius_}
 {
 
-#if 0
-    // this is a large bite to make this work
+    // Initialize wave speeds
     grad_G | selector::D =
-        mesh::location | r_tuple{vs::transform(neg_G<0>{center, radius}),
-                                 vs::transform(neg_G<1>{center, radius}),
-                                 vs::transform(neg_G<2>{center, radius})};
-#endif
+        mesh::location | field::Tuple{vs::transform(neg_G<0>{center, radius}),
+                                      vs::transform(neg_G<1>{center, radius}),
+                                      vs::transform(neg_G<2>{center, radius})};
     grad_G | selector::Rxyz = 0;
 }
 

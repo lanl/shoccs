@@ -49,7 +49,7 @@ TEST_CASE("selection")
     auto s = field::Scalar(&global::loc, Tuple{v}, Tuple{rx, ry, rz});
 
     static_assert(std::same_as<decltype(s.get<0>()), Tuple<std::vector<int>&>&>);
-    static_assert(std::same_as<decltype(view<0>(s.get<0>())), decltype(vs::all(v))&>);
+    static_assert(std::same_as<decltype(view<0>(s.get<0>())), decltype(vs::all(v))>);
 
     // Add tests to verify the type of the containers and views.
     // THey may point to scalar needing to be a tuple of nested tuples
@@ -247,7 +247,11 @@ TEST_CASE("mesh location span")
     REQUIRE(rs::equal(s | selector::Ry, ry | ur));
     REQUIRE(rs::equal(s | selector::Rz, rz | ur));
 
-    Tuple{vs::transform(loc_fn<0>{}),
-          vs::transform(loc_fn<1>{}),
-          vs::transform(loc_fn<2>{})};
+    s | selector::Rxyz = mesh::location | Tuple{vs::transform(loc_fn<0>{}),
+                                                vs::transform(loc_fn<1>{}),
+                                                vs::transform(loc_fn<2>{})};
+
+    REQUIRE(rs::equal(u, rx | vs::transform(loc_fn<0>{})));
+    REQUIRE(rs::equal(v, ry | vs::transform(loc_fn<1>{})));
+    REQUIRE(rs::equal(w, rz | vs::transform(loc_fn<2>{})));
 }

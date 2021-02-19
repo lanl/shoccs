@@ -12,6 +12,8 @@
 #include "Tuple_fwd.hpp"
 #include "Vector_fwd.hpp"
 
+#include "Selector_fwd.hpp"
+
 namespace ccs::selector
 {
 
@@ -45,9 +47,13 @@ struct Selection : R {
         return *this;
     }
 
-    template <typename Fn>
-    requires(!Numeric<Fn> && field::tuple::traits::ThreeTuple<R>) friend constexpr auto
-    operator|(Selection& selection, Fn f)
+    template <typename ViewFn>
+    requires(field::tuple::traits::ThreeTuple<R>&& requires(Selection s,
+                                                            vs::view_closure<ViewFn> f) {
+        f(detail::makeSelection(std::get<0>(s.location.view()),
+                                field::Tuple{std::get<0>(s.view())}));
+    }) friend constexpr auto
+    operator|(Selection& selection, vs::view_closure<ViewFn> f)
     {
         // For some reason, spans trigger errors with the pipe syntax but things appear to
         // work with direct function calls.
@@ -68,6 +74,36 @@ struct Selection : R {
                                     field::Tuple{field::tuple::view<1>(selection)})),
             f(detail::makeSelection(field::tuple::view<2>(selection.location),
                                     field::Tuple{field::tuple::view<2>(selection)}))};
+    }
+
+    template <field::tuple::traits::ThreeTuple TupleFn>
+    requires(field::tuple::traits::ThreeTuple<R>&& requires(Selection s, TupleFn f) {
+        f.template get<0>()(detail::makeSelection(std::get<0>(s.location.view()),
+                                                  field::Tuple{std::get<0>(s.view())}));
+    }) friend constexpr auto
+    operator|(Selection& selection, TupleFn&& f)
+    {
+        // For some reason, spans trigger errors with the pipe syntax but things appear to
+        // work with direct function calls.
+        // return field::Tuple{
+        //     detail::makeSelection(field::tuple::view<0>(selection.location),
+        //                           field::Tuple{field::tuple::view<0>(selection)}) |
+        //         f,
+        //     detail::makeSelection(field::tuple::view<1>(selection.location),
+        //                           field::Tuple{field::tuple::view<1>(selection)}) |
+        //         f,
+        //     detail::makeSelection(field::tuple::view<2>(selection.location),
+        //                           field::Tuple{field::tuple::view<2>(selection)}) |
+        //         f};
+        return field::Tuple{f.template get<0>()(detail::makeSelection(
+                                field::tuple::view<0>(selection.location),
+                                field::Tuple{field::tuple::view<0>(selection)})),
+                            f.template get<1>()(detail::makeSelection(
+                                field::tuple::view<1>(selection.location),
+                                field::Tuple{field::tuple::view<1>(selection)})),
+                            f.template get<2>()(detail::makeSelection(
+                                field::tuple::view<2>(selection.location),
+                                field::Tuple{field::tuple::view<2>(selection)}))};
     }
 };
 
