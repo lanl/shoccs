@@ -16,7 +16,6 @@ class ScalarWave
 
     // how should one initialize these?  Do they need the mesh or do they
     // only require some reduced set of information
-    SystemField u_rhs;
     field::SimpleVector<std::vector<real>> grad_G;
     field::SimpleVector<std::vector<real>> du;
 

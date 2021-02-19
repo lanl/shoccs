@@ -2,6 +2,8 @@
 
 #include "Tuple.hpp"
 #include "Vector_fwd.hpp"
+// can make this Scalar_fwd once the return of dot depends on the template parameter
+#include "Scalar.hpp"
 
 namespace ccs::field::tuple
 {
@@ -20,6 +22,11 @@ class Vector : public Tuple<U, V>
     Base&& base() && { return static_cast<Base&&>(*this); }
 
     const mesh::Location* location_ = nullptr;
+
+    template<typename T>
+    constexpr friend auto dot(const Vector&, const T&) {
+        return SimpleScalar<std::vector<real>>{};
+    }
 
 public:
     Vector() = default;

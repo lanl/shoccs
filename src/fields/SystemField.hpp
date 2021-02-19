@@ -125,13 +125,4 @@ using SystemField = field::SystemField<std::vector<real>>;
 using SystemView_Mutable = field::SystemField<std::span<real>>;
 using SystemView_Const = field::SystemField<std::span<const real>>;
 
-namespace field
-{
-template <typename U, typename V>
-constexpr auto dot(U&&, V&&)
-{
-    return ::ccs::SystemField{};
-}
-} // namespace field
-
 } // namespace ccs

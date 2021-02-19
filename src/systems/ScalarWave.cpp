@@ -57,7 +57,7 @@ ScalarWave::ScalarWave( // cart_mesh&& cart_,
     real3 center_,
     real radius_) //,
                   // double stats_begin_accumulate_)
-    : gradient{}, u_rhs{}, grad_G{}, du{}, center{center_}, radius{radius_}
+    : gradient{}, grad_G{}, du{}, center{center_}, radius{radius_}
 {
 
     // Initialize wave speeds
@@ -120,9 +120,11 @@ void ScalarWave::rhs(SystemView_Const field, real, SystemView_Mutable field_rhs)
     // operators on them
     auto&& [u] = field.scalars(scalars::u);
     // grad should d/dx, d/dy, d/dz on F and Rx, Ry, Rz, respectively
-    u_rhs = gradient(u, du);
+    du = gradient(u);
     // compute grad_G . u_rhs and store in v_rhs
-    field_rhs = dot(grad_G, u_rhs);
+    auto&& [u_rhs] = field_rhs.scalars(scalars::u);
+    //u_rhs = dot(grad_G, du);
+    dot(grad_G, du);
 }
 
 void ScalarWave::update_boundary(SystemView_Mutable field, real time)
