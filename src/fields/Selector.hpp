@@ -205,6 +205,8 @@ inline constexpr auto D = detail::SelectorFunc{
                                 field::tuple::view<2>(FWD(x).template get<0>())};
     }};
 
+inline constexpr auto F = D;
+
 inline constexpr auto Rx = detail::SelectorFunc{
     [](auto&& x) {
         auto l = x.location();

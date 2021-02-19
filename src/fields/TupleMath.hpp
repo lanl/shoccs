@@ -72,109 +72,114 @@ class ViewAccess
     friend class ViewMath;
 };
 
+#define SHOCCS_GEN_OPERATORS(op, f)                                                      \
+    template <typename U, Numeric V>                                                     \
+    requires std::derived_from<std::remove_cvref_t<U>, T>&&                              \
+        From_View<U> friend constexpr auto                                               \
+        op(U&& u, V v)                                                                   \
+    {                                                                                    \
+        constexpr bool nested = requires(U u, V v)                                       \
+        {                                                                                \
+            u.template get<0>();                                                         \
+            op(u.template get<0>(), v);                                                  \
+        };                                                                               \
+                                                                                         \
+        if constexpr (nested) {                                                          \
+            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto v)          \
+            {                                                                            \
+                return std::invoke(                                                      \
+                    create_from_view<U>, u, op(u.template get<Is>(), v)...);             \
+            }                                                                            \
+            (std::make_index_sequence<u.N>{}, FWD(u), v);                                \
+        } else {                                                                         \
+            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto v)          \
+            {                                                                            \
+                return std::invoke(                                                      \
+                    create_from_view<U>,                                                 \
+                    u,                                                                   \
+                    vs::zip_with(                                                        \
+                        f, view<Is>(u), vs::repeat_n(v, view<Is>(u).size()))...);        \
+            }                                                                            \
+            (std::make_index_sequence<u.N>{}, FWD(u), v);                                \
+        }                                                                                \
+    }                                                                                    \
+                                                                                         \
+    template <typename U, Numeric V>                                                     \
+    requires std::derived_from<std::remove_cvref_t<U>, T>&&                              \
+        From_View<U> friend constexpr auto                                               \
+        op(V v, U&& u)                                                                   \
+    {                                                                                    \
+        constexpr bool nested = requires(U u, V v)                                       \
+        {                                                                                \
+            u.template get<0>();                                                         \
+            op(v, u.template get<0>());                                                  \
+        };                                                                               \
+                                                                                         \
+        if constexpr (nested) {                                                          \
+            return []<auto... Is>(std::index_sequence<Is...>, auto v, auto&& u)          \
+            {                                                                            \
+                return std::invoke(                                                      \
+                    create_from_view<U>, u, op(v, u.template get<Is>())...);             \
+            }                                                                            \
+            (std::make_index_sequence<u.N>{}, v, FWD(u));                                \
+        } else {                                                                         \
+            return []<auto... Is>(std::index_sequence<Is...>, auto v, auto&& u)          \
+            {                                                                            \
+                return std::invoke(create_from_view<U>,                                  \
+                                   u,                                                    \
+                                   vs::zip_with(f,                                       \
+                                                vs::repeat_n(v, view<Is>(u).size()),     \
+                                                view<Is>(u))...);                        \
+            }                                                                            \
+            (std::make_index_sequence<u.N>{}, v, FWD(u));                                \
+        }                                                                                \
+    }                                                                                    \
+                                                                                         \
+    template <typename U, typename V>                                                    \
+    requires std::derived_from<std::remove_cvref_t<U>, T>&& From_View<U, V>&& requires(  \
+        V v)                                                                             \
+    {                                                                                    \
+        v.view();                                                                        \
+    }                                                                                    \
+    friend constexpr auto op(U&& u, V&& v)                                               \
+    {                                                                                    \
+        constexpr bool nested = requires(U u, V v)                                       \
+        {                                                                                \
+            u.template get<0>();                                                         \
+            v.template get<0>();                                                         \
+            op(u.template get<0>(), v.template get<0>());                                \
+        };                                                                               \
+                                                                                         \
+        if constexpr (nested) {                                                          \
+            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto&& v)        \
+            {                                                                            \
+                return std::invoke(create_from_view<U, V>,                               \
+                                   u,                                                    \
+                                   v,                                                    \
+                                   op(u.template get<Is>(), v.template get<Is>())...);   \
+            }                                                                            \
+            (std::make_index_sequence<u.N>{}, v, FWD(u));                                \
+        } else {                                                                         \
+            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto&& v)        \
+            {                                                                            \
+                return std::invoke(create_from_view<U, V>,                               \
+                                   u,                                                    \
+                                   v,                                                    \
+                                   vs::zip_with(f, view<Is>(u), view<Is>(v))...);        \
+            }                                                                            \
+            (std::make_index_sequence<std::max(u.N, v.N)>{}, FWD(u), FWD(v));            \
+        }                                                                                \
+    }
+
 template <typename T>
 struct ViewMath {
 
 private:
-    template <typename U, Numeric V>
-    requires std::derived_from<std::remove_cvref_t<U>, T>&&
-        From_View<U> friend constexpr auto
-        operator+(U&& u, V v)
-    {
-        constexpr bool nested = requires(U u, V v)
-        {
-            u.template get<0>();
-            u.template get<0>() + v;
-        };
-
-        if constexpr (nested) {
-            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto v)
-            {
-                return std::invoke(
-                    create_from_view<U>, u, operator+(u.template get<Is>(), v)...);
-            }
-            (std::make_index_sequence<u.N>{}, FWD(u), v);
-        } else {
-            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto v)
-            {
-                return std::invoke(create_from_view<U>,
-                                   u,
-                                   vs::zip_with(std::plus{},
-                                                view<Is>(u),
-                                                vs::repeat_n(v, view<Is>(u).size()))...);
-            }
-            (std::make_index_sequence<u.N>{}, FWD(u), v);
-        }
-    }
-
-    template <typename U, Numeric V>
-    requires std::derived_from<std::remove_cvref_t<U>, T>&&
-        From_View<U> friend constexpr auto
-        operator+(V v, U&& u)
-    {
-        constexpr bool nested = requires(U u, V v)
-        {
-            u.template get<0>();
-            v + u.template get<0>();
-        };
-
-        if constexpr (nested) {
-            return []<auto... Is>(std::index_sequence<Is...>, auto v, auto&& u)
-            {
-                return std::invoke(
-                    create_from_view<U>, u, operator+(v, u.template get<Is>())...);
-            }
-            (std::make_index_sequence<u.N>{}, v, FWD(u));
-        } else {
-            return []<auto... Is>(std::index_sequence<Is...>, auto v, auto&& u)
-            {
-                return std::invoke(create_from_view<U>,
-                                   u,
-                                   vs::zip_with(std::plus{},
-                                                vs::repeat_n(v, view<Is>(u).size()),
-                                                view<Is>(u))...);
-            }
-            (std::make_index_sequence<u.N>{}, v, FWD(u));
-        }
-    }
-
-    template <typename U, typename V>
-    requires std::derived_from<std::remove_cvref_t<U>, T>&&
-        From_View<U, V>&& requires(V v)
-    {
-        v.view();
-    }
-    friend constexpr auto operator+(U&& u, V&& v)
-    {
-        constexpr bool nested = requires(U u, V v)
-        {
-            u.template get<0>();
-            v.template get<0>();
-            u.template get<0>() + v.template get<0>();
-        };
-
-        if constexpr (nested) {
-            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto&& v)
-            {
-                return std::invoke(
-                    create_from_view<U, V>,
-                    u,
-                    v,
-                    operator+(u.template get<Is>(), v.template get<Is>())...);
-            }
-            (std::make_index_sequence<u.N>{}, v, FWD(u));
-        } else {
-            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto&& v)
-            {
-                return std::invoke(
-                    create_from_view<U, V>,
-                    u,
-                    v,
-                    vs::zip_with(std::plus{}, view<Is>(u), view<Is>(v))...);
-            }
-            (std::make_index_sequence<std::max(u.N, v.N)>{}, FWD(u), FWD(v));
-        }
-    }
+    SHOCCS_GEN_OPERATORS(operator+, std::plus{})
+    SHOCCS_GEN_OPERATORS(operator-, std::minus{})
+    SHOCCS_GEN_OPERATORS(operator*, std::multiplies{})
+    SHOCCS_GEN_OPERATORS(operator/, std::divides{})
 };
+#undef SHOCCS_GEN_OPERATORS
 
 } // namespace ccs::field::tuple::lazy

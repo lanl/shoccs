@@ -1,12 +1,14 @@
 #include "InviscidVortex.hpp"
 #include "fields/Selector.hpp"
 #include "fields/views.hpp"
+#include "fields/lift.hpp"
 #include "real3_operators.hpp"
 #include <cmath>
 #include <numbers>
 #include <spdlog/spdlog.h>
 
 #include <range/v3/view/transform.hpp>
+#include <range/v3/algorithm/max.hpp>
 
 namespace ccs::systems
 {
@@ -14,6 +16,10 @@ namespace ccs::systems
 constexpr real g = 1.4;
 constexpr real g1 = 0.4;
 constexpr real twoPi = 2 * std::numbers::pi_v<real>;
+
+constexpr auto max_abs =
+    field::lift([](auto&& a, auto&& b) { return std::max(std::abs(a), std::abs(b)); });
+constexpr auto sqrt = field::lift([](auto&& x) { return std::sqrt(x); });
 
 enum class vars { rho, rhoU, rhoV, rhoE, P };
 
@@ -224,14 +230,9 @@ bool InviscidVortex::valid(const SystemStats&) const { return false; }
 
 real InviscidVortex::timestep_size(const SystemField&, const StepController&) const
 {
-#if 0
-    auto&& [rho, rhoU, rhoV, rhoE] =
-        U.scalars(scalars::rho, scalars::rhoU, scalars::rhoV, scalars::rhoE);
 
-    // or
-    constexpr auto max_abs = Scalar::lift(
-        [](auto&& a, auto&& b) { return std::max(std::abs(a), std::abs(b)); });
-    constexpr auto sqrt = Scalar::lift([](auto&& x) { return std::sqrt(x) });
+    auto&& [rho, rhoU, rhoV, rhoE, P] =
+        U.scalars(vars::rho, vars::rhoU, vars::rhoV, vars::rhoE, vars::P);
 
     const auto d =
         rs::max((max_abs(rhoU / rho, rhoV / rho) + sqrt(g * P / rho)) | selector::F);
@@ -239,8 +240,7 @@ real InviscidVortex::timestep_size(const SystemField&, const StepController&) co
     // return cfl *
     // std::min({cart.delta(0), cart.delta(1), cart.delta(2)}) / d;
     return 1 / d;
-#endif
-    return null_v<>;
+//    return null_v<>;
 };
 
 void InviscidVortex::rhs(SystemView_Const field, real, SystemView_Mutable field_rhs)
