@@ -151,7 +151,7 @@ TEST_CASE("lifting multiple args")
     REQUIRE(rs::equal(z | selector::Rz, std::vector{10, 8, 10, 7}));
 }
 
-TEST_CASE("mesh location")
+TEST_CASE("mesh location vector")
 {
     using namespace ccs;
     using namespace ccs::field;
@@ -190,4 +190,64 @@ TEST_CASE("mesh location")
     REQUIRE(rs::equal(s | selector::Rx, rx | u));
     REQUIRE(rs::equal(s | selector::Ry, ry | u));
     REQUIRE(rs::equal(s | selector::Rz, rz | u));
+}
+
+template <auto I>
+struct loc_fn {
+    constexpr auto operator()(auto&& loc)
+    {
+        auto&& [x, y, z] = loc;
+        return x * y * z * std::get<I>(loc);
+    }
+};
+
+TEST_CASE("mesh location span")
+{
+    using namespace ccs;
+    using namespace ccs::field;
+    using namespace global;
+
+    auto t = std::vector<real>(x.size() * y.size() * z.size());
+    auto u = std::vector<real>(rx.size());
+    auto v = std::vector<real>(ry.size());
+    auto w = std::vector<real>(rz.size());
+
+    auto s = SimpleScalar<std::span<real>>{
+        &loc,
+        Tuple{std::span<real>(t)},
+        Tuple{std::span<real>(u), std::span<real>(v), std::span<real>(w)}};
+
+    constexpr auto tr = vs::transform([](auto&& loc) {
+        auto&& [x, y, z] = loc;
+        return x * y * z;
+    });
+
+    constexpr auto sol = mesh::location | tr;
+
+    s | selector::D = sol;
+    REQUIRE(rs::equal(s | selector::D, vs::cartesian_product(x, y, z) | tr));
+    REQUIRE(rs::equal(s | selector::Rx, vs::repeat_n(0.0, rx.size())));
+
+    s | selector::Rx = sol;
+    REQUIRE(rs::equal(s | selector::Rx, rx | tr));
+
+    s | selector::Ry = sol;
+    REQUIRE(rs::equal(s | selector::Ry, ry | tr));
+
+    s | selector::Rz = sol;
+    REQUIRE(rs::equal(s | selector::Rz, rz | tr));
+
+    constexpr auto ur = vs::transform([](auto&& loc) {
+        auto&& [x, y, z] = loc;
+        return x * y * y * z;
+    });
+
+    s | selector::Rxyz = mesh::location | ur;
+    REQUIRE(rs::equal(s | selector::Rx, rx | ur));
+    REQUIRE(rs::equal(s | selector::Ry, ry | ur));
+    REQUIRE(rs::equal(s | selector::Rz, rz | ur));
+
+    Tuple{vs::transform(loc_fn<0>{}),
+          vs::transform(loc_fn<1>{}),
+          vs::transform(loc_fn<2>{})};
 }

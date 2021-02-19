@@ -19,11 +19,7 @@ namespace ccs::field::tuple
 {
 
 template <int I, typename R>
-constexpr decltype(auto) view(R&& r)
-{
-    constexpr int Idx = I < r.N ? I : r.N - 1;
-    return std::get<Idx>(FWD(r).view());
-}
+constexpr decltype(auto) view(R&&);
 
 // Several utilities for working with container/view tuples
 template <typename T>
@@ -459,6 +455,12 @@ public:
     const view_tuple& as_view_tuple() const { return *this; }
 };
 
+namespace detail
+{
+template <typename... Args>
+auto makeTuple(Args&&...);
+}
+
 // r_tuple for viewable ref components
 template <typename... Args>
 struct Tuple : container_tuple<Args...>, view_tuple<Args&...> {
@@ -551,13 +553,29 @@ struct Tuple : container_tuple<Args...>, view_tuple<Args&...> {
     }
 
     template <typename Fn>
-    requires(sizeof...(Args) > 1) friend constexpr auto operator|(Tuple& t, Fn f)
+    requires(sizeof...(Args) > 1 &&
+             requires(Tuple t, Fn f) { f(std::get<0>(t.view())); }) friend constexpr auto
+    operator|(Tuple& t, Fn f)
     {
         return [f]<auto... Is>(std::index_sequence<Is...>, auto& t)
         {
-            return Tuple{f(view<Is>(t))...};
+            return detail::makeTuple(f(view<Is>(t))...);
         }
         (std::make_index_sequence<sizeof...(Args)>{}, t);
+    }
+
+    template <traits::TupleType TupleFn>
+    requires(sizeof...(Args) > 1 &&
+             requires(Tuple t, TupleFn f) {
+                 f.template get<0>()(std::get<0>(t.view()));
+             }) friend constexpr auto
+    operator|(Tuple& t, TupleFn&& f)
+    {
+        return [&t]<auto... Is>(std::index_sequence<Is...>, auto&& fn)
+        {
+            return detail::makeTuple(fn.template get<Is>()(view<Is>(t))...);
+        }
+        (std::make_index_sequence<sizeof...(Args)>{}, FWD(f));
     }
 };
 
@@ -595,13 +613,28 @@ struct Tuple<Args...> : view_tuple<Args...> {
     }
 
     template <typename Fn>
-    requires(sizeof...(Args) > 1) friend constexpr auto operator|(Tuple& t, Fn f)
+    requires(sizeof...(Args) > 1 &&
+             requires(Tuple t, Fn f) { f(std::get<0>(t.view())); }) friend constexpr auto
+    operator|(Tuple& t, Fn f)
     {
         return [f]<auto... Is>(std::index_sequence<Is...>, auto& t)
         {
-            return Tuple{f(view<Is>(t))...};
+            return detail::makeTuple(f(view<Is>(t))...);
         }
         (std::make_index_sequence<sizeof...(Args)>{}, t);
+    }
+    template <traits::TupleType TupleFn>
+    requires(sizeof...(Args) > 1 &&
+             requires(Tuple t, TupleFn fn) {
+                 fn.template get<0>()(std::get<0>(t.view()));
+             }) friend constexpr auto
+    operator|(Tuple& t, TupleFn&& f)
+    {
+        return [&t]<auto... Is>(std::index_sequence<Is...>, auto&& fn)
+        {
+            return detail::makeTuple(fn.template get<Is>()(view<Is>(t))...);
+        }
+        (std::make_index_sequence<sizeof...(Args)>{}, FWD(f));
     }
 };
 
@@ -610,5 +643,21 @@ Tuple(Args&&...) -> Tuple<Args...>;
 
 template <typename... Args>
 Tuple(tag, Args&&...) -> Tuple<Args...>;
+
+template <int I, typename R>
+constexpr decltype(auto) view(R&& r)
+{
+    constexpr int Idx = I < r.N ? I : r.N - 1;
+    return std::get<Idx>(FWD(r).view());
+}
+
+namespace detail
+{
+template <typename... Args>
+auto makeTuple(Args&&... args)
+{
+    return Tuple<Args...>(tag{}, FWD(args)...);
+}
+} // namespace detail
 
 } // namespace ccs::field::tuple

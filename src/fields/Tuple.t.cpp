@@ -54,6 +54,12 @@ TEST_CASE("concepts")
     using V = decltype(vs::iota(0, 10));
     REQUIRE(All<V>);
     REQUIRE(All<Tuple<V>>);
+
+    using W = std::span<real>;
+    REQUIRE(All<W>);
+    REQUIRE(All<W&>);
+    REQUIRE(All<Tuple<W>>);
+    REQUIRE(All<Tuple<W&>>);
 }
 TEST_CASE("construction")
 {
@@ -295,6 +301,38 @@ TEST_CASE("Pipe syntax for Non-Owning ThreeTuples")
     REQUIRE(rs::equal(view<0>(z), std::vector{2, 8, 18}));
     REQUIRE(rs::equal(view<1>(z), std::vector{32, 50}));
     REQUIRE(rs::equal(view<2>(z), std::vector{32, 18, 8, 2}));
+}
+
+TEST_CASE("ThreeTuples with ThreeTuplePipes")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+
+    auto x = Tuple{std::vector{1, 2, 3}, std::vector{4, 5}, std::vector{4, 3, 2, 1}};
+    auto y = x | Tuple{vs::transform([](auto&& i) { return i * i; }),
+                       vs::transform([](auto&& i) { return i + i; }),
+                       vs::transform([](auto&& i) { return i * i * i; })};
+    REQUIRE(traits::ThreeTuple<decltype(y)>);
+    REQUIRE(rs::equal(view<0>(y), std::vector{1, 4, 9}));
+    REQUIRE(rs::equal(view<1>(y), std::vector{8, 10}));
+    REQUIRE(rs::equal(view<2>(y), std::vector{64, 27, 8, 1}));
+
+    auto a = std::vector<int>(3);
+    auto b = std::vector<int>(2);
+    auto c = std::vector<int>(4);
+    auto z = Tuple{a, b, c};
+    REQUIRE(traits::Non_Tuple_Input_Range<decltype(
+                view<0>(y | vs::transform([](auto&& i) { return i + i; })))>);
+    z = y | vs::transform([](auto&& i) { return i + i; });
+    REQUIRE(rs::equal(view<0>(z), std::vector{2, 8, 18}));
+    REQUIRE(rs::equal(view<1>(z), std::vector{16, 20}));
+    REQUIRE(rs::equal(view<2>(z), std::vector{128, 54, 16, 2}));
+
+    auto q = Tuple<std::span<int>, std::span<int>, std::span<int>>{a, b, c};
+
+    q | Tuple{vs::transform([](auto&& i) { return i * i; }),
+              vs::transform([](auto&& i) { return i + i; }),
+              vs::transform([](auto&& i) { return i * i * i; })};
 }
 
 #if 0

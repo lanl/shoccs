@@ -35,7 +35,8 @@ struct solution {
     //    real operator()(const mesh_object_info& info) const { return
     //    (*this)(info.position); }
 
-    real operator()(const real3& location) const
+    template <typename T>
+    real operator()(T&& location) const
     {
         return std::sin(twoPI * (length(location - center) - radius - time));
     }
@@ -98,10 +99,6 @@ void ScalarWave::operator()(SystemField& field, const StepController& controller
     auto sol = mesh::location | vs::transform(solution{center, radius, time});
     u | selector::D = sol;
     u | selector::Rxyz = sol;
-
-    // something like the above would require that the mesh/geometry/object information
-    // be embedded in the system_field and accessible by its components.
-    // Need transorm operations
 }
 
 SystemStats
@@ -129,12 +126,13 @@ void ScalarWave::rhs(SystemView_Const field, real, SystemView_Mutable field_rhs)
     field_rhs = dot(grad_G, u_rhs);
 }
 
-void ScalarWave::update_boundary(SystemView_Mutable u, real time)
+void ScalarWave::update_boundary(SystemView_Mutable field, real time)
 {
     // update object boundaries
     auto sol = mesh::location | vs::transform(solution{center, radius, time});
-    u | selector::Rxyz = sol;
+    auto&& [u] = field.scalars(scalars::u);
 
+    u | selector::Rxyz = sol;
     // update domain boundaries
 }
 

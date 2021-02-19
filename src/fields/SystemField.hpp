@@ -18,7 +18,7 @@ class SystemField : lazy::ViewMath<SystemField<T>>, lazy::ContainerMath<SystemFi
     friend class lazy::ContainerAccess;
 
     std::vector<SimpleScalar<T>> scalars_;
-    std::vector<Vector<T>> vectors_;
+    std::vector<SimpleVector<T>> vectors_;
 
 public:
     using type = SystemField<T>;
