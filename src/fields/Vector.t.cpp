@@ -1,5 +1,6 @@
 #include "types.hpp"
 
+#include "Scalar.hpp"
 #include "Vector.hpp"
 
 #include "Selector.hpp"
@@ -100,7 +101,7 @@ TEST_CASE("math")
     REQUIRE(rs::equal(plus(vs::iota(2, 6), vs::iota(1, 5)), r | selector::Dx));
     REQUIRE(rs::equal(plus(vs::iota(11, 16), vs::iota(10, 15)), r | selector::Rz));
 
-    SimpleVector<std::vector<int>> t = r;
+    SimpleVector<std::vector<int>> t{r};
     REQUIRE(rs::equal(t | selector::Dz, r | selector::Dz));
     REQUIRE(rs::equal(t | selector::Ry, r | selector::Ry));
 }

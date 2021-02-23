@@ -31,6 +31,19 @@ struct Selection : R {
 
     constexpr Selection(L l, R r) : R{MOVE(r)}, location{MOVE(l)} {}
 
+    Selection(const Selection&) = default;
+    Selection(Selection&&) = default;
+
+    Selection& operator=(const Selection&) = default;
+    Selection& operator=(Selection&&) = default;
+
+    template <traits::SelectionType S>
+    Selection& operator=(S&& s)
+    {
+        R::operator=(FWD(s).as_Tuple());
+        return *this;
+    }
+
     template <Numeric N>
     Selection& operator=(N n)
     {
@@ -105,6 +118,10 @@ struct Selection : R {
                                 field::tuple::view<2>(selection.location),
                                 field::Tuple{field::tuple::view<2>(selection)}))};
     }
+
+    R& as_Tuple() & { return *this; }
+    const R& as_Tuple() const& { return *this; }
+    R as_Tuple() && { return *this; }
 };
 
 #if 0

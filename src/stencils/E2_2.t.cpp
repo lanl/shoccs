@@ -11,7 +11,7 @@ TEST_CASE("dirichlet")
 {
     using namespace ccs;
 
-    auto st = make_E2_2();
+    auto st = stencils::make_E2_2();
 
     auto [p, r, t, x] = st.query_max();
     REQUIRE(p == 1);
@@ -48,7 +48,7 @@ TEST_CASE("floating")
 {
     using namespace ccs;
 
-    auto st = make_E2_2();
+    auto st = stencils::make_E2_2();
 
     auto [p, r, t, x] = st.query(boundary::floating);
     REQUIRE(p == 1);
@@ -78,7 +78,7 @@ TEST_CASE("neumann")
 {
     using namespace ccs;
 
-    auto st = make_E2_2();
+    auto st = stencils::make_E2_2();
 
     auto [p, r, t, x] = st.query(boundary::neumann);
     REQUIRE(p == 1);

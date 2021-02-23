@@ -1,7 +1,7 @@
 #pragma once
 
+#include "Cartesian.hpp"
 #include "indexing.hpp"
-#include "mesh.hpp"
 
 #include <cppcoro/generator.hpp>
 
@@ -10,11 +10,11 @@
 // since most objects will need to know about the mesh but do not need to pay the
 // compile penalty for including ranges.
 
-namespace ccs
+namespace ccs::mesh
 {
 
 template <int I = 2>
-cppcoro::generator<real3> location_view(const mesh& m)
+cppcoro::generator<real3> location_view(const Cartesian& m)
 {
     constexpr int F = index::dir<I>::fast;
     constexpr int S = index::dir<I>::slow;
@@ -37,7 +37,7 @@ cppcoro::generator<real3> location_view(const mesh& m)
 }
 
 template <int I>
-cppcoro::generator<real3> location_view(const mesh& m, int i)
+cppcoro::generator<real3> location_view(const Cartesian& m, int i)
 {
     constexpr int F = index::dir<I>::fast;
     constexpr int S = index::dir<I>::slow;
@@ -58,4 +58,4 @@ cppcoro::generator<real3> location_view(const mesh& m, int i)
     }
 }
 
-} // namespace ccs
+} // namespace ccs::mesh

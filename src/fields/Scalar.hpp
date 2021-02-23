@@ -27,17 +27,28 @@ class Scalar : public Tuple<U, V>
     const mesh::Location* location_ = nullptr;
 
 public:
-    Scalar() = default;
-    Scalar(U&& u, V&& v) : Base{FWD(u), FWD(v)}, location_{nullptr} {}
-    Scalar(const mesh::Location* location, U&& u, V&& v)
+    explicit Scalar() = default;
+    explicit Scalar(U&& u, V&& v) : Base{FWD(u), FWD(v)}, location_{nullptr} {}
+    explicit Scalar(const mesh::Location* location, U&& u, V&& v)
         : Base{FWD(u), FWD(v)}, location_{location}
     {
     }
 
     template <traits::ScalarType S>
-    requires std::constructible_from<Base, typename std::remove_cvref_t<S>::Base>
-    Scalar(S&& s) : Base{FWD(s).base()}, location_{FWD(s).location_}
+    requires std::constructible_from<
+        Base,
+        typename std::remove_cvref_t<S>::Base> explicit Scalar(S&& s)
+        : Base{FWD(s).base()}, location_{FWD(s).location_}
     {
+    }
+
+    template <traits::ScalarType S>
+    // requires std::assignable_from<Base&, typename std::remove_cvref_t<S>::Base>
+    Scalar& operator=(S&& s)
+    {
+        location_ = s.location();
+        Base::operator=(FWD(s).base());
+        return *this;
     }
 
     Scalar(const Scalar&) = default;
@@ -45,6 +56,13 @@ public:
 
     Scalar& operator=(const Scalar&) = default;
     Scalar& operator=(Scalar&&) = default;
+
+    template <std::invocable<Scalar&> Fn>
+    Scalar& operator=(Fn&& f)
+    {
+        std::invoke(FWD(f), *this);
+        return *this;
+    }
 
     const mesh::Location* location() const { return location_; }
 };

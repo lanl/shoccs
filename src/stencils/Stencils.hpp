@@ -4,7 +4,7 @@
 #include "types.hpp"
 #include <concepts>
 
-namespace ccs
+namespace ccs::stencils
 {
 
 // A stencil is comprised of both an interior discretization and its
@@ -12,7 +12,7 @@ namespace ccs
 // The interior discretization is of order 2p and containts 2p + 1 points
 // The nbs is a dense small dense rxt matrix
 // A stencil can have extra information associated with it (like Neumann BC's)
-struct stencil_info {
+struct StencilInfo {
     int p;
     int r;
     int t;
@@ -21,27 +21,30 @@ struct stencil_info {
 
 // satisfaction of Stencil makes a type a stencil
 template <typename T>
-concept Stencil = requires(const T& stencil,
-                           boundary b,
-                           real h,
-                           real psi,
-                           bool ray_outside,
-                           std::span<real> c,
-                           std::span<real> extra)
+concept StencilType = requires(const T& stencil,
+                               boundary b,
+                               real h,
+                               real psi,
+                               bool ray_outside,
+                               std::span<real> c,
+                               std::span<real> extra)
 {
     {
         stencil.query(b)
     }
-    ->std::same_as<stencil_info>;
+    ->std::same_as<StencilInfo>;
 
-    { stencil.query_max() } ->std::same_as<stencil_info>;
+    {
+        stencil.query_max()
+    }
+    ->std::same_as<StencilInfo>;
 
     {stencil.nbs(h, b, psi, ray_outside, c, extra)};
 
     {stencil.interior(h, c)};
 };
 
-class stencil
+class Stencil
 {
     // private nested classes for type erasure
     class any_stencil
@@ -49,8 +52,8 @@ class stencil
     public:
         virtual ~any_stencil() {}
         virtual any_stencil* clone() const = 0;
-        virtual stencil_info query(boundary) const = 0;
-        virtual stencil_info query_max() const = 0;
+        virtual StencilInfo query(boundary) const = 0;
+        virtual StencilInfo query_max() const = 0;
         virtual void nbs(real h,
                          boundary,
                          real psi,
@@ -60,7 +63,7 @@ class stencil
         virtual void interior(real c, std::span<real> coeffs) const = 0;
     };
 
-    template <Stencil S>
+    template <StencilType S>
     class any_stencil_impl : public any_stencil
     {
         S s;
@@ -71,8 +74,8 @@ class stencil
 
         any_stencil_impl* clone() const override { return new any_stencil_impl(s); }
 
-        stencil_info query(boundary b) const override { return s.query(b); }
-        stencil_info query_max() const override { return s.query_max(); }
+        StencilInfo query(boundary b) const override { return s.query(b); }
+        StencilInfo query_max() const override { return s.query_max(); }
 
         void nbs(real h,
                  boundary b,
@@ -93,45 +96,45 @@ class stencil
     any_stencil* s;
 
 public:
-    stencil() : s{nullptr} {}
+    Stencil() : s{nullptr} {}
 
-    stencil(const stencil& other) : s{nullptr}
+    Stencil(const Stencil& other) : s{nullptr}
     {
         if (other) s = other.s->clone();
     }
 
-    stencil(stencil&& other) : s{std::exchange(other.s, nullptr)} {}
+    Stencil(Stencil&& other) : s{std::exchange(other.s, nullptr)} {}
 
     // construction from anything with a hit method
     template <typename T>
-        requires Stencil<T> &&
-        (!std::same_as<stencil, std::remove_cvref_t<T>>)stencil(T&& other)
+        requires StencilType<T> &&
+        (!std::same_as<Stencil, std::remove_cvref_t<T>>)Stencil(T&& other)
         : s{new any_stencil_impl{std::forward<T>(other)}}
     {
     }
 
-    stencil& operator=(const stencil& other)
+    Stencil& operator=(const Stencil& other)
     {
-        stencil tmp{other};
+        Stencil tmp{other};
         swap(*this, tmp);
         return (*this);
     }
 
-    stencil& operator=(stencil&& other)
+    Stencil& operator=(Stencil&& other)
     {
         delete s;
         s = std::exchange(other.s, nullptr);
         return *this;
     }
 
-    ~stencil() { delete s; }
+    ~Stencil() { delete s; }
 
-    friend void swap(stencil& x, stencil& y) { std::swap(x.s, y.s); }
+    friend void swap(Stencil& x, Stencil& y) { std::swap(x.s, y.s); }
 
     explicit operator bool() const { return s != nullptr; }
 
-    stencil_info query(boundary b) const { return s->query(b); }
-    stencil_info query_max() const { return s->query_max(); }
+    StencilInfo query(boundary b) const { return s->query(b); }
+    StencilInfo query_max() const { return s->query_max(); }
 
     void nbs(real h,
              boundary b,
@@ -146,5 +149,5 @@ public:
     void interior(real h, std::span<real> c) const { return s->interior(h, c); }
 };
 
-stencil make_E2_2();
-} // namespace ccs
+Stencil make_E2_2();
+} // namespace ccs::stencils

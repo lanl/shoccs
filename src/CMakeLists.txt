@@ -7,7 +7,6 @@ add_unit_test(real3_operators "real3")
 
 add_subdirectory(mesh)
 add_subdirectory(fields)
-add_subdirectory(geometry)
 add_subdirectory(matrices)
 add_subdirectory(stencils)
 add_subdirectory(operators)

@@ -1,20 +1,20 @@
 #pragma once
 
-#include "stencils/stencils.hpp"
+#include "stencils/Stencils.hpp"
 #include <cassert>
 // a simple identity stencil for testing operators
 
-namespace ccs
+namespace ccs::stencils
 {
-struct identity_stencil {
-    stencil_info query(boundary b) const
+struct Identity {
+    StencilInfo query(boundary b) const
     {
         if (b == boundary::neumann)
             return {0, 2, 3, 2};
         else
             return {0, 2, 3, 0};
     }
-    stencil_info query_max() const { return {0, 2, 3, 2}; }
+    StencilInfo query_max() const { return {0, 2, 3, 2}; }
 
     void interior(real, std::span<real> c) const { c[0] = 1; }
 
@@ -65,4 +65,4 @@ struct identity_stencil {
         }
     }
 };
-} // namespace ccs
+} // namespace ccs::stencils

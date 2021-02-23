@@ -17,9 +17,6 @@
 namespace ccs::field::tuple
 {
 
-template <int I, typename R>
-constexpr auto view(R&&);
-
 // Several utilities for working with container/view tuples
 template <typename T>
 using all_t = decltype(vs::all(std::declval<T>()));

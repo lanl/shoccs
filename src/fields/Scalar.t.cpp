@@ -102,7 +102,7 @@ TEST_CASE("math")
     REQUIRE(rs::equal(plus(vs::iota(2, 6), vs::iota(1, 5)), r | selector::D));
     REQUIRE(rs::equal(plus(vs::iota(11, 16), vs::iota(10, 15)), r | selector::Rz));
 
-    SimpleScalar<std::vector<int>> t = r;
+    SimpleScalar<std::vector<int>> t{r};
     REQUIRE(rs::equal(t | selector::D, r | selector::D));
     REQUIRE(rs::equal(t | selector::Ry, r | selector::Ry));
 }

@@ -1,10 +1,13 @@
 #include "ScalarWave.hpp"
 #include "fields/Selector.hpp"
+#include "fields/algorithms.hpp"
 #include "fields/views.hpp"
 #include "real3_operators.hpp"
 #include <cmath>
 #include <numbers>
 #include <spdlog/spdlog.h>
+
+#include "operators/DiscreteOperator.hpp"
 
 #include <range/v3/view/transform.hpp>
 
@@ -60,6 +63,9 @@ ScalarWave::ScalarWave( // cart_mesh&& cart_,
     : gradient{}, grad_G{}, du{}, center{center_}, radius{radius_}
 {
 
+    // Initialize the operator
+    auto op = operators::DiscreteOperator{};
+    gradient = op.to<operators::Gradient>(); // domainBoundaries, ObjectBoundaries);
     // Initialize wave speeds
     grad_G | selector::D =
         mesh::location | field::Tuple{vs::transform(neg_G<0>{center, radius}),
@@ -120,11 +126,11 @@ void ScalarWave::rhs(SystemView_Const field, real, SystemView_Mutable field_rhs)
     // operators on them
     auto&& [u] = field.scalars(scalars::u);
     // grad should d/dx, d/dy, d/dz on F and Rx, Ry, Rz, respectively
-    du = gradient(u);
+    // du = gradient(u);
+    gradient(u);
     // compute grad_G . u_rhs and store in v_rhs
     auto&& [u_rhs] = field_rhs.scalars(scalars::u);
-    //u_rhs = dot(grad_G, du);
-    dot(grad_G, du);
+    u_rhs = dot(grad_G, du);
 }
 
 void ScalarWave::update_boundary(SystemView_Mutable field, real time)
@@ -134,6 +140,7 @@ void ScalarWave::update_boundary(SystemView_Mutable field, real time)
     auto&& [u] = field.scalars(scalars::u);
 
     u | selector::Rxyz = sol;
+
     // update domain boundaries
 }
 

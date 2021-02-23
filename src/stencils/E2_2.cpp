@@ -1,9 +1,9 @@
 #include "stencils.hpp"
 
-#include <range/v3/algorithm/reverse.hpp>
 #include <range/v3/algorithm/fill.hpp>
+#include <range/v3/algorithm/reverse.hpp>
 
-namespace ccs
+namespace ccs::stencils
 {
 struct E2_2 {
 
@@ -12,8 +12,8 @@ struct E2_2 {
     static constexpr int T = 4;
     static constexpr int X = 2;
 
-    stencil_info query_max() const { return {P, R, T, X}; }
-    stencil_info query(boundary b) const
+    StencilInfo query_max() const { return {P, R, T, X}; }
+    StencilInfo query(boundary b) const
     {
         switch (b) {
         case boundary::dirichlet:
@@ -34,8 +34,12 @@ struct E2_2 {
         c[2] = 1 / (h * h);
     }
 
-    void nbs(real h, boundary b, real psi, bool right, std::span<real> c, std::span<real> x)
-        const
+    void nbs(real h,
+             boundary b,
+             real psi,
+             bool right,
+             std::span<real> c,
+             std::span<real> x) const
     {
         switch (b) {
         case boundary::floating:
@@ -75,7 +79,8 @@ struct E2_2 {
             ranges::fill(c.subspan(0, T), real{});
     }
 
-    void nbs_neumann(real h, real psi, std::span<real> c, std::span<real> x, bool right) const
+    void
+    nbs_neumann(real h, real psi, std::span<real> c, std::span<real> x, bool right) const
     {
         real t5 = 2 * psi;
         real t9 = psi * psi;
@@ -104,5 +109,5 @@ struct E2_2 {
     }
 };
 
-stencil make_E2_2() { return E2_2{}; }
-} // namespace ccs
+Stencil make_E2_2() { return E2_2{}; }
+} // namespace ccs::stencils

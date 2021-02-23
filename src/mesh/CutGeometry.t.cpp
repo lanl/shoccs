@@ -1,4 +1,4 @@
-#include "geometry.hpp"
+#include "CutGeometry.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -6,6 +6,7 @@
 TEST_CASE("sphere intersections")
 {
     using namespace ccs;
+    using namespace mesh;
 
     std::vector<shape> shapes;
     shapes.push_back(make_sphere(0, std::array{0.01, -0.01, 0.5}, 0.25));
@@ -13,7 +14,7 @@ TEST_CASE("sphere intersections")
     int3 n{21, 22, 23};
     real3 min{-1, -1, 0};
     real3 max{1, 2, 2.2};
-    geometry g{shapes, mesh{min, max, n}, false};
+    CutGeometry g{shapes, Cartesian{min, max, n}, false};
 
     // intersections in x from Mathematica
     SECTION("X")
@@ -306,13 +307,13 @@ TEST_CASE("rect_intersections")
 {
     using namespace ccs;
 
-    auto m = mesh{real3{}, real3{1, 1, 1}, int3{11, 2, 1}};
+    auto m = mesh::Cartesian{real3{}, real3{1, 1, 1}, int3{11, 2, 1}};
     REQUIRE(m.dims() == 2);
 
     real loc = 1.0 - 1e-6;
     auto shapes =
         std::vector<shape>{make_yz_rect(0, real3{loc, -1, -1}, real3{loc, 2, 2}, -1)};
-    auto g = geometry(shapes, m);
+    auto g = mesh::CutGeometry(shapes, m);
     REQUIRE(g.Rx().size() == 2u);
     REQUIRE(g.Sx().size() == 2u);
 }

@@ -7,6 +7,9 @@
 namespace ccs::field::tuple
 {
 
+template <int I, typename R>
+constexpr auto view(R&&);
+
 // Concept for being able to apply vs::all.  Need to exclude int3 as
 // an "Allable" range to trigger proper tuple construction calls
 template <typename T>

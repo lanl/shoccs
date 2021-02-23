@@ -1,6 +1,6 @@
-add_library(stencils E2_2.cpp)
+add_library(shoccs-stencils E2_2.cpp)
 
-target_include_directories(stencils PUBLIC ..)
-target_link_libraries(stencils PRIVATE range-v3::range-v3)
+target_include_directories(shoccs-stencils PUBLIC ..)
+target_link_libraries(shoccs-stencils PRIVATE range-v3::range-v3)
 
-add_unit_test(E2_2 "stencils" stencils range-v3::range-v3)
+add_unit_test(E2_2 "stencils" shoccs-stencils range-v3::range-v3)

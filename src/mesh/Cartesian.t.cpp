@@ -1,4 +1,4 @@
-#include "mesh.hpp"
+#include "Cartesian.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -9,7 +9,7 @@ TEST_CASE("mesh api")
 {
     using namespace ccs;
 
-    auto m = mesh{};
+    auto m = mesh::Cartesian{};
 
     SECTION("3d")
     {
@@ -17,7 +17,7 @@ TEST_CASE("mesh api")
         real3 max{1.0, 2.0, 3.0};
         int3 n{11, 31, 51};
 
-        m = mesh{min, max, n};
+        m = mesh::Cartesian{min, max, n};
 
         REQUIRE(m.dims() == 3);
 
@@ -30,17 +30,16 @@ TEST_CASE("mesh api")
 
             auto f = m.ucf_ijk2dir(i);
             REQUIRE(f(int3{0, 0, 0}) == 0);
-            REQUIRE(f(int3{n[0]-1, n[1]-1, n[2]-1}) == m.size()-1);
-            
-            int3 ijk {};
-            ijk[i] = n[i]-1;
-            REQUIRE(f(ijk) == n[i]-1);
+            REQUIRE(f(int3{n[0] - 1, n[1] - 1, n[2] - 1}) == m.size() - 1);
+
+            int3 ijk{};
+            ijk[i] = n[i] - 1;
+            REQUIRE(f(ijk) == n[i] - 1);
 
             auto [fast, slow] = index::dirs(i);
-            int3 pt {ijk[slow], ijk[fast], ijk[i]};
+            int3 pt{ijk[slow], ijk[fast], ijk[i]};
             auto ff = m.ucf_dir(i);
             REQUIRE(ff(pt) == f(ijk));
-
         }
     }
 
@@ -50,7 +49,7 @@ TEST_CASE("mesh api")
         real3 max{1.0, 2.0};
         int3 n{11, 31};
 
-        m = mesh{min, max, n};
+        m = mesh::Cartesian{min, max, n};
 
         REQUIRE(m.dims() == 2);
 
@@ -63,17 +62,16 @@ TEST_CASE("mesh api")
 
             auto f = m.ucf_ijk2dir(i);
             REQUIRE(f(int3{0, 0, 0}) == 0);
-            REQUIRE(f(int3{n[0]-1, n[1]-1, 0}) == m.size()-1);
-            
-            int3 ijk {};
-            ijk[i] = n[i]-1;
-            REQUIRE(f(ijk) == n[i]-1);
+            REQUIRE(f(int3{n[0] - 1, n[1] - 1, 0}) == m.size() - 1);
+
+            int3 ijk{};
+            ijk[i] = n[i] - 1;
+            REQUIRE(f(ijk) == n[i] - 1);
 
             auto [fast, slow] = index::dirs(i);
-            int3 pt {ijk[slow], ijk[fast], ijk[i]};
+            int3 pt{ijk[slow], ijk[fast], ijk[i]};
             auto ff = m.ucf_dir(i);
             REQUIRE(ff(pt) == f(ijk));
-
         }
     }
 
@@ -83,7 +81,7 @@ TEST_CASE("mesh api")
         std::vector<real> max{2.0};
         std::vector<int> n{21};
 
-        m = mesh{min, max, n};
+        m = mesh::Cartesian{min, max, n};
 
         REQUIRE(m.dims() == 1);
 
@@ -96,14 +94,14 @@ TEST_CASE("mesh api")
 
             auto f = m.ucf_ijk2dir(i);
             REQUIRE(f(int3{0, 0, 0}) == 0);
-            REQUIRE(f(int3{n[0]-1, 0, 0}) == m.size()-1);
-            
-            int3 ijk {};
-            ijk[i] = n[i]-1;
-            REQUIRE(f(ijk) == n[i]-1);
+            REQUIRE(f(int3{n[0] - 1, 0, 0}) == m.size() - 1);
+
+            int3 ijk{};
+            ijk[i] = n[i] - 1;
+            REQUIRE(f(ijk) == n[i] - 1);
 
             auto [fast, slow] = index::dirs(i);
-            int3 pt {ijk[slow], ijk[fast], ijk[i]};
+            int3 pt{ijk[slow], ijk[fast], ijk[i]};
             auto ff = m.ucf_dir(i);
             REQUIRE(ff(pt) == f(ijk));
         }

@@ -5,7 +5,7 @@
 
 #include <cassert>
 
-namespace ccs
+namespace ccs::mesh
 {
 
 struct umesh_line {
@@ -16,7 +16,7 @@ struct umesh_line {
 };
 
 // simple representation of a uniform mesh
-class mesh
+class Cartesian
 {
     real3 min_;
     real3 max_;
@@ -25,9 +25,9 @@ class mesh
     int dims_;
 
 public:
-    mesh() = default;
+    Cartesian() = default;
 
-    mesh(span<const real> min, span<const real> max, span<const int> n);
+    Cartesian(span<const real> min, span<const real> max, span<const int> n);
 
     constexpr int dims() const { return dims_; }
 
@@ -45,9 +45,7 @@ public:
         return {min_[i], max_[i], h_[i], n_[i]};
     }
 
-    constexpr real3 h() const {
-        return h_;
-    }
+    constexpr real3 h() const { return h_; }
 
     constexpr int3 extents() const { return n_; }
 
@@ -88,4 +86,4 @@ public:
 
     constexpr int uc_dir(int dir, const int3& pt) { return ucf_dir(dir)(pt); }
 };
-} // namespace ccs
+} // namespace ccs::mesh

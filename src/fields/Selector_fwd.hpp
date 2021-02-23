@@ -22,3 +22,10 @@ template <typename S>
 concept SelectionType = is_Selection<std::remove_cvref_t<S>>::value;
 } // namespace traits
 } // namespace ccs::selector
+
+namespace std
+{
+template <typename L, typename R>
+struct tuple_size<ccs::selector::Selection<L, R>> : tuple_size<R> {
+};
+} // namespace std

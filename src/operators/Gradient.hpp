@@ -7,10 +7,9 @@ namespace ccs::operators
 
 struct Gradient {
 
-    template<field::tuple::traits::ScalarType U>
-    constexpr auto operator()(U&& u) {
+    auto operator()(field::SimpleScalar<std::span<const real>>)
+    {
         return field::SimpleVector<std::vector<real>>{};
     }
-
 };
 } // namespace ccs::operators

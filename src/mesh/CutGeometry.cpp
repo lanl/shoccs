@@ -1,10 +1,10 @@
-#include "geometry.hpp"
+#include "CutGeometry.hpp"
 #include "indexing.hpp"
 #include <cassert>
 #include <cmath>
 #include <iostream>
 
-namespace ccs
+namespace ccs::mesh
 {
 
 static std::optional<hit_info>
@@ -168,7 +168,9 @@ static void init_solid(const std::array<umesh_line, 3>& lines,
     }
 }
 
-geometry::geometry(std::span<const shape> shapes, const mesh& m, bool check_domain)
+CutGeometry::CutGeometry(std::span<const shape> shapes,
+                         const Cartesian& m,
+                         bool check_domain)
 {
     std::array<umesh_line, 3> lines{m.line(0), m.line(1), m.line(2)};
     init_line<0>(shapes, lines, rx_, rx_m_);
@@ -197,29 +199,29 @@ geometry::geometry(std::span<const shape> shapes, const mesh& m, bool check_doma
     }
 }
 
-std::span<const mesh_object_info> geometry::Rx() const { return rx_; }
+std::span<const mesh_object_info> CutGeometry::Rx() const { return rx_; }
 
-std::span<const mesh_object_info> geometry::Rx(int shape_id) const
+std::span<const mesh_object_info> CutGeometry::Rx(int shape_id) const
 {
     return rx_m_[shape_id];
 }
 
-std::span<const mesh_object_info> geometry::Ry() const { return ry_; }
+std::span<const mesh_object_info> CutGeometry::Ry() const { return ry_; }
 
-std::span<const mesh_object_info> geometry::Ry(int shape_id) const
+std::span<const mesh_object_info> CutGeometry::Ry(int shape_id) const
 {
     return ry_m_[shape_id];
 }
 
-std::span<const mesh_object_info> geometry::Rz() const { return rz_; }
+std::span<const mesh_object_info> CutGeometry::Rz() const { return rz_; }
 
-std::span<const mesh_object_info> geometry::Rz(int shape_id) const
+std::span<const mesh_object_info> CutGeometry::Rz(int shape_id) const
 {
     return rz_m_[shape_id];
 }
 
-std::span<const int3> geometry::Sx() const { return sx_; }
-std::span<const int3> geometry::Sy() const { return sy_; }
-std::span<const int3> geometry::Sz() const { return sz_; }
+std::span<const int3> CutGeometry::Sx() const { return sx_; }
+std::span<const int3> CutGeometry::Sy() const { return sy_; }
+std::span<const int3> CutGeometry::Sz() const { return sz_; }
 
-} // namespace ccs
+} // namespace ccs::mesh
