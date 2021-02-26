@@ -28,8 +28,8 @@ TEST_CASE("concepts")
     REQUIRE(!All<T>);
     REQUIRE(!All<T&&>);
 
-    REQUIRE(!All<container_tuple<T>&>);
-    REQUIRE(!All<container_tuple<T>>);
+    REQUIRE(!All<ContainerTuple<T>&>);
+    REQUIRE(!All<ContainerTuple<T>>);
 
     REQUIRE(All<Tuple<T>&>);
     REQUIRE(!All<Tuple<T>>);

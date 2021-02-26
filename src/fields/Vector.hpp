@@ -76,40 +76,40 @@ public:
     ScalarView_Const x() const
     {
         return ScalarView_Const{location_,
-                                Tuple{this->template get<0>().template get<0>()},
+                                Tuple{view<0>(this->template get<0>())},
                                 this->template get<1>()};
     }
 
     ScalarView_Mutable x()
     {
         return ScalarView_Mutable{location_,
-                                  Tuple{this->template get<0>().template get<0>()},
+                                  Tuple{view<0>(this->template get<0>())},
                                   this->template get<1>()};
     }
     ScalarView_Const y() const
     {
         return ScalarView_Const{location_,
-                                Tuple{this->template get<0>().template get<1>()},
+                                Tuple{view<1>(this->template get<0>())},
                                 this->template get<1>()};
     }
 
     ScalarView_Mutable y()
     {
         return ScalarView_Mutable{location_,
-                                  Tuple{this->template get<0>().template get<1>()},
+                                  Tuple{view<1>(this->template get<0>())},
                                   this->template get<1>()};
     }
     ScalarView_Const z() const
     {
         return ScalarView_Const{location_,
-                                Tuple{this->template get<0>().template get<2>()},
+                                Tuple{view<2>(this->template get<0>())},
                                 this->template get<1>()};
     }
 
     ScalarView_Mutable z()
     {
         return ScalarView_Mutable{location_,
-                                  Tuple{this->template get<0>().template get<2>()},
+                                  Tuple{view<2>(this->template get<0>())},
                                   this->template get<1>()};
     }
 

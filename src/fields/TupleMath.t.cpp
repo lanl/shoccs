@@ -13,6 +13,28 @@
 
 #include <vector>
 
+TEST_CASE("container math concepts")
+{
+    using namespace ccs;
+    using namespace ccs::field::tuple;
+
+    constexpr auto f = []<typename T, bool B = true>()
+    {
+        if constexpr (B) {
+            static_assert(requires(Tuple<T> x) { x = 1; });
+            static_assert(requires(Tuple<T> x) { x += 1; });
+        } else {
+            static_assert(!requires(Tuple<T> x) { x = 1; });
+            static_assert(!requires(Tuple<T> x) { x += 1; });
+        }
+    };
+    f.template operator()<std::vector<real>>();
+    f.template operator()<std::vector<real>&>();
+    f.template operator()<const std::vector<real>&, false>();
+    f.template operator()<std::span<real>>();
+    f.template operator()<std::span<const real>, false>();
+}
+
 TEST_CASE("container math")
 {
     using namespace ccs;

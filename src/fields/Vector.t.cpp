@@ -110,6 +110,12 @@ TEST_CASE("to scalar")
         sz | selector::D = 1;
         REQUIRE(rs::equal(s | selector::Dz, std::vector{1., 1., 1.}));
     }
+
+    {
+        VectorView_Const v = s;
+        ScalarView_Const sx = v.x();
+        REQUIRE(rs::equal(sx | selector::D, v | selector::Dx));
+    }
 }
 
 TEST_CASE("selection")

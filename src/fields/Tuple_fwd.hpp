@@ -21,8 +21,11 @@ concept All = rs::range<T&>&& rs::viewable_range<T> &&
 namespace traits
 {
 template <typename T>
-concept range = rs::input_range<T> && (!std::same_as<int3, std::remove_cvref_t<T>>);
-}
+concept Range = rs::input_range<T> && (!std::same_as<int3, std::remove_cvref_t<T>>);
+
+template <typename T>
+concept OutputRange = rs::range<T>&& rs::output_range<T, rs::range_value_t<T>>;
+} // namespace traits
 
 // Forward decls for main types
 template <typename...>
@@ -36,28 +39,46 @@ struct tag {
 
 // forward decls for component types
 template <typename...>
-struct container_tuple;
+struct ContainerTuple;
 
 template <typename...>
 struct view_tuple;
+
+template<typename...>
+struct ViewBaseTuple;
+
+template<typename...>
+struct ViewTuple;
 
 // traits and concepts for component types
 namespace traits
 {
 template <typename>
-struct is_container_tuple : std::false_type {
+struct is_ContainerTuple : std::false_type {
 };
 
 template <typename... Args>
-struct is_container_tuple<container_tuple<Args...>> : std::true_type {
+struct is_ContainerTuple<ContainerTuple<Args...>> : std::true_type {
 };
 
 template <typename T>
-concept Container_Tuple = is_container_tuple<std::remove_cvref_t<T>>::value;
+concept ContainerTupleType = is_ContainerTuple<std::remove_cvref_t<T>>::value;
 
 template <typename T, typename U>
-concept Other_Container_Tuple = Container_Tuple<T>&& Container_Tuple<U> &&
+concept OtherContainerTuple = ContainerTupleType<T>&& ContainerTupleType<U> &&
                                 (!std::same_as<U, std::remove_cvref_t<T>>);
+
+template <typename>
+struct is_ViewBaseTuple : std::false_type {
+};
+
+template <typename... Args>
+struct is_ViewBaseTuple<ViewBaseTuple<Args...>> : std::true_type {
+};
+
+template <typename T>
+concept ViewBaseTupleType = is_ViewBaseTuple<std::remove_cvref_t<T>>::value;
+
 
 template <typename>
 struct is_view_tuple : std::false_type {
@@ -69,6 +90,20 @@ struct is_view_tuple<view_tuple<Args...>> : std::true_type {
 
 template <typename T>
 concept View_Tuple = is_view_tuple<std::remove_cvref_t<T>>::value;
+
+template <typename>
+struct is_ViewTuple : std::false_type {
+};
+
+template <typename... Args>
+struct is_ViewTuple<ViewTuple<Args...>> : std::true_type {
+};
+
+template <typename T>
+concept ViewTupleType = is_ViewTuple<std::remove_cvref_t<T>>::value;
+
+
+
 
 template <typename>
 struct is_Tuple : std::false_type {
