@@ -1,4 +1,4 @@
-#include "stencils.hpp"
+#include "Stencils.hpp"
 
 #include <range/v3/algorithm/fill.hpp>
 #include <range/v3/algorithm/reverse.hpp>

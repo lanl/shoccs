@@ -2,7 +2,7 @@
 
 #include "types.hpp"
 #include "real3_operators.hpp"
-#include "shapes.hpp"
+#include "Shapes.hpp"
 #include "indexing.hpp"
 
 namespace ccs {

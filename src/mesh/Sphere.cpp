@@ -1,5 +1,5 @@
 #include "real3_operators.hpp"
-#include "shapes.hpp"
+#include "Shapes.hpp"
 #include <cassert>
 #include <cmath>
 #include <iostream>
