@@ -16,6 +16,8 @@
 
 #include <vector>
 
+#include <iostream>
+
 TEST_CASE("concepts")
 {
     using namespace ccs;
@@ -183,6 +185,85 @@ TEST_CASE("construction")
         auto x = Tuple{vs::concat(Tuple{vs::iota(0, 16)}, vs::iota(16, 21))};
         REQUIRE(rs::equal(x, vs::iota(0, 21)));
     }
+}
+
+TEST_CASE("Conversion OneTuples")
+{
+    using namespace ccs;
+    using namespace ccs::field;
+
+    auto x = Tuple<std::vector<int>>{std::vector{1, 2, 3}};
+    Tuple<std::span<int>> y = x;
+
+    REQUIRE(x.size() == y.size());
+    REQUIRE(rs::equal(x, y));
+
+    Tuple<std::span<const int>> z = x;
+    REQUIRE(x.size() == z.size());
+    REQUIRE(rs::equal(x, z));
+
+    Tuple<std::span<const int>> zz = y;
+    REQUIRE(x.size() == zz.size());
+    REQUIRE(rs::equal(x, zz));
+}
+
+TEST_CASE("Conversion ThreeTuples")
+{
+    using namespace ccs;
+    using namespace ccs::field;
+    using T = std::vector<int>;
+    using U = std::span<int>;
+    using V = std::span<const int>;
+
+    auto x =
+        Tuple<T, T, T>{std::vector{1, 2, 3}, std::vector{1}, std::vector{5, 4, 3, 2}};
+    Tuple<U, U, U> y = x;
+
+    REQUIRE(rs::equal(view<0>(x), view<0>(y)));
+    REQUIRE(rs::equal(view<1>(x), view<1>(y)));
+    REQUIRE(rs::equal(view<2>(x), view<2>(y)));
+
+    Tuple<V, V, V> z = x;
+    REQUIRE(rs::equal(view<0>(x), view<0>(z)));
+    REQUIRE(rs::equal(view<1>(x), view<1>(z)));
+    REQUIRE(rs::equal(view<2>(x), view<2>(z)));
+
+    Tuple<V, V, V> zz = y;
+    REQUIRE(rs::equal(view<0>(x), view<0>(zz)));
+    REQUIRE(rs::equal(view<1>(x), view<1>(zz)));
+    REQUIRE(rs::equal(view<2>(x), view<2>(zz)));
+}
+
+TEST_CASE("Conversion Nested ThreeTuples")
+{
+    using namespace ccs;
+    using namespace ccs::field;
+    using T = std::vector<int>;
+    using U = std::span<int>;
+    using V = std::span<const int>;
+
+    auto x = Tuple<Tuple<T>, Tuple<T, T, T>>{
+        Tuple{std::vector{1, 2}},
+        Tuple{std::vector{1, 2, 3}, std::vector{1}, std::vector{5, 4, 3, 2}},
+    };
+
+    Tuple<Tuple<U>, Tuple<U, U, U>> y = x;
+    REQUIRE(rs::equal(x.get<0>(), y.get<0>()));
+    REQUIRE(rs::equal(view<0>(x.get<1>()), view<0>(y.get<1>())));
+    REQUIRE(rs::equal(view<1>(x.get<1>()), view<1>(y.get<1>())));
+    REQUIRE(rs::equal(view<2>(x.get<1>()), view<2>(y.get<1>())));
+
+    Tuple<Tuple<V>, Tuple<V, V, V>> z = x;
+    REQUIRE(rs::equal(x.get<0>(), z.get<0>()));
+    REQUIRE(rs::equal(view<0>(x.get<1>()), view<0>(z.get<1>())));
+    REQUIRE(rs::equal(view<1>(x.get<1>()), view<1>(z.get<1>())));
+    REQUIRE(rs::equal(view<2>(x.get<1>()), view<2>(z.get<1>())));
+
+    Tuple<Tuple<V>, Tuple<V, V, V>> zz = y;
+    REQUIRE(rs::equal(x.get<0>(), zz.get<0>()));
+    REQUIRE(rs::equal(view<0>(x.get<1>()), view<0>(zz.get<1>())));
+    REQUIRE(rs::equal(view<1>(x.get<1>()), view<1>(zz.get<1>())));
+    REQUIRE(rs::equal(view<2>(x.get<1>()), view<2>(zz.get<1>())));
 }
 
 TEST_CASE("numeric assignment with owning tuple")

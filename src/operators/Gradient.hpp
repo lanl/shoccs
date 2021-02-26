@@ -1,15 +1,21 @@
 #pragma once
 
+#include "Derivative.hpp"
+
 #include "fields/SystemField.hpp"
 
 namespace ccs::operators
 {
 
-struct Gradient {
+class Gradient
+{
+    Derivative dx;
+    Derivative dy;
+    Derivative dz;
 
-    auto operator()(field::SimpleScalar<std::span<const real>>)
-    {
-        return field::SimpleVector<std::vector<real>>{};
-    }
+public:
+    Gradient() = default;
+
+    std::function<void(field::VectorView_Mutable)> operator()(field::ScalarView_Const);
 };
 } // namespace ccs::operators

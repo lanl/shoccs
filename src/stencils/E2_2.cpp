@@ -13,14 +13,14 @@ struct E2_2 {
     static constexpr int X = 2;
 
     StencilInfo query_max() const { return {P, R, T, X}; }
-    StencilInfo query(boundary b) const
+    StencilInfo query(bcs::type b) const
     {
         switch (b) {
-        case boundary::dirichlet:
+        case bcs::Dirichlet:
             [[fallthrough]];
-        case boundary::floating:
+        case bcs::Floating:
             return {P, R, T, 0};
-        case boundary::neumann:
+        case bcs::Neumann:
             return {P, R, T, X};
         default:
             return {};
@@ -35,18 +35,18 @@ struct E2_2 {
     }
 
     void nbs(real h,
-             boundary b,
+             bcs::type b,
              real psi,
              bool right,
              std::span<real> c,
              std::span<real> x) const
     {
         switch (b) {
-        case boundary::floating:
+        case bcs::Floating:
             return nbs_floating(h, psi, c.subspan(0, R * T), right);
-        case boundary::dirichlet:
+        case bcs::Dirichlet:
             return nbs_dirichlet(h, psi, c.subspan(0, R * T), right);
-        case boundary::neumann:
+        case bcs::Neumann:
             return nbs_neumann(h, psi, c.subspan(0, R * T), x.subspan(0, X), right);
         }
     }

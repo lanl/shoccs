@@ -61,4 +61,7 @@ using tuple::Scalar;
 
 template <typename T>
 using SimpleScalar = Scalar<Tuple<T>, Tuple<T, T, T>>;
+
+using ScalarView_Mutable = SimpleScalar<std::span<real>>;
+using ScalarView_Const = SimpleScalar<std::span<const real>>;
 } // namespace ccs::field

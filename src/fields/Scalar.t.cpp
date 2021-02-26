@@ -35,7 +35,39 @@ TEST_CASE("construction")
     using namespace ccs::field;
     using T = std::vector<int>;
     auto s = SimpleScalar<T>{};
+    auto r = SimpleScalar<T>{&global::loc};
 }
+
+TEST_CASE("conversion")
+{
+    using namespace ccs;
+    using namespace ccs::field;
+
+    auto s = SimpleScalar<std::vector<int>>{
+        &global::loc,
+        Tuple{std::vector{1, 2, 3}},
+        Tuple{std::vector{1}, std::vector{2, 3}, std::vector{4, 5, 6}}};
+
+    SimpleScalar<std::span<const int>> r = s;
+
+    REQUIRE((s | selector::D).size() == (r | selector::D).size());
+    REQUIRE(rs::equal(s | selector::D, r | selector::D));
+
+    auto f = [](SimpleScalar<std::span<int>> x) {
+        auto q = SimpleScalar<std::vector<int>>{
+            &global::loc,
+            Tuple{std::vector{1, 2, 3}},
+            Tuple{std::vector{1}, std::vector{2, 3}, std::vector{4, 5, 6}}};
+        x = 2 * q;
+    };
+
+    s = f;
+    REQUIRE(rs::equal(s | selector::D, std::vector{2, 4, 6}));
+    REQUIRE(rs::equal(s | selector::Rx, std::vector{2}));
+    REQUIRE(rs::equal(s | selector::Ry, std::vector{4, 6}));
+    REQUIRE(rs::equal(s | selector::Rz, std::vector{8, 10, 12}));
+}
+
 TEST_CASE("selection")
 {
     using namespace ccs;
@@ -58,7 +90,8 @@ TEST_CASE("selection")
     REQUIRE(rs::equal(ry, s | selector::Ry));
     REQUIRE(rs::equal(rz, s | selector::Rz));
 
-    // static_assert(field::tuple::All<std::remove_cvref_t<decltype(s | selector::D)>>);
+    // static_assert(field::tuple::All<std::remove_cvref_t<decltype(s |
+    // selector::D)>>);
     using T = decltype(s | selector::D);
     static_assert(All<ranges::ref_view<std::vector<int>>>);
     static_assert(rs::range<T>);

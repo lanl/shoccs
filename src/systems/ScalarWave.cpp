@@ -65,7 +65,8 @@ ScalarWave::ScalarWave( // cart_mesh&& cart_,
 
     // Initialize the operator
     auto op = operators::DiscreteOperator{};
-    gradient = op.to<operators::Gradient>(); // domainBoundaries, ObjectBoundaries);
+    gradient =
+        op.to<operators::Gradient>(bcs::Grid{}); // domainBoundaries, ObjectBoundaries);
     // Initialize wave speeds
     grad_G | selector::D =
         mesh::location | field::Tuple{vs::transform(neg_G<0>{center, radius}),

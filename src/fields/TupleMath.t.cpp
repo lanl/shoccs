@@ -119,10 +119,12 @@ TEST_CASE("view math with tuples")
         REQUIRE(rs::equal(view<1>(xx), g));
         REQUIRE(rs::equal(view<2>(xx), h));
 
-        auto yy = Tuple<T, T, T>{};
-        yy = Tuple{x + y, z + x + x + y, z + z + x};
-        REQUIRE(rs::equal(view<0>(yy), z));
-        REQUIRE(rs::equal(view<1>(yy), g));
-        REQUIRE(rs::equal(view<2>(yy), h));
+        // This functionality complicates the constraints on Tuple construction and I
+        // don't think we actually need it.
+        // auto yy = Tuple<T, T, T>{};
+        // yy = Tuple{x + y, z + x + x + y, z + z + x};
+        // REQUIRE(rs::equal(view<0>(yy), z));
+        // REQUIRE(rs::equal(view<1>(yy), g));
+        // REQUIRE(rs::equal(view<2>(yy), h));
     }
 }

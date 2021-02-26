@@ -33,6 +33,83 @@ TEST_CASE("construction")
     using namespace ccs::field;
     using T = std::vector<int>;
     auto s = SimpleVector<T>{};
+    auto r = SimpleVector<T>{&global::loc};
+}
+
+TEST_CASE("conversion")
+{
+    using namespace ccs;
+    using namespace ccs::field;
+
+    auto s = SimpleVector<std::vector<int>>{
+        &global::loc,
+        Tuple{std::vector{1, 2, 3}, std::vector{4, 5, 6}, std::vector{7, 8, 9}},
+        Tuple{std::vector{1}, std::vector{2, 3}, std::vector{4, 5, 6}}};
+
+    SimpleVector<std::span<const int>> r = s;
+
+    REQUIRE((s | selector::Dx).size() == (r | selector::Dx).size());
+    REQUIRE(rs::equal(s | selector::Dx, r | selector::Dx));
+
+    auto f = [](SimpleVector<std::span<int>> x) {
+        auto q = SimpleVector<std::vector<int>>{
+            &global::loc,
+            Tuple{std::vector{1, 2, 3}, std::vector{4, 5, 6}, std::vector{7, 8, 9}},
+            Tuple{std::vector{1}, std::vector{2, 3}, std::vector{4, 5, 6}}};
+        x = 2 * q;
+    };
+
+    s = f;
+    REQUIRE(rs::equal(s | selector::Dz, std::vector{14, 16, 18}));
+    REQUIRE(rs::equal(s | selector::Rx, std::vector{2}));
+    REQUIRE(rs::equal(s | selector::Ry, std::vector{4, 6}));
+    REQUIRE(rs::equal(s | selector::Rz, std::vector{8, 10, 12}));
+}
+
+TEST_CASE("to scalar")
+{
+    using namespace ccs;
+    using namespace ccs::field;
+
+    auto s = SimpleVector<std::vector<real>>{
+        &global::loc,
+        Tuple{std::vector{1, 2, 3}, std::vector{4, 5, 6}, std::vector{7, 8, 9}},
+        Tuple{std::vector{1}, std::vector{2, 3}, std::vector{4, 5, 6}}};
+
+    {
+        ScalarView_Const sx = s.x();
+        REQUIRE(rs::equal(sx | selector::D, s | selector::Dx));
+        REQUIRE(rs::equal(sx | selector::Rx, s | selector::Rx));
+    }
+
+    {
+        ScalarView_Mutable sx = s.x();
+        sx | selector::D = 1;
+        REQUIRE(rs::equal(s | selector::Dx, std::vector{1., 1., 1.}));
+    }
+
+    {
+        ScalarView_Const sy = s.y();
+        REQUIRE(rs::equal(sy | selector::D, s | selector::Dy));
+        REQUIRE(rs::equal(sy | selector::Ry, s | selector::Ry));
+    }
+
+    {
+        ScalarView_Mutable sy = s.y();
+        sy | selector::D = 1;
+        REQUIRE(rs::equal(s | selector::Dy, std::vector{1., 1., 1.}));
+    }
+    {
+        ScalarView_Const sz = s.z();
+        REQUIRE(rs::equal(sz | selector::D, s | selector::Dz));
+        REQUIRE(rs::equal(sz | selector::Rz, s | selector::Rz));
+    }
+
+    {
+        ScalarView_Mutable sz = s.z();
+        sz | selector::D = 1;
+        REQUIRE(rs::equal(s | selector::Dz, std::vector{1., 1., 1.}));
+    }
 }
 
 TEST_CASE("selection")

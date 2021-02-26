@@ -3,8 +3,10 @@
 
 #include "IdentityStencil.hpp"
 
-#include "mesh/Cartesian.hpp"
-#include "mesh/CutGeometry.hpp"
+#include "mesh/Mesh.hpp"
+
+#include "fields/Selector.hpp"
+#include "fields/views.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -13,7 +15,9 @@
 
 #include <range/v3/algorithm/count.hpp>
 #include <range/v3/algorithm/equal.hpp>
+#include <range/v3/range/conversion.hpp>
 #include <range/v3/view/filter.hpp>
+#include <range/v3/view/transform.hpp>
 
 TEST_CASE("domain")
 {
@@ -23,11 +27,25 @@ TEST_CASE("domain")
 
     Stencil stencil = Identity{};
     REQUIRE(stencil);
-    const int3 extents{31, 33, 32};
-    auto m = mesh::Cartesian{real3{-1, -1, -1}, real3{1, 1, 1}, extents};
-    auto g = mesh::CutGeometry{};
+    // const int3 extents{31, 33, 32};
+    // auto m = mesh::Cartesian{real3{-1, -1, -1}, real3{1, 1, 1}, extents};
+    // auto g = mesh::CutGeometry{};
 
-    auto op = operators::DiscreteOperator(m, g);
+    auto m = mesh::Mesh{mesh::DomainBounds{real3{-1, -1, -1}, real3{1, 1, 1}},
+                        mesh::IndexExtents{31, 33, 32}};
+
+    auto gradient = operators::DiscreteOperator(Identity{}, m)
+                        .to<operators::Gradient>(bcs::Grid{bcs::dd, bcs::ff, bcs::dd});
+
+    randomize();
+
+    auto u = field::SimpleScalar<std::vector<real>>{m};
+    u | selector::D = mesh::location | vs::transform([](auto&&...) { return pick(); });
+    u | selector::Rxyz = 0;
+
+    auto du = field::SimpleVector<std::vector<real>>{m};
+
+    du = gradient(u);
 
 #if 0
 

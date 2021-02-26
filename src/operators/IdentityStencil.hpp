@@ -7,9 +7,9 @@
 namespace ccs::stencils
 {
 struct Identity {
-    StencilInfo query(boundary b) const
+    StencilInfo query(bcs::type b) const
     {
-        if (b == boundary::neumann)
+        if (b == bcs::type::N)
             return {0, 2, 3, 2};
         else
             return {0, 2, 3, 0};
@@ -19,14 +19,14 @@ struct Identity {
     void interior(real, std::span<real> c) const { c[0] = 1; }
 
     void nbs(real,
-             boundary b,
+             bcs::type b,
              real psi,
              bool right_wall,
              std::span<real> c,
              std::span<real> x) const
     {
         assert(0 <= psi && psi <= 1);
-        if (b == boundary::neumann) {
+        if (b == bcs::type::N) {
             if (right_wall) {
                 x[0] = 1;
                 x[1] = 2;

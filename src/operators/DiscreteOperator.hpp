@@ -1,7 +1,7 @@
 #pragma once
 
-#include "mesh/Cartesian.hpp"
-#include "mesh/CutGeometry.hpp"
+#include "boundaries.hpp"
+#include "mesh/Mesh.hpp"
 #include "stencils/stencils.hpp"
 #include "types.hpp"
 
@@ -15,10 +15,13 @@ class DiscreteOperator
 public:
     DiscreteOperator() = default;
 
-    DiscreteOperator(const mesh::Cartesian&, const mesh::CutGeometry&) {}
+    DiscreteOperator(stencils::Stencil stencil, const mesh::Mesh&)
+        : stencil{MOVE(stencil)}
+    {
+    }
 
     template <typename T>
-    T to()
+    T to(const bcs::Grid&)
     {
         return {};
     }

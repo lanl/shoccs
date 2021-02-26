@@ -39,6 +39,10 @@ constexpr auto tuple_map(F&& f, T&& t)
 // Given a container and and input range, attempt to resize the container.
 // Either way, copy the input range into the container - may not be safe.
 template <typename C, traits::range R>
+requires requires(C container, R r)
+{
+    rs::copy(r, rs::begin(container));
+}
 void resize_and_copy(C& container, R&& r)
 {
     constexpr bool can_resize_member = requires(C c, R r) { c.resize(r.size()); };
@@ -74,12 +78,19 @@ auto container_from_container(const T& t)
         {
             std::tuple<Args...>{Args(t.template get<Is>())...};
         };
+        constexpr bool fromRange = requires(T t)
+        {
+            std::tuple<Args...>{
+                Args{rs::begin(t.template get<Is>()), rs::end(t.template get<Is>())}...};
+        };
 
         if constexpr (direct)
             return std::tuple<Args...>{Args(t.template get<Is>())...};
-        else
+        else if constexpr (fromRange)
             return std::tuple<Args...>{
                 Args{rs::begin(t.template get<Is>()), rs::end(t.template get<Is>())}...};
+        else
+            static_assert(true, "Cannot construct container");
     }
     (std::make_index_sequence<sizeof...(Args)>{});
 }
@@ -274,8 +285,13 @@ public:
     view_base_tuple() = default;
     // view_base_tuple(Args&&...args) : v{vs::all(FWD(args))...} {};
 
-    template <All... Ranges>
+    template <traits::Non_Tuple_Input_Range... Ranges>
     view_base_tuple(Ranges&&... args) : v{vs::all(FWD(args))...}
+    {
+    }
+
+    template <traits::TupleType T>
+    view_base_tuple(T&& t) : v{tuple_map(vs::all, t.view())}
     {
     }
 
@@ -409,13 +425,18 @@ public:
     view_tuple() = default;
     view_tuple(Args&&... args) : Base_Tup{FWD(args)...}, As_View{Base_Tup::view()} {}
 
-    template <traits::range... Ranges>
+    template <traits::Non_Tuple_Input_Range... Ranges>
     view_tuple(Ranges&&... r) : Base_Tup{FWD(r)...}, As_View{Base_Tup::view()}
     {
     }
 
     template <typename... C>
     view_tuple(container_tuple<C...>& x) : Base_Tup{x}, As_View{Base_Tup::view()}
+    {
+    }
+
+    template <traits::TupleType R>
+    view_tuple(R&& r) : Base_Tup{FWD(r)}, As_View{Base_Tup::view()}
     {
     }
 
@@ -593,6 +614,9 @@ struct Tuple : container_tuple<Args...>, view_tuple<Args&...> {
     }
 };
 
+//
+// Non Owning Tuple
+//
 template <All... Args>
 struct Tuple<Args...> : view_tuple<Args...> {
     using View = view_tuple<Args...>;
@@ -603,6 +627,12 @@ struct Tuple<Args...> : view_tuple<Args...> {
     Tuple(tag, Args&&... args) : View{FWD(args)...} {};
 
     Tuple() = default;
+
+    template <traits::TupleType T>
+    requires(sizeof...(Args) == std::tuple_size_v<std::remove_cvref_t<T>>) Tuple(T&& t)
+        : View{FWD(t)}
+    {
+    }
 
     template <Numeric T>
     Tuple& operator=(T t)

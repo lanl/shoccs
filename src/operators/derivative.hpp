@@ -1,32 +1,12 @@
 #pragma once
 
-#include "directional.hpp"
-#include "fields/fields.hpp"
+#include "types.hpp"
 
-namespace ccs::op
+#include "fields/Scalar.hpp"
+
+namespace ccs::operators
 {
-
-class derivative
-{
-    directional x;
-    directional y;
-    directional z;
-
-public:
-    derivative() = default;
-
-    derivative(directional&& x, directional&& y, directional&& z)
-        : x{std::move(x)}, y{std::move(y)}, z{std::move(z)}
-    {
-    }
-
-    auto solid_points() const
-    {
-        return vector_range{x.solid_points(), y.solid_points(), z.solid_points()};
-    }
-
-    void operator()(const vector_field<real>& f,
-                    const vector_field<real>& df,
-                    vector_field<real>& dxyz) const;
+struct Derivative {
+    void operator()(field::ScalarView_Const, field::ScalarView_Mutable) {}
 };
-} // namespace ccs::op
+} // namespace ccs::operators

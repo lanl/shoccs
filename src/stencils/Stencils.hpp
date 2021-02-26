@@ -22,7 +22,7 @@ struct StencilInfo {
 // satisfaction of Stencil makes a type a stencil
 template <typename T>
 concept StencilType = requires(const T& stencil,
-                               boundary b,
+                               bcs::type b,
                                real h,
                                real psi,
                                bool ray_outside,
@@ -52,10 +52,10 @@ class Stencil
     public:
         virtual ~any_stencil() {}
         virtual any_stencil* clone() const = 0;
-        virtual StencilInfo query(boundary) const = 0;
+        virtual StencilInfo query(bcs::type) const = 0;
         virtual StencilInfo query_max() const = 0;
         virtual void nbs(real h,
-                         boundary,
+                         bcs::type,
                          real psi,
                          bool ray_outside,
                          std::span<real> coeffs,
@@ -74,11 +74,11 @@ class Stencil
 
         any_stencil_impl* clone() const override { return new any_stencil_impl(s); }
 
-        StencilInfo query(boundary b) const override { return s.query(b); }
+        StencilInfo query(bcs::type b) const override { return s.query(b); }
         StencilInfo query_max() const override { return s.query_max(); }
 
         void nbs(real h,
-                 boundary b,
+                 bcs::type b,
                  real psi,
                  bool ray_outside,
                  std::span<real> c,
@@ -133,11 +133,11 @@ public:
 
     explicit operator bool() const { return s != nullptr; }
 
-    StencilInfo query(boundary b) const { return s->query(b); }
+    StencilInfo query(bcs::type b) const { return s->query(b); }
     StencilInfo query_max() const { return s->query_max(); }
 
     void nbs(real h,
-             boundary b,
+             bcs::type b,
              real psi,
              bool ray_outside,
              std::span<real> c,

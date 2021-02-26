@@ -60,4 +60,7 @@ using tuple::Vector;
 
 template <typename T>
 using SimpleVector = Vector<Tuple<T, T, T>, Tuple<T, T, T>>;
+
+using VectorView_Mutable = SimpleVector<std::span<real>>;
+using VectorView_Const = SimpleVector<std::span<const real>>;
 } // namespace ccs::field

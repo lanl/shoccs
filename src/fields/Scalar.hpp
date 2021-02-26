@@ -4,6 +4,8 @@
 
 #include "Scalar_fwd.hpp"
 
+#include "Location.hpp"
+
 namespace ccs::field::tuple
 {
 
@@ -34,13 +36,20 @@ public:
     {
     }
 
-    template <traits::ScalarType S>
-    requires std::constructible_from<
-        Base,
-        typename std::remove_cvref_t<S>::Base> explicit Scalar(S&& s)
-        : Base{FWD(s).base()}, location_{FWD(s).location_}
+    explicit Scalar(const mesh::Location* location)
+        : Base{Tuple{location->x.size() * location->y.size() * location->z.size()},
+               Tuple{location->rx.size(), location->ry.size(), location->rz.size()}},
+          location_{location}
     {
     }
+
+    template <traits::ScalarType S>
+    requires std::constructible_from<Base, typename std::remove_cvref_t<S>::Base>
+    Scalar(S&& s) : Base{FWD(s).base()}, location_{FWD(s).location_}
+    {
+    }
+
+    // template<typename UU, typename VV>
 
     template <traits::ScalarType S>
     // requires std::assignable_from<Base&, typename std::remove_cvref_t<S>::Base>

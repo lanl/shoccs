@@ -1,8 +1,10 @@
 #pragma once
 
-#include "Scalar_fwd.hpp"
+#include "Scalar.hpp"
 #include "Tuple.hpp"
 #include "Vector_fwd.hpp"
+
+#include "Location.hpp"
 
 namespace ccs::field::tuple
 {
@@ -35,11 +37,18 @@ public:
     {
     }
 
+    explicit Vector(const mesh::Location* location)
+        : Base{Tuple{location->x.size() * location->y.size() * location->z.size(),
+                     location->x.size() * location->y.size() * location->z.size(),
+                     location->x.size() * location->y.size() * location->z.size()},
+               Tuple{location->rx.size(), location->ry.size(), location->rz.size()}},
+          location_{location}
+    {
+    }
+
     template <traits::VectorType S>
-    requires std::constructible_from<
-        Base,
-        typename std::remove_cvref_t<S>::Base> explicit Vector(S&& s)
-        : Base{FWD(s).base()}, location_{FWD(s).location_}
+    requires std::constructible_from<Base, typename std::remove_cvref_t<S>::Base>
+    Vector(S&& s) : Base{FWD(s).base()}, location_{FWD(s).location_}
     {
     }
 
@@ -56,6 +65,53 @@ public:
 
     Vector& operator=(const Vector&) = default;
     Vector& operator=(Vector&&) = default;
+
+    template <std::invocable<Vector&> Fn>
+    Vector& operator=(Fn&& f)
+    {
+        std::invoke(FWD(f), *this);
+        return *this;
+    }
+
+    ScalarView_Const x() const
+    {
+        return ScalarView_Const{location_,
+                                Tuple{this->template get<0>().template get<0>()},
+                                this->template get<1>()};
+    }
+
+    ScalarView_Mutable x()
+    {
+        return ScalarView_Mutable{location_,
+                                  Tuple{this->template get<0>().template get<0>()},
+                                  this->template get<1>()};
+    }
+    ScalarView_Const y() const
+    {
+        return ScalarView_Const{location_,
+                                Tuple{this->template get<0>().template get<1>()},
+                                this->template get<1>()};
+    }
+
+    ScalarView_Mutable y()
+    {
+        return ScalarView_Mutable{location_,
+                                  Tuple{this->template get<0>().template get<1>()},
+                                  this->template get<1>()};
+    }
+    ScalarView_Const z() const
+    {
+        return ScalarView_Const{location_,
+                                Tuple{this->template get<0>().template get<2>()},
+                                this->template get<1>()};
+    }
+
+    ScalarView_Mutable z()
+    {
+        return ScalarView_Mutable{location_,
+                                  Tuple{this->template get<0>().template get<2>()},
+                                  this->template get<1>()};
+    }
 
     const mesh::Location* location() const { return location_; }
 };

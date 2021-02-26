@@ -31,7 +31,7 @@ public:
 
     constexpr int dims() const { return dims_; }
 
-    constexpr int size() const { return n_[0] * n_[1] * n_[2]; }
+    constexpr long size() const { return (long)n_[0] * (long)n_[1] * (long)n_[2]; }
 
     constexpr int plane_size(int i) const
     {
