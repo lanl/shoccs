@@ -28,13 +28,6 @@ using span = std::span<T>;
 template <typename T>
 concept Numeric = std::integral<T> || std::floating_point<T>;
 
-template <typename T>
-concept TupleLike = requires(T t)
-{
-    std::get<0>(t);
-    std::tuple_size_v<std::remove_cvref_t<T>>;
-};
-
 namespace rs = ranges;
 namespace vs = ranges::views;
 

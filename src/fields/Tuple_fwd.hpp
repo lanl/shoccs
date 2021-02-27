@@ -7,6 +7,8 @@
 namespace ccs::field::tuple
 {
 
+using std::get;
+
 template <int I, typename R>
 constexpr auto view(R&&);
 
@@ -44,10 +46,10 @@ struct ContainerTuple;
 template <typename...>
 struct view_tuple;
 
-template<typename...>
+template <typename...>
 struct ViewBaseTuple;
 
-template<typename...>
+template <typename...>
 struct ViewTuple;
 
 // traits and concepts for component types
@@ -66,7 +68,7 @@ concept ContainerTupleType = is_ContainerTuple<std::remove_cvref_t<T>>::value;
 
 template <typename T, typename U>
 concept OtherContainerTuple = ContainerTupleType<T>&& ContainerTupleType<U> &&
-                                (!std::same_as<U, std::remove_cvref_t<T>>);
+                              (!std::same_as<U, std::remove_cvref_t<T>>);
 
 template <typename>
 struct is_ViewBaseTuple : std::false_type {
@@ -78,7 +80,6 @@ struct is_ViewBaseTuple<ViewBaseTuple<Args...>> : std::true_type {
 
 template <typename T>
 concept ViewBaseTupleType = is_ViewBaseTuple<std::remove_cvref_t<T>>::value;
-
 
 template <typename>
 struct is_view_tuple : std::false_type {
@@ -102,9 +103,6 @@ struct is_ViewTuple<ViewTuple<Args...>> : std::true_type {
 template <typename T>
 concept ViewTupleType = is_ViewTuple<std::remove_cvref_t<T>>::value;
 
-
-
-
 template <typename>
 struct is_Tuple : std::false_type {
 };
@@ -120,9 +118,19 @@ template <typename T>
 concept Non_Tuple_Input_Range = rs::input_range<T> && (!TupleType<T>);
 
 template <typename T>
+concept NonTupleRange = rs::input_range<T> &&
+                        (!ViewBaseTupleType<T>)&&(!ViewTupleType<T>)&&(!TupleType<T>);
+
+template <typename T>
 concept Owning_Tuple = TupleType<T>&& requires(T t)
 {
     t.template get<0>();
+};
+
+template <typename T>
+concept TupleLike = requires(T t)
+{
+    get<0>(t);
 };
 } // namespace traits
 

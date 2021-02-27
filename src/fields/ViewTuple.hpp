@@ -5,8 +5,6 @@
 #include "TupleMath.hpp"
 #include "TupleUtils.hpp"
 
-#include <iostream>
-
 namespace ccs::field::tuple
 {
 // Several utilities for working with container/view tuples
@@ -25,6 +23,12 @@ public:
 
     ViewBaseTuple() = default;
     ViewBaseTuple(Args&&... args) : v{FWD(args)...} {};
+
+    ViewBaseTuple(const ViewBaseTuple&) = default;
+    ViewBaseTuple(ViewBaseTuple&&) = default;
+
+    ViewBaseTuple& operator=(const ViewBaseTuple&) = default;
+    ViewBaseTuple& operator=(ViewBaseTuple&&) = default;
 
     template <typename... C>
     ViewBaseTuple(ContainerTuple<C...>& x)
@@ -52,22 +56,28 @@ public:
     std::tuple<vs::all_t<Args>...> v;
 
     ViewBaseTuple() = default;
-    // ViewBaseTuple(Args&&...args) : v{vs::all(FWD(args))...} {};
+    ViewBaseTuple(const ViewBaseTuple&) = default;
+    ViewBaseTuple(ViewBaseTuple&&) = default;
 
-    template <traits::Non_Tuple_Input_Range... Ranges>
+    ViewBaseTuple& operator=(const ViewBaseTuple&) = default;
+    ViewBaseTuple& operator=(ViewBaseTuple&&) = default;
+
+    ViewBaseTuple(Args&&... args) : v{vs::all(FWD(args))...} {};
+
+    template <traits::NonTupleRange... Ranges>
     ViewBaseTuple(Ranges&&... args) : v{vs::all(FWD(args))...}
     {
     }
 
-    template <traits::TupleType T>
-    ViewBaseTuple(T&& t) : v{tuple_map(vs::all, t.view())}
+    template <traits::TupleLike T>
+    ViewBaseTuple(T&& t) : v{tuple_map(vs::all, FWD(t))}
     {
     }
 
-    template <typename... C>
-    ViewBaseTuple(ContainerTuple<C...>& x) : v{tuple_map(vs::all, x.c)}
-    {
-    }
+    // template <typename... C>
+    // ViewBaseTuple(ContainerTuple<C...>& x) : v{tuple_map(vs::all, x.c)}
+    // {
+    // }
 
     template <typename... C>
     ViewBaseTuple& operator=(ContainerTuple<C...>& x)
@@ -126,9 +136,8 @@ template <typename... Args>
 ViewBaseTuple(Args&&...) -> ViewBaseTuple<Args...>;
 
 template <std::size_t I, traits::ViewBaseTupleType V>
-auto get(V&& v)
+constexpr auto get(V&& v) noexcept
 {
-    std::cout << "type VBT: " << debug::type(FWD(v)) << std::endl;
     return std::get<I>(FWD(v).v);
 }
 
@@ -178,10 +187,8 @@ public:
     AsView() = default;
     AsView(A&& a) : View(vs::all(FWD(a))) {}
 
-    //template <typename R>
-    AsView(std::tuple<vs::all_t<A>> v) : View(std::get<0>(v))
-    {
-    }
+    // template <typename R>
+    AsView(std::tuple<vs::all_t<A>> v) : View(std::get<0>(v)) {}
 
     AsView& operator=(A&& a)
     {
@@ -219,7 +226,7 @@ public:
     ViewTuple() = default;
     ViewTuple(Args&&... args) : Base_Tup{FWD(args)...}, As_View{Base_Tup::view()} {}
 
-    template <traits::Non_Tuple_Input_Range... Ranges>
+    template <traits::NonTupleRange... Ranges>
     ViewTuple(Ranges&&... r) : Base_Tup{FWD(r)...}, As_View{Base_Tup::view()}
     {
     }
@@ -275,7 +282,7 @@ public:
 };
 
 template <std::size_t I, traits::ViewTupleType V>
-decltype(auto) get(V&& v)
+constexpr decltype(auto) get(V&& v) noexcept
 {
     return get<I>(FWD(v).as_ViewBaseTuple());
 }

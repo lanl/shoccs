@@ -1,10 +1,11 @@
+#include "ContainerTuple.hpp"
 #include "types.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <range/v3/algorithm/equal.hpp>
 #include <range/v3/range/concepts.hpp>
 #include <range/v3/view/all.hpp>
-#include <range/v3/algorithm/equal.hpp>
 
 #include <vector>
 
@@ -40,4 +41,11 @@ TEST_CASE("Modify Containers from Views")
     for (auto&& i : y) i *= 2;
 
     REQUIRE(rs::equal(x, std::vector{2, 4, 6}));
+}
+
+TEST_CASE("TupleLike")
+{
+    using namespace ccs::field::tuple;
+    REQUIRE(traits::TupleLike<std::tuple<int, int>>);
+    REQUIRE(traits::TupleLike<ContainerTuple<std::vector<int>>>);
 }
