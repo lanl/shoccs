@@ -7,10 +7,6 @@
 
 namespace ccs::field::tuple
 {
-// Several utilities for working with container/view tuples
-// template <typename T>
-// using all_t = decltype(vs::all(std::declval<T>()));
-
 // this base class stores the view of (or pointer to) the data in a tuple.  It should be
 // inherited before AsView to ensure the tuple is initialized correctly.
 template <typename... Args>
@@ -43,14 +39,16 @@ public:
         return *this;
     }
 
-    auto view() { return v; }
-    auto view() const { return v; }
+    Type& as_ViewBaseTuple() & { return *this; }
+    const Type& as_ViewBaseTuple() const& { return *this; }
+    Type&& as_ViewBaseTuple() && { return MOVE(*this); }
 };
 
 template <All... Args>
 struct ViewBaseTuple<Args...> {
 private:
     using Type = ViewBaseTuple<Args...>;
+    static constexpr bool Output = (traits::AnyOutputRange<Args> && ...);
 
 public:
     std::tuple<vs::all_t<Args>...> v;
@@ -58,78 +56,60 @@ public:
     ViewBaseTuple() = default;
     ViewBaseTuple(const ViewBaseTuple&) = default;
     ViewBaseTuple(ViewBaseTuple&&) = default;
-
+    // defaults are triggered when Output is false
     ViewBaseTuple& operator=(const ViewBaseTuple&) = default;
     ViewBaseTuple& operator=(ViewBaseTuple&&) = default;
 
-    ViewBaseTuple(Args&&... args) : v{vs::all(FWD(args))...} {};
+    explicit ViewBaseTuple(Args&&... args) requires(sizeof...(Args) > 0)
+        : v{vs::all(FWD(args))...} {};
 
     template <traits::NonTupleRange... Ranges>
-    ViewBaseTuple(Ranges&&... args) : v{vs::all(FWD(args))...}
+    requires(std::constructible_from<Args, Ranges>&&...) explicit ViewBaseTuple(
+        Ranges&&... args)
+        : v{vs::all(Args{FWD(args)})...}
     {
     }
 
     template <traits::TupleLike T>
-    ViewBaseTuple(T&& t) : v{tuple_map(vs::all, FWD(t))}
+    explicit ViewBaseTuple(T&& t) : v{tuple_map(vs::all, FWD(t))}
     {
     }
 
-    // template <typename... C>
-    // ViewBaseTuple(ContainerTuple<C...>& x) : v{tuple_map(vs::all, x.c)}
-    // {
-    // }
-
-    template <typename... C>
-    ViewBaseTuple& operator=(ContainerTuple<C...>& x)
+    ViewBaseTuple& operator=(const ViewBaseTuple& x) requires Output
     {
-        v = tuple_map(vs::all, x.c);
+        resize_and_copy(*this, x);
+        return *this;
+    }
+
+    ViewBaseTuple& operator=(ViewBaseTuple&& x) requires Output
+    {
+        resize_and_copy(*this, MOVE(x));
+        return *this;
+    }
+
+    // When assigning from a ContainerTuple, make sure we don't copy anything and instead
+    // just take news views
+    template <traits::OwningTuple C>
+    ViewBaseTuple& operator=(C&& c)
+    {
+        v = tuple_map(vs::all, FWD(c));
         return *this;
     }
 
     // This overload is only reached when called on a Tuple that does not
     // have a corresponding container.  Thus, this call results in a copy operation
     // rather than simply resetting the view to the container
-    template <All... Ranges>
-    ViewBaseTuple& operator=(Ranges&&... args)
+    template <typename T>
+        requires(!traits::OwningTuple<T>) &&
+        traits::OutputTuple<ViewBaseTuple, T> ViewBaseTuple& operator=(T&& t)
     {
-        [this]<auto... Is>(std::index_sequence<Is...>, auto&&... r)
-        {
-            (resize_and_copy(std::get<Is>(v), r), ...);
-        }
-        (std::make_index_sequence<sizeof...(Args)>{}, FWD(args)...);
-        // v = std::tuple{vs::all(args)...};
+        resize_and_copy(*this, FWD(t));
         return *this;
     }
 
-    template <traits::TupleType R>
-    requires(sizeof...(Args) == std::tuple_size_v<std::remove_cvref_t<R>>) ViewBaseTuple&
-    operator=(R&& r)
-    {
-        [this]<auto... Is>(std::index_sequence<Is...>, auto&& r)
-        {
-            (resize_and_copy(std::get<Is>(v), std::get<Is>(FWD(r).view())), ...);
-        }
-        (std::make_index_sequence<sizeof...(Args)>{}, FWD(r));
-        return *this;
-    }
-
-    template <Numeric T>
-    ViewBaseTuple& operator=(T t)
-    {
-        [ this, t ]<auto... Is>(std::index_sequence<Is...>)
-        {
-            constexpr bool direct = requires(T t) { ((std::get<Is>(v) = t), ...); };
-            if constexpr (direct)
-                ((std::get<Is>(v) = t), ...);
-            else
-                (rs::fill(std::get<Is>(v), t), ...);
-        }
-        (std::make_index_sequence<sizeof...(Args)>{});
-        return *this;
-    }
-
-    auto view() { return v; }
-    auto view() const { return v; }
+    Type& as_ViewBaseTuple() & { return *this; }
+    const Type& as_ViewBaseTuple() const& { return *this; }
+    Type&& as_ViewBaseTuple() && { return MOVE(*this); }
 };
 
 template <typename... Args>
@@ -166,6 +146,11 @@ struct AsView {
 
     AsView() = default;
 
+    AsView(const AsView&) = default;
+    AsView(AsView&&) = default;
+    AsView& operator=(const AsView&) = default;
+    AsView& operator=(AsView&&) = default;
+
     template <typename... T>
     AsView(T&&...)
     {
@@ -185,10 +170,17 @@ private:
 
 public:
     AsView() = default;
+    AsView(const AsView&) = default;
+    AsView(AsView&&) = default;
+    AsView& operator=(const AsView&) = default;
+    AsView& operator=(AsView&&) = default;
+
     AsView(A&& a) : View(vs::all(FWD(a))) {}
 
-    // template <typename R>
-    AsView(std::tuple<vs::all_t<A>> v) : View(std::get<0>(v)) {}
+    template <traits::TupleLike T>
+    AsView(T&& t) : View(get<0>(t))
+    {
+    }
 
     AsView& operator=(A&& a)
     {
@@ -196,10 +188,10 @@ public:
         return *this;
     }
 
-    template <All R>
-    AsView& operator=(std::tuple<R> v)
+    template <traits::TupleLike T>
+    AsView& operator=(T&& t)
     {
-        View::operator=(vs::all(std::get<0>(v)));
+        View::operator=(get<0>(t));
         return *this;
     }
 };
@@ -217,69 +209,40 @@ private:
     using Base_Tup = ViewBaseTuple<Args...>;
     using As_View = AsView<Args...>;
     using Type = ViewTuple<Args...>;
+    static constexpr bool Output = (traits::AnyOutputRange<Args> && ...);
 
     friend class ViewAccess;
 
 public:
-    static constexpr int N = sizeof...(Args);
-
-    ViewTuple() = default;
-    ViewTuple(Args&&... args) : Base_Tup{FWD(args)...}, As_View{Base_Tup::view()} {}
-
-    template <traits::NonTupleRange... Ranges>
-    ViewTuple(Ranges&&... r) : Base_Tup{FWD(r)...}, As_View{Base_Tup::view()}
+    explicit ViewTuple() = default;
+    explicit ViewTuple(Args&&... args) requires(sizeof...(Args) > 0)
+        : Base_Tup{FWD(args)...}, As_View{*this}
     {
     }
 
-    template <typename... C>
-    ViewTuple(ContainerTuple<C...>& x) : Base_Tup{x}, As_View{Base_Tup::view()}
+    // Forward all construction to ViewBaseTuple
+    template <typename... T>
+    requires std::constructible_from<Base_Tup, T...> explicit ViewTuple(T&&... t)
+        : Base_Tup{FWD(t)...}, As_View{*this}
     {
     }
 
-    template <traits::TupleType R>
-    ViewTuple(R&& r) : Base_Tup{FWD(r)}, As_View{Base_Tup::view()}
+    // Foward all assignment to ViewBaseTuple
+    template <typename T>
+    requires std::is_assignable_v<Base_Tup&, T> ViewTuple& operator=(T&& t)
     {
-    }
-
-    template <typename... C>
-    ViewTuple& operator=(ContainerTuple<C...>& x)
-    {
-        Base_Tup::operator=(x);
-        As_View::operator=(this->view());
+        Base_Tup::operator=(FWD(t));
+        As_View::operator=(*this);
         return *this;
     }
 
-    template <Numeric T>
-    ViewTuple& operator=(T t)
-    {
-        Base_Tup::operator=(t);
-        return *this;
-    }
-
-    template <traits::TupleType R>
-    ViewTuple& operator=(R&& r)
-    {
-        Base_Tup::operator=(FWD(r));
-        return *this;
-    }
-
-    template <traits::Non_Tuple_Input_Range... R>
-    ViewTuple& operator=(R&&... r)
-    {
-        Base_Tup::operator=(FWD(r)...);
-        return *this;
-    }
-
-    ViewTuple& as_ViewTuple() { return *this; }
-    const ViewTuple& as_ViewTuple() const { return *this; }
-
-    Base_Tup& as_ViewBaseTuple() & { return static_cast<Base_Tup&>(*this); }
-    const Base_Tup& as_ViewBaseTuple() const&
-    {
-        return static_cast<const Base_Tup&>(*this);
-    }
-    Base_Tup&& as_ViewBaseTuple() && { return static_cast<Base_Tup&&>(*this); }
+    ViewTuple& as_ViewTuple() & { return *this; }
+    const ViewTuple& as_ViewTuple() const& { return *this; }
+    ViewTuple&& as_ViewTuple() && { return MOVE(*this); }
 };
+
+template <typename... Args>
+ViewTuple(Args&&...) -> ViewTuple<Args...>;
 
 template <std::size_t I, traits::ViewTupleType V>
 constexpr decltype(auto) get(V&& v) noexcept

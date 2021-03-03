@@ -9,9 +9,8 @@ namespace ccs::field::tuple
 // Base clase for r_tuples which own the containers associated with the data
 // i.e vectors and spans
 template <typename... Args>
-struct ContainerTuple : field::tuple::lazy::ContainerMath<ContainerTuple<Args...>> {
+struct ContainerTuple {
 private:
-    friend class ContainerAccess;
     using Type = ContainerTuple<Args...>;
 
 public:
@@ -29,99 +28,48 @@ public:
     }
 
     // allow for constructing and assigning from input_ranges
-    template <traits::Range... Ranges>
-    ContainerTuple(Ranges&&... r) : c{Args{rs::begin(r), rs::end(r)}...}
+    template <traits::NonTupleRange... Ranges>
+    requires(traits::FromRange<Ranges, Args>&&...) ContainerTuple(Ranges&&... r)
+        : c{Args{rs::begin(r), rs::end(r)}...}
     {
     }
 
-    template <traits::Range... Ranges>
-    ContainerTuple& operator=(Ranges&&... r)
+    template <traits::FromTuple<ContainerTuple> T>
+    ContainerTuple(T&& t) : c{to_tuple<ContainerTuple>(FWD(t))}
     {
-        static_assert(sizeof...(Args) == sizeof...(Ranges));
-
-        [this]<auto... Is>(std::index_sequence<Is...>, auto&&... r)
-        {
-            (resize_and_copy(get<Is>(*this), FWD(r)), ...);
-        }
-        (std::make_index_sequence<sizeof...(Ranges)>{}, FWD(r)...);
-
-        return *this;
     }
 
-    // allow for constructing and assigning from container tuples of different types
-    template <traits::OtherContainerTuple<Type> T>
-    ContainerTuple(const T& t) : c{container_from_container<Args...>(t)}
-    {
-        static_assert(sizeof...(Args) == std::tuple_size_v<T>);
-    }
-
-    template <traits::OtherContainerTuple<Type> T>
-    ContainerTuple& operator=(const T& t)
-    {
-        static_assert(sizeof...(Args) == std::tuple_size_v<T>);
-
-        [ this, &t ]<auto... Is>(std::index_sequence<Is...>)
-        {
-            constexpr bool direct = requires(T t)
-            {
-                ((get<Is>(*this) = get<Is>(t)), ...);
-            };
-            if constexpr (direct)
-                ((get<Is>(*this) = get<Is>(t)), ...);
-            else
-                (resize_and_copy(get<Is>(*this), get<Is>(t)), ...);
-        }
-        (std::make_index_sequence<sizeof...(Args)>{});
-
-        return *this;
-    }
+    // template <traits::FromTuple<ContainerTuple> T>
+    // ContainerTuple(T&& t) : c{to_tuple<ContainerTuple>(FWD(t))}
+    // {
+    // }
 
     // allow for constructing and assigning from r_tuples
-    template <traits::View_Tuple T>
-    requires requires(T t)
-    {
-        container_from_view<Args...>(t);
-    }
-    ContainerTuple(T&& t) : c{container_from_view<Args...>(FWD(t))} {}
+    // template <traits::ViewTuple T>
+    // requires requires(T t)
+    // {
+    //     container_from_view<Args...>(t);
+    // }
+    // ContainerTuple(T&& t) : c{container_from_view<Args...>(FWD(t))} {}
 
-    template <traits::View_Tuple T>
-    ContainerTuple& operator=(const T& t)
+    template <typename T>
+    requires traits::OutputTuple<ContainerTuple, T> ContainerTuple& operator=(T&& t)
     {
-        [ this, &t ]<auto... Is>(std::index_sequence<Is...>)
-        {
-            (resize_and_copy(get<Is>(*this), view<Is>(t)), ...);
-        }
-        (std::make_index_sequence<sizeof...(Args)>{});
-
+        resize_and_copy(*this, FWD(t));
         return *this;
     }
 
-    template <Numeric T>
-    ContainerTuple& operator=(T t)
-    {
-        [ this, t ]<auto... Is>(std::index_sequence<Is...>)
-        {
-            constexpr bool direct = requires(T t) { ((get<Is>(*this) = t), ...); };
-            if constexpr (direct)
-                ((get<Is>(*this) = t), ...);
-            else
-                (rs::fill(get<Is>(*this), t), ...);
-        }
-        (std::make_index_sequence<sizeof...(Args)>{});
-
-        return *this;
-    }
-
-    ContainerTuple& container() { return *this; }
-    const ContainerTuple& container() const { return *this; }
+    ContainerTuple& as_Container() { return *this; }
+    const ContainerTuple& as_Container() const { return *this; }
 };
 
 template <typename... Args>
 ContainerTuple(Args&&...) -> ContainerTuple<std::remove_reference_t<Args>...>;
 
-template<std::size_t I, traits::ContainerTupleType C>
-auto&& get(C&& c) {
-     return std::get<I>(FWD(c).c);
+template <std::size_t I, traits::ContainerTupleType C>
+auto&& get(C&& c)
+{
+    return std::get<I>(FWD(c).c);
 }
 } // namespace ccs::field::tuple
 

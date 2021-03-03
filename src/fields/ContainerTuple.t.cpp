@@ -1,4 +1,5 @@
 #include "ContainerTuple.hpp"
+#include "ViewTuple.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -81,6 +82,82 @@ TEST_CASE("Construction from Ranges")
     }
 }
 
+TEST_CASE("Construction from OneViewTuples")
+{
+    using namespace ccs;
+    using namespace ccs::field::tuple;
+
+    using T = std::vector<real>;
+    const auto i = vs::iota(0, 100);
+
+    {
+        auto v = ViewTuple{i};
+        ContainerTuple<T> x{};
+        x = v;
+        REQUIRE(rs::equal(get<0>(x), i));
+    }
+
+    {
+        auto v = ViewTuple{i};
+        ContainerTuple<T> x{v};
+        REQUIRE(rs::equal(get<0>(x), i));
+    }
+
+    {
+        auto v = ViewTuple{i};
+        ContainerTuple<T> x{};
+        x = MOVE(v);
+        REQUIRE(rs::equal(get<0>(x), i));
+    }
+
+    {
+        auto v = ViewTuple{i};
+        ContainerTuple<T> x{MOVE(v)};
+        REQUIRE(rs::equal(get<0>(x), i));
+    }
+}
+
+TEST_CASE("Construction from TwoViewTuples")
+{
+    using namespace ccs;
+    using namespace ccs::field::tuple;
+
+    using T = std::vector<real>;
+    using U = ContainerTuple<T, T>;
+    const auto i = vs::iota(0, 100);
+    const auto j = vs::iota(-1, 1);
+
+    {
+        auto v = ViewTuple{i, j};
+        U x{};
+        x = v;
+        REQUIRE(rs::equal(get<0>(x), i));
+        REQUIRE(rs::equal(get<1>(x), j));
+    }
+
+    {
+        auto v = ViewTuple{i, j};
+        U x{v};
+        REQUIRE(rs::equal(get<0>(x), i));
+        REQUIRE(rs::equal(get<1>(x), j));
+    }
+
+    {
+        auto v = ViewTuple{i, j};
+        U x{};
+        x = MOVE(v);
+        REQUIRE(rs::equal(get<0>(x), i));
+        REQUIRE(rs::equal(get<1>(x), j));
+    }
+
+    {
+        auto v = ViewTuple{i, j};
+        U x{MOVE(v)};
+        REQUIRE(rs::equal(get<0>(x), i));
+        REQUIRE(rs::equal(get<1>(x), j));
+    }
+}
+
 TEST_CASE("Copy")
 {
     using namespace ccs;
@@ -88,6 +165,7 @@ TEST_CASE("Copy")
 
     using T = std::vector<real>;
 
+    SECTION("copy assignment OneTuple")
     {
         auto x = ContainerTuple<T>{};
         const auto y = ContainerTuple<T>{vs::iota(0, 10)};
@@ -95,7 +173,15 @@ TEST_CASE("Copy")
         x = y;
         REQUIRE(rs::equal(get<0>(x), get<0>(y)));
     }
+    SECTION("copy construction OneTuple")
+    {
+        const auto y = ContainerTuple<T>{vs::iota(0, 10)};
+        ContainerTuple<T> x{y};
 
+        REQUIRE(rs::equal(get<0>(x), get<0>(y)));
+    }
+
+    SECTION("copy assignment TwoTuple")
     {
         auto x = ContainerTuple<T, T>{};
         const auto y = ContainerTuple<T, T>{vs::iota(0, 10), vs::iota(1, 4)};
@@ -105,6 +191,16 @@ TEST_CASE("Copy")
         REQUIRE(rs::equal(get<1>(x), get<1>(y)));
     }
 
+    SECTION("copy construction TwoTuple")
+    {
+        const auto y = ContainerTuple<T, T>{vs::iota(0, 10), vs::iota(1, 4)};
+        ContainerTuple<T, T> x{y};
+
+        REQUIRE(rs::equal(get<0>(x), get<0>(y)));
+        REQUIRE(rs::equal(get<1>(x), get<1>(y)));
+    }
+
+    SECTION("copy assignment for OtherContainerTuple")
     {
         auto x = ContainerTuple<T, T>{};
         const auto y = ContainerTuple<std::vector<int>, std::vector<int>>{vs::iota(0, 10),
@@ -113,5 +209,96 @@ TEST_CASE("Copy")
         x = y;
         REQUIRE(rs::equal(get<0>(x), get<0>(y)));
         REQUIRE(rs::equal(get<1>(x), get<1>(y)));
+    }
+}
+
+TEST_CASE("Move")
+{
+    using namespace ccs;
+    using namespace ccs::field::tuple;
+
+    using T = std::vector<real>;
+
+    const auto i = vs::iota(0, 10);
+    const auto j = vs::iota(1, 4);
+
+    SECTION("move assignment OneTuple")
+    {
+        auto x = ContainerTuple<T>{};
+        const auto y = ContainerTuple<T>{i};
+
+        x = MOVE(y);
+        REQUIRE(rs::equal(get<0>(x), i));
+    }
+    SECTION("move construction OneTuple")
+    {
+        auto y = ContainerTuple<T>{i};
+        ContainerTuple<T> x{MOVE(y)};
+
+        REQUIRE(rs::equal(get<0>(x), i));
+    }
+
+    SECTION("move assignment TwoTuple")
+    {
+        auto x = ContainerTuple<T, T>{};
+        auto y = ContainerTuple<T, T>{i, j};
+
+        x = MOVE(y);
+        REQUIRE(rs::equal(get<0>(x), i));
+        REQUIRE(rs::equal(get<1>(x), j));
+    }
+
+    SECTION("move construction TwoTuple")
+    {
+        auto y = ContainerTuple<T, T>{i, j};
+        ContainerTuple<T, T> x{MOVE(y)};
+
+        REQUIRE(rs::equal(get<0>(x), i));
+        REQUIRE(rs::equal(get<1>(x), j));
+    }
+
+    SECTION("move assignment for OtherContainerTuple")
+    {
+        auto x = ContainerTuple<T, T>{};
+        auto y = ContainerTuple<std::vector<int>, std::vector<int>>{i, j};
+
+        x = MOVE(y);
+        REQUIRE(rs::equal(get<0>(x), i));
+        REQUIRE(rs::equal(get<1>(x), j));
+    }
+}
+
+TEST_CASE("Nested")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+
+    using T = std::vector<real>;
+
+    {
+        ContainerTuple<ContainerTuple<T, T>> x{
+            ContainerTuple<T, T>{vs::iota(0, 10), vs::iota(4, 7)}};
+
+        auto&& [c] = x;
+
+        auto&& [a, b] = c;
+
+        REQUIRE(rs::equal(a, vs::iota(0, 10)));
+        REQUIRE(rs::equal(b, vs::iota(4, 7)));
+    }
+
+    {
+        ContainerTuple<ContainerTuple<T, T>, ContainerTuple<T>> x{
+            ContainerTuple<T, T>{vs::iota(0, 10), vs::iota(4, 7)},
+            ContainerTuple<T>{T{-1, -2, -3}}};
+
+        auto&& [u, v] = x;
+
+        auto&& [a, b] = u;
+        REQUIRE(rs::equal(a, vs::iota(0, 10)));
+        REQUIRE(rs::equal(b, vs::iota(4, 7)));
+
+        auto&& [c] = v;
+        REQUIRE(rs::equal(c, T{-1, -2, -3}));
     }
 }
