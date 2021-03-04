@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <range/v3/algorithm/equal.hpp>
+#include <range/v3/numeric/accumulate.hpp>
 #include <range/v3/range/concepts.hpp>
 #include <range/v3/view/all.hpp>
 #include <range/v3/view/iota.hpp>
@@ -47,6 +48,48 @@ TEST_CASE("for_each")
     REQUIRE(rs::equal(get<0>(s), T{3, 4, 5}));
     REQUIRE(rs::equal(get<1>(s), T{5, 6, 7}));
     REQUIRE(rs::equal(get<2>(s), T{18, 20, 22}));
+}
+
+TEST_CASE("map")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+
+    using T = std::vector<int>;
+
+    auto s = std::tuple{T{1, 2, 3}, T{4, 5, 6, 7, 8, 9}, T{4, 5}};
+
+    {
+        auto r = map(s, [](auto&& vec) { return rs::accumulate(FWD(vec), 0); });
+
+        auto&& [x, y, z] = r;
+        REQUIRE(x == 6);
+        REQUIRE(y == 39);
+        REQUIRE(z == 9);
+    }
+
+    {
+        constexpr auto f = []<auto I>(auto&& vec) { return rs::accumulate(FWD(vec), I); };
+        auto r = map(s, f);
+
+        auto&& [x, y, z] = r;
+        REQUIRE(x == 6);
+        REQUIRE(y == 40);
+        REQUIRE(z == 11);
+    }
+
+    {
+        constexpr auto f = [](auto&& vec) { return rs::accumulate(FWD(vec), -6); };
+        constexpr auto g = [](auto&& vec) { return rs::accumulate(FWD(vec), -39); };
+        constexpr auto h = [](auto&& vec) { return rs::accumulate(FWD(vec), -9); };
+
+        auto r = map(s, std::tuple{f, g, h});
+
+        auto&& [x, y, z] = r;
+        REQUIRE(x == 0);
+        REQUIRE(y == 0);
+        REQUIRE(z == 0);
+    }
 }
 
 TEST_CASE("resize_and_copy vector")
@@ -220,4 +263,14 @@ TEST_CASE("to_tuple")
     auto z = to_tuple<std::tuple<T, T>>(std::tuple{i, j});
     REQUIRE(rs::equal(get<0>(z), i));
     REQUIRE(rs::equal(get<1>(z), j));
+}
+
+TEST_CASE("makeTuple")
+{
+    using namespace ccs::field::tuple;
+
+    auto s = makeTuple<std::tuple<int, int>>(5.1, 4.2);
+    static_assert(std::same_as<std::tuple<double, double>, decltype(s)>);
+    REQUIRE(get<0>(s) == 5.1);
+    REQUIRE(get<1>(s) == 4.2);
 }

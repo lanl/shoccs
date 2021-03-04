@@ -7,7 +7,7 @@ namespace ccs::field::tuple
 {
 
 // Base clase for r_tuples which own the containers associated with the data
-// i.e vectors and spans
+// i.e vectors or nested tuples
 template <typename... Args>
 struct ContainerTuple {
 private:
@@ -38,19 +38,6 @@ public:
     ContainerTuple(T&& t) : c{to_tuple<ContainerTuple>(FWD(t))}
     {
     }
-
-    // template <traits::FromTuple<ContainerTuple> T>
-    // ContainerTuple(T&& t) : c{to_tuple<ContainerTuple>(FWD(t))}
-    // {
-    // }
-
-    // allow for constructing and assigning from r_tuples
-    // template <traits::ViewTuple T>
-    // requires requires(T t)
-    // {
-    //     container_from_view<Args...>(t);
-    // }
-    // ContainerTuple(T&& t) : c{container_from_view<Args...>(FWD(t))} {}
 
     template <typename T>
     requires traits::OutputTuple<ContainerTuple, T> ContainerTuple& operator=(T&& t)

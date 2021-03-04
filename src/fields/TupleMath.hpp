@@ -29,7 +29,7 @@ private:
 template <typename T>
 struct ViewMath;
 
-class ViewAccess
+class ViewMathAccess
 {
     template <typename T>
     friend class ViewMath;

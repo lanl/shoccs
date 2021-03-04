@@ -18,6 +18,53 @@ template <traits::TupleLike T>
 constexpr auto TupleIndex =
     std::make_index_sequence<std::tuple_size_v<std::remove_cvref_t<T>>>{};
 
+namespace detail
+{
+template <typename>
+struct makeTuple_Fn;
+
+template <template <typename...> typename T, typename... Ts>
+struct makeTuple_Fn<T<Ts...>> {
+    template <typename... Args>
+    constexpr auto operator()(Args&&... args) const
+    {
+        return T{FWD(args)...};
+    }
+};
+} // namespace detail
+template <traits::TupleLike T>
+constexpr auto makeTuple = detail::makeTuple_Fn<std::remove_cvref_t<T>>{};
+
+template <traits::TupleLike T, traits::InvocableOver<T> F>
+constexpr auto map(T&& t, F&& f)
+{
+    return [&]<auto... Is>(std::index_sequence<Is...>)
+    {
+        return makeTuple<T>(std::invoke(f, get<Is>(t))...);
+    }
+    (TupleIndex<T>);
+}
+
+template <traits::TupleLike T, traits::TemplatedInvocableOver<T> F>
+constexpr auto map(T&& t, F&& f)
+{
+    return [&]<auto... Is>(std::index_sequence<Is...>)
+    {
+        return makeTuple<T>(f.template operator()<Is>(get<Is>(t))...);
+    }
+    (TupleIndex<T>);
+}
+
+template <traits::TupleLike T, traits::TupleInvocableOver<T> F>
+constexpr auto map(T&& t, F&& f)
+{
+    return [&]<auto... Is>(std::index_sequence<Is...>)
+    {
+        return makeTuple<T>(std::invoke(get<Is>(f), get<Is>(t))...);
+    }
+    (TupleIndex<T>);
+}
+
 // Map a function `f` over the elements in tuple `t`.  Returns a new tuple.
 template <typename F, typename T>
 requires requires(F f, T t)
@@ -122,34 +169,6 @@ requires(!traits::FromTupleDirect<T, To>) auto to_tuple(T&& t)
             std::tuple_element_t<Is, To>(rs::begin(get<Is>(t)), rs::end(get<Is>(t)))...};
     }
     (TupleIndex<T>);
-}
-
-template <typename... Args, typename T>
-auto container_from_container(const T& t)
-{
-    return [&t]<auto... Is>(std::index_sequence<Is...>)
-    {
-        // prefer to delegate to direct construction rather than building
-        // from ranges.
-        // Use () instead of {} to allow constructing vectors from from sizes
-        constexpr bool direct = requires(T t)
-        {
-            std::tuple<Args...>{Args(get<Is>(t))...};
-        };
-        constexpr bool fromRange = requires(T t)
-        {
-            std::tuple<Args...>{Args{rs::begin(get<Is>(t)), rs::end(get<Is>(t))}...};
-        };
-
-        if constexpr (direct)
-            return std::tuple<Args...>{Args(get<Is>(t))...};
-        else if constexpr (fromRange)
-            return std::tuple<Args...>{
-                Args{rs::begin(get<Is>(t)), rs::end(get<Is>(t))}...};
-        else
-            static_assert(true, "Cannot construct container");
-    }
-    (std::make_index_sequence<sizeof...(Args)>{});
 }
 
 // Construct a container from a view by converting the view to a

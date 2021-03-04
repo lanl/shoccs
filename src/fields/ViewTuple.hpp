@@ -3,6 +3,7 @@
 #include <range/v3/view/all.hpp>
 
 #include "TupleMath.hpp"
+#include "TuplePipe.hpp"
 #include "TupleUtils.hpp"
 
 namespace ccs::field::tuple
@@ -199,19 +200,24 @@ public:
 template <typename... Args>
 AsView(Args&&...) -> AsView<Args...>;
 
+template <std::size_t I, traits::ViewTupleType V>
+constexpr decltype(auto) get(V&& v) noexcept;
+
 // r_tuple's inherit from this base class which combines AsView/base_view_tuple
 // into a workable unified abstraction
 template <typename... Args>
 struct ViewTuple : ViewBaseTuple<Args...>,
                    AsView<Args...>,
-                   field::tuple::lazy::ViewMath<ViewTuple<Args...>> {
+                   field::tuple::lazy::ViewMath<ViewTuple<Args...>>,
+                   field::tuple::lazy::ViewPipe<ViewTuple<Args...>> {
 private:
     using Base_Tup = ViewBaseTuple<Args...>;
     using As_View = AsView<Args...>;
     using Type = ViewTuple<Args...>;
     static constexpr bool Output = (traits::AnyOutputRange<Args> && ...);
 
-    friend class ViewAccess;
+    friend class ViewMathAccess;
+    friend class ViewPipeAccess;
 
 public:
     explicit ViewTuple() = default;

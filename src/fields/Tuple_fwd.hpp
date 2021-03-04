@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include <concepts>
 #include <range/v3/range/concepts.hpp>
+#include <range/v3/view/view.hpp>
 
 namespace ccs::field::tuple
 {
@@ -138,6 +139,7 @@ template <typename T>
 concept NonTupleRange = rs::input_range<T> && (!TupleLike<T>);
 
 // construct something from a range
+// needed for output ranges and container
 template <typename From, typename To>
 concept FromRange = ranges::range<From>&& requires(From& r)
 {
@@ -207,10 +209,12 @@ template <typename From, typename To>
 concept FromTupleRange =
     TupleLike<To>&& TupleLike<From>&& detail::from_range_v<std::remove_cvref_t<From>, To>;
 
+// Needed to simplify construction of ContainerTuples
 template <typename From, typename To>
 concept FromTuple = FromTupleDirect<From, To> || FromTupleRange<From, To>;
 
 // traits for functions on Tuples
+
 template <auto I, typename F, typename... Args>
 concept TemplateInvocable = requires(F f, Args... args)
 {

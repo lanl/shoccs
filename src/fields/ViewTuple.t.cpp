@@ -9,6 +9,7 @@
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/repeat_n.hpp>
 #include <range/v3/view/take.hpp>
+#include <range/v3/view/transform.hpp>
 #include <range/v3/view/zip_with.hpp>
 
 #include <vector>
@@ -362,4 +363,41 @@ TEST_CASE("Modifying Math OneTuples")
 
     u += v;
     REQUIRE(rs::equal(u, T{4, 6, 8}));
+}
+
+TEST_CASE("Pipe Syntax OneTuples")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+    using T = std::vector<int>;
+
+    auto a = T{1, 2, 3};
+    auto u = ViewTuple{a};
+
+    REQUIRE(rs::equal(u | vs::transform([](auto&& i) { return i * i; }), T{1, 4, 9}));
+
+    auto b = T(3);
+    auto v = ViewTuple{b};
+
+    v = u | vs::transform([](auto&& i) { return i * i; });
+    REQUIRE(rs::equal(b, T{1, 4, 9}));
+}
+
+TEST_CASE("Pipe Syntax TwoTuples")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+
+    const auto i = vs::iota(0, 10);
+    const auto j = vs::iota(-10, 10);
+    constexpr auto f = [](auto&& i) { return i + i; };
+
+    auto v = ViewTuple{vs::iota(0, 10), vs::iota(-10, 10)};
+
+    auto u = v | vs::transform(f);
+
+    auto [a, b] = u;
+
+    REQUIRE(rs::equal(a, vs::zip_with(std::plus{}, i, i)));
+    REQUIRE(rs::equal(b, vs::zip_with(std::plus{}, j, j)));
 }
