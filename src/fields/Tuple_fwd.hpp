@@ -5,6 +5,11 @@
 #include <range/v3/range/concepts.hpp>
 #include <range/v3/view/view.hpp>
 
+// Can we leverage something like MP11 to rewrite
+// most of these traits?
+
+// Can we use mp11's mapping capabilities
+
 namespace ccs::field::tuple
 {
 
@@ -62,15 +67,13 @@ namespace traits
 
 // Container concepts
 template <typename>
-struct is_ContainerTuple : std::false_type {
-};
+constexpr bool is_ContainerTuple = false;
 
 template <typename... Args>
-struct is_ContainerTuple<ContainerTuple<Args...>> : std::true_type {
-};
+constexpr bool is_ContainerTuple<ContainerTuple<Args...>> = true;
 
 template <typename T>
-concept ContainerTupleType = is_ContainerTuple<std::remove_cvref_t<T>>::value;
+concept ContainerTupleType = is_ContainerTuple<std::remove_cvref_t<T>>;
 
 template <typename T, typename U>
 concept OtherContainerTuple = ContainerTupleType<T>&& ContainerTupleType<U> &&
@@ -283,6 +286,41 @@ concept TemplatedInvocableOver =
 template <typename F, typename T>
 concept TupleInvocableOver = TupleLike<T>&& TupleLike<F>&&
     detail::tuple_invocable_over_v<std::remove_cvref_t<F>, std::remove_cvref_t<T>>;
+
+namespace detail
+{
+// concepts for view closures
+template <auto I, typename F, typename T>
+concept pipeable_element = requires(F f, T t)
+{
+    get<I>(t) | f;
+};
+
+// get based
+template <typename...>
+constexpr bool pipeable_over_v = false;
+
+template <typename ViewFn, typename T, auto... Is>
+constexpr bool pipeable_over_v<vs::view_closure<ViewFn>, T, std::index_sequence<Is...>> =
+    (pipeable_element<Is, vs::view_closure<ViewFn>, T> && ...);
+
+template <typename...>
+constexpr bool tuple_pipeable_over_v = false;
+
+template <template <typename...> typename F, typename... Fs, typename T, auto... Is>
+requires(sizeof...(Fs) ==
+         sizeof...(Is)) constexpr bool tuple_pipeable_over_v<F<vs::view_closure<Fs>...>,
+                                                             T,
+                                                             std::index_sequence<Is...>> =
+    (pipeable_element<Is, vs::view_closure<Fs>, T> && ...);
+} // namespace detail
+
+template <typename F, typename T>
+concept PipeableOver = TupleLike<T>&& detail::pipeable_over_v<F, T, IndexSeq<T>>;
+
+template <typename F, typename T>
+concept TuplePipeableOver = TupleLike<T>&& TupleLike<F>&&
+    detail::tuple_pipeable_over_v<std::remove_cvref_t<F>, T, IndexSeq<T>>;
 
 } // namespace traits
 

@@ -22,11 +22,19 @@ requires(sizeof...(Ts) > 1) struct ViewPipe<T<Ts...>> {
 private:
     using Type = T<Ts...>;
 
-    template <typename U, typename ViewFn>
+    template <typename U, traits::PipeableOver<U> F>
     requires std::derived_from<std::remove_cvref_t<U>, Type> friend constexpr auto
-    operator|(U&& u, vs::view_closure<ViewFn> f)
+    operator|(U&& u, F f)
     {
         return map(FWD(u), [f](auto&& e) { return e | f; });
+    }
+
+    template <typename U, traits::TuplePipeableOver<U> F>
+    requires std::derived_from<std::remove_cvref_t<U>, Type> friend constexpr auto
+    operator|(U&& u, F f)
+    {
+        return map(
+            FWD(u), [f]<auto I>(auto&& e) { return FWD(e) | get<I>(f); });
     }
 };
 

@@ -520,53 +520,45 @@ TEST_CASE("Pipe syntax for Non-Owning ThreeTuples")
     REQUIRE(rs::equal(get<1>(z), std::vector{32, 50}));
     REQUIRE(rs::equal(get<2>(z), std::vector{32, 18, 8, 2}));
 }
-#if 0
 
 TEST_CASE("ThreeTuples with ThreeTuplePipes")
 {
     using namespace ccs;
     using namespace field::tuple;
+    constexpr auto f = vs::transform([](auto&& i) { return i * i; });
+    constexpr auto g = vs::transform([](auto&& i) { return i + i; });
+    constexpr auto h = vs::transform([](auto&& i) { return i * i * i; });
 
     auto x = Tuple{std::vector{1, 2, 3}, std::vector{4, 5}, std::vector{4, 3, 2, 1}};
-    auto y = x | Tuple{vs::transform([](auto&& i) { return i * i; }),
-                       vs::transform([](auto&& i) { return i + i; }),
-                       vs::transform([](auto&& i) { return i * i * i; })};
+    auto y = x | std::tuple{f, g, h};
     REQUIRE(traits::ThreeTuple<decltype(y)>);
-    REQUIRE(rs::equal(view<0>(y), std::vector{1, 4, 9}));
-    REQUIRE(rs::equal(view<1>(y), std::vector{8, 10}));
-    REQUIRE(rs::equal(view<2>(y), std::vector{64, 27, 8, 1}));
+    REQUIRE(rs::equal(get<0>(y), std::vector{1, 4, 9}));
+    REQUIRE(rs::equal(get<1>(y), std::vector{8, 10}));
+    REQUIRE(rs::equal(get<2>(y), std::vector{64, 27, 8, 1}));
 
     auto a = std::vector<int>(3);
     auto b = std::vector<int>(2);
     auto c = std::vector<int>(4);
     auto z = Tuple{a, b, c};
-    REQUIRE(traits::Non_Tuple_Input_Range<decltype(
-                view<0>(y | vs::transform([](auto&& i) { return i + i; })))>);
-    z = y | vs::transform([](auto&& i) { return i + i; });
-    REQUIRE(rs::equal(view<0>(z), std::vector{2, 8, 18}));
-    REQUIRE(rs::equal(view<1>(z), std::vector{16, 20}));
-    REQUIRE(rs::equal(view<2>(z), std::vector{128, 54, 16, 2}));
+    z = y | g; // vs::transform([](auto&& i) { return i + i; });
+    REQUIRE(rs::equal(get<0>(z), std::vector{2, 8, 18}));
+    REQUIRE(rs::equal(get<1>(z), std::vector{16, 20}));
+    REQUIRE(rs::equal(get<2>(z), std::vector{128, 54, 16, 2}));
 
     auto q = Tuple<std::span<int>, std::span<int>, std::span<int>>{a, b, c};
 
-    q | Tuple{vs::transform([](auto&& i) { return i * i; }),
-              vs::transform([](auto&& i) { return i + i; }),
-              vs::transform([](auto&& i) { return i * i * i; })};
+    q | std::tuple{f, g, h};
 
-    q = y | Tuple{vs::transform([](auto&& i) { return i * i; }),
-                  vs::transform([](auto&& i) { return i + i; }),
-                  vs::transform([](auto&& i) { return i * i * i; })};
+    q = y | Tuple{f, g, h};
 
     REQUIRE(rs::equal(a, std::vector{1, 16, 81}));
     REQUIRE(rs::equal(b, std::vector{16, 20}));
     REQUIRE(rs::equal(c, std::vector{262144, 19683, 512, 1}));
 
-    vs::transform([](auto&& i) { return i; }) |
-        Tuple{vs::transform([](auto&& i) { return i * i; }),
-              vs::transform([](auto&& i) { return i + i; }),
-              vs::transform([](auto&& i) { return i * i * i; })};
+    // vs::transform([](auto&& i) { return i; }) |
+    //     Tuple{vs::transform([](auto&& i) { return i * i; }),
+    //           vs::transform([](auto&& i) { return i + i; }),
+    //           vs::transform([](auto&& i) { return i * i * i; })};
     // vs::transform([](auto&& i) { return i; }) |
     //     Tuple{vs::transform([](auto&& i) { return 2 * i; })};
 }
-
-#endif

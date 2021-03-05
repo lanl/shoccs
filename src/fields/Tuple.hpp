@@ -12,12 +12,6 @@
 namespace ccs::field::tuple
 {
 
-namespace detail
-{
-template <typename... Args>
-auto makeTuple(Args&&...);
-}
-
 // r_tuple for viewable ref components
 template <typename... Args>
 struct Tuple : ContainerTuple<Args...>, ViewTuple<Args&...> {
@@ -74,57 +68,6 @@ struct Tuple : ContainerTuple<Args...>, ViewTuple<Args&...> {
         View::operator=(*this);
         return *this;
     }
-
-    // template <traits::Non_Tuple_Input_Range... R>
-    // Tuple& operator=(R&&... r)
-    // {
-    //     Container::operator=(FWD(r)...);
-    //     View::operator=(this->container());
-    //     return *this;
-    // }
-
-    // template <typename ViewFn>
-    // requires(sizeof...(Args) > 1 &&
-    //          requires(Tuple t, vs::view_closure<ViewFn> f) {
-    //              std::get<0>(t.view()) | f;
-    //          }) friend constexpr auto
-    // operator|(Tuple& t, vs::view_closure<ViewFn> f)
-    // {
-    //     return [f]<auto... Is>(std::index_sequence<Is...>, auto& t)
-    //     {
-    //         return detail::makeTuple((view<Is>(t) | f)...);
-    //     }
-    //     (std::make_index_sequence<sizeof...(Args)>{}, t);
-    // }
-
-    // // allow for composing a tuple of ranges with a tuple of functions
-    // template <traits::TupleType TupleFn>
-    // requires(sizeof...(Args) > 1 &&
-    //          requires(Tuple t, TupleFn f) {
-    //              std::get<0>(t.view()) | f.template get<0>();
-    //          }) friend constexpr auto
-    // operator|(Tuple& t, TupleFn&& f)
-    // {
-    //     return [&t]<auto... Is>(std::index_sequence<Is...>, auto&& fn)
-    //     {
-    //         return detail::makeTuple((view<Is>(t) | fn.template get<Is>())...);
-    //     }
-    //     (std::make_index_sequence<sizeof...(Args)>{}, FWD(f));
-    // }
-
-    // template <typename ViewFn>
-    // requires requires(vs::view_closure<ViewFn> f, Tuple t)
-    // {
-    //     f | t.template get<0>();
-    // }
-    // friend constexpr auto operator|(vs::view_closure<ViewFn> f, Tuple t)
-    // {
-    //     return [f]<auto... Is>(std::index_sequence<Is...>, auto&& t)
-    //     {
-    //         return detail::makeTuple((f | t.template get<Is>())...);
-    //     }
-    //     (std::make_index_sequence<sizeof...(Args)>{}, MOVE(t));
-    // }
 };
 
 //
@@ -152,36 +95,16 @@ struct Tuple<Args...> : ViewTuple<Args...> {
         View::operator=(FWD(t));
         return *this;
     }
-
-    // template <typename Fn>
-    // requires(sizeof...(Args) > 1 &&
-    //          requires(Tuple t, Fn f) { std::get<0>(t.view()) | f; }) friend constexpr
-    //          auto
-    // operator|(Tuple& t, Fn f)
-    // {
-    //     return [f]<auto... Is>(std::index_sequence<Is...>, auto& t)
-    //     {
-    //         return detail::makeTuple((view<Is>(t) | f)...);
-    //     }
-    //     (std::make_index_sequence<sizeof...(Args)>{}, t);
-    // }
-    // template <traits::TupleType TupleFn>
-    // requires(sizeof...(Args) > 1 &&
-    //          requires(Tuple t, TupleFn fn) {
-    //              std::get<0>(t.view()) | fn.template get<0>();
-    //          }) friend constexpr auto
-    // operator|(Tuple& t, TupleFn&& f)
-    // {
-    //     return [&t]<auto... Is>(std::index_sequence<Is...>, auto&& fn)
-    //     {
-    //         return detail::makeTuple((view<Is>(t) | fn.template get<Is>())...);
-    //     }
-    //     (std::make_index_sequence<sizeof...(Args)>{}, FWD(f));
-    // }
 };
 
 template <typename... Args>
 Tuple(Args&&...) -> Tuple<Args...>;
+
+// need to caputre view closures by value to meet range-v3 concepts
+template <typename... ViewFn>
+Tuple(vs::view_closure<ViewFn>&...) -> Tuple<vs::view_closure<ViewFn>...>;
+template <typename... ViewFn>
+Tuple(const vs::view_closure<ViewFn>&...) -> Tuple<vs::view_closure<ViewFn>...>;
 
 template <typename... Args>
 Tuple(tag, Args&&...) -> Tuple<Args...>;
@@ -230,14 +153,5 @@ concept OneTuple = NTuple<T, 1u>;
 template <typename T>
 concept ThreeTuple = NTuple<T, 3u>;
 } // namespace traits
-
-namespace detail
-{
-template <typename... Args>
-auto makeTuple(Args&&... args)
-{
-    return Tuple<Args...>(tag{}, FWD(args)...);
-}
-} // namespace detail
 
 } // namespace ccs::field::tuple

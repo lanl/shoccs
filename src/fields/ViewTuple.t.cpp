@@ -401,3 +401,24 @@ TEST_CASE("Pipe Syntax TwoTuples")
     REQUIRE(rs::equal(a, vs::zip_with(std::plus{}, i, i)));
     REQUIRE(rs::equal(b, vs::zip_with(std::plus{}, j, j)));
 }
+
+TEST_CASE("MultiPipe Syntax")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+
+    const auto i = vs::iota(0, 10);
+    const auto j = vs::iota(-10, 10);
+
+    constexpr auto f = [](auto&& i) { return i + i; };
+    constexpr auto g = [](auto&& i) { return i * i; };
+
+    auto v = ViewTuple{vs::iota(0, 10), vs::iota(-10, 10)};
+
+    auto u = v | std::tuple{vs::transform(f), vs::transform(g)};
+
+    auto [a, b] = u;
+
+    REQUIRE(rs::equal(a, vs::zip_with(std::plus{}, i, i)));
+    REQUIRE(rs::equal(b, vs::zip_with(std::multiplies{}, j, j)));
+}
