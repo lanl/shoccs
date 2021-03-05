@@ -14,18 +14,18 @@
 
 int main()
 {
-
-    using namespace ccs;
+ using namespace ccs;
     using namespace ccs::field::tuple;
     using T = std::vector<real>;
 
     auto v = T{1, 2, 3};
-    ViewTuple<T&> x{v};
 
-    std::cout << "x == v" << rs::equal(x, v);
+    ViewBaseTuple<T&> x{v};
 
-    // why is && needed here?
-    std::tuple_element<0, ViewTuple<T&>> t;
-    auto [yy] = x;
-    std::cout << "type(yy): " << debug::type(yy) << '\n';
+    auto u = T{4, 5, 6};
+    ViewBaseTuple<T&> y{u};
+
+    x = y;
+    std::cout << rs::equal(v, T{4, 5, 6}) << '\n';
+    
 }

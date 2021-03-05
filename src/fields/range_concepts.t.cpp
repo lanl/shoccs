@@ -71,6 +71,13 @@ TEST_CASE("Modify Containers from Views")
     for (auto&& i : y) i *= 2;
 
     REQUIRE(rs::equal(x, std::vector{2, 4, 6}));
+
+    {
+        constexpr auto f = [](auto&& i) { return i; };
+        auto a = x | vs::transform(f);
+        auto b = y | vs::transform(f);
+        static_assert(std::same_as<decltype(a), decltype(b)>);
+    }
 }
 
 TEST_CASE("TupleLike")

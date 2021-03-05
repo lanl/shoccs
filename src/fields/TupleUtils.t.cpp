@@ -8,6 +8,7 @@
 #include <range/v3/view/all.hpp>
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/repeat_n.hpp>
+#include <range/v3/view/zip.hpp>
 
 #include <vector>
 
@@ -19,38 +20,71 @@ TEST_CASE("for_each")
     using T = std::vector<int>;
 
     auto s = std::tuple{T{1, 2, 3}, T{4, 5, 6}, T{7, 8, 9}};
+    auto t = std::tuple{T{4, 5, 6}, T{1, 2, 3}, T{-1, -2, -3}};
 
-    for_each(s, [](T& v) {
-        for (auto&& i : v) i += 1;
-    });
+    for_each(
+        [](auto&& v) {
+            for (auto&& i : v) i += 1;
+        },
+        s);
     REQUIRE(rs::equal(get<0>(s), T{2, 3, 4}));
     REQUIRE(rs::equal(get<1>(s), T{5, 6, 7}));
     REQUIRE(rs::equal(get<2>(s), T{8, 9, 10}));
 
-    for_each(s,
-             std::tuple{[](T& v) {
-                            for (auto&& i : v) i += 1;
-                        },
-                        [](T& v) {
-                            for (auto&& i : v) i -= 1;
-                        },
-                        [](T& v) {
-                            for (auto&& i : v) i *= 2;
-                        }});
-    REQUIRE(rs::equal(get<0>(s), T{3, 4, 5}));
-    REQUIRE(rs::equal(get<1>(s), T{4, 5, 6}));
-    REQUIRE(rs::equal(get<2>(s), T{16, 18, 20}));
+    for_each(
+        [](auto&& x, auto&& y) {
+            using std::swap;
+            swap(x, y);
+        },
+        s,
+        t);
+    REQUIRE(rs::equal(get<0>(t), T{2, 3, 4}));
+    REQUIRE(rs::equal(get<1>(t), T{5, 6, 7}));
+    REQUIRE(rs::equal(get<2>(t), T{8, 9, 10}));
+
+    REQUIRE(rs::equal(get<0>(s), T{4, 5, 6}));
+    REQUIRE(rs::equal(get<1>(s), T{1, 2, 3}));
+    REQUIRE(rs::equal(get<2>(s), T{-1, -2, -3}));
 
     for_each(
-        s, []<auto I>(T & v) {
+        []<auto I>(traits::mp_size_t<I>, auto&& v) {
             for (auto&& i : v) i += I;
-        });
-    REQUIRE(rs::equal(get<0>(s), T{3, 4, 5}));
-    REQUIRE(rs::equal(get<1>(s), T{5, 6, 7}));
-    REQUIRE(rs::equal(get<2>(s), T{18, 20, 22}));
+        },
+        s);
+    REQUIRE(rs::equal(get<0>(s), T{4, 5, 6}));
+    REQUIRE(rs::equal(get<1>(s), T{2, 3, 4}));
+    REQUIRE(rs::equal(get<2>(s), T{1, 0, -1}));
+
+    for_each(std::tuple{[](auto&& x, auto&& y) {
+                            using std::swap;
+                            swap(x, y);
+                        },
+                        [](auto&& x, auto&& y) {
+                            for (auto&& [i, j] : vs::zip(x, y)) {
+                                i += 1;
+                                j -= 1;
+                            }
+                        },
+                        [](auto&& x, auto&& y) {
+                            for (auto&& [i, j] : vs::zip(x, y)) {
+                                i *= 2;
+                                j *= 3;
+                            }
+                        }},
+             s,
+             t);
+    // swapped
+    REQUIRE(rs::equal(get<0>(s), T{2, 3, 4}));
+    REQUIRE(rs::equal(get<0>(t), T{4, 5, 6}));
+
+    REQUIRE(rs::equal(get<1>(s), T{3, 4, 5}));
+    REQUIRE(rs::equal(get<1>(t), T{4, 5, 6}));
+
+    REQUIRE(rs::equal(get<2>(s), T{2, 0, -2}));
+    REQUIRE(rs::equal(get<2>(t), T{24, 27, 30}));
 }
 
-TEST_CASE("map")
+TEST_CASE("transform")
 {
     using namespace ccs;
     using namespace field::tuple;
@@ -58,9 +92,10 @@ TEST_CASE("map")
     using T = std::vector<int>;
 
     auto s = std::tuple{T{1, 2, 3}, T{4, 5, 6, 7, 8, 9}, T{4, 5}};
+    auto t = std::tuple(T{4, 5, 6}, T{1, 2, 3, 4, 5, 6}, T{6, 7});
 
     {
-        auto r = map(s, [](auto&& vec) { return rs::accumulate(FWD(vec), 0); });
+        auto r = transform([](auto&& vec) { return rs::accumulate(FWD(vec), 0); }, s);
 
         auto&& [x, y, z] = r;
         REQUIRE(x == 6);
@@ -69,8 +104,21 @@ TEST_CASE("map")
     }
 
     {
-        constexpr auto f = []<auto I>(auto&& vec) { return rs::accumulate(FWD(vec), I); };
-        auto r = map(s, f);
+        auto r = transform(
+            [](auto&&... vec) { return (rs::accumulate(FWD(vec), 0) + ...); }, s, t);
+
+        auto&& [x, y, z] = r;
+        REQUIRE(x == 21);
+        REQUIRE(y == 60);
+        REQUIRE(z == 22);
+    }
+
+    {
+        constexpr auto f = []<auto I>(traits::mp_size_t<I>, auto&& vec)
+        {
+            return rs::accumulate(FWD(vec), I);
+        };
+        auto r = transform(f, s);
 
         auto&& [x, y, z] = r;
         REQUIRE(x == 6);
@@ -79,11 +127,43 @@ TEST_CASE("map")
     }
 
     {
+        constexpr auto f = []<auto I>(traits::mp_size_t<I>, auto&&... vec)
+        {
+            return (rs::accumulate(FWD(vec), I) + ...);
+        };
+        auto r = transform(f, s, t);
+
+        auto&& [x, y, z] = r;
+        REQUIRE(x == 21);
+        REQUIRE(y == 62);
+        REQUIRE(z == 26);
+    }
+
+    {
         constexpr auto f = [](auto&& vec) { return rs::accumulate(FWD(vec), -6); };
         constexpr auto g = [](auto&& vec) { return rs::accumulate(FWD(vec), -39); };
         constexpr auto h = [](auto&& vec) { return rs::accumulate(FWD(vec), -9); };
 
-        auto r = map(s, std::tuple{f, g, h});
+        auto r = transform(std::tuple{f, g, h}, s);
+
+        auto&& [x, y, z] = r;
+        REQUIRE(x == 0);
+        REQUIRE(y == 0);
+        REQUIRE(z == 0);
+    }
+
+    {
+        constexpr auto f = [](auto&& x, auto&& y) {
+            return rs::accumulate(FWD(x), -21) + rs::accumulate(FWD(y), 0);
+        };
+        constexpr auto g = [](auto&& x, auto&& y) {
+            return rs::accumulate(FWD(x), -60) + rs::accumulate(FWD(y), 0);
+        };
+        constexpr auto h = [](auto&& x, auto&& y) {
+            return rs::accumulate(FWD(x), -22) + rs::accumulate(FWD(y), 0);
+        };
+
+        auto r = transform(std::tuple{f, g, h}, s, t);
 
         auto&& [x, y, z] = r;
         REQUIRE(x == 0);

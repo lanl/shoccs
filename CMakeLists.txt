@@ -30,6 +30,7 @@ if (Catch2_FOUND)
   message(STATUS "Catch2 has been found.  Enabling testing via ctest")
   enable_testing()
 endif()
+find_package(Boost REQUIRED) # for header only mp11
 
 
 

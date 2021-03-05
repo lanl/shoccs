@@ -5,6 +5,8 @@
 #include <range/v3/range/concepts.hpp>
 #include <range/v3/view/view.hpp>
 
+#include <boost/mp11.hpp>
+
 // Can we leverage something like MP11 to rewrite
 // most of these traits?
 
@@ -28,6 +30,8 @@ concept All = rs::range<T&>&& rs::viewable_range<T> &&
 // int3 extents are not considered an input_range
 namespace traits
 {
+using namespace boost::mp11;
+
 template <typename T>
 concept Range = rs::input_range<T> && (!std::same_as<int3, std::remove_cvref_t<T>>);
 
@@ -65,21 +69,23 @@ struct ViewTuple;
 namespace traits
 {
 
-// Container concepts
+//
+// ContainerTuple concepts
+//
 template <typename>
-constexpr bool is_ContainerTuple = false;
+struct is_ContainerTuple : std::false_type {
+};
 
 template <typename... Args>
-constexpr bool is_ContainerTuple<ContainerTuple<Args...>> = true;
+struct is_ContainerTuple<ContainerTuple<Args...>> : std::true_type {
+};
 
 template <typename T>
-concept ContainerTupleType = is_ContainerTuple<std::remove_cvref_t<T>>;
+concept ContainerTupleType = is_ContainerTuple<std::remove_cvref_t<T>>::value;
 
-template <typename T, typename U>
-concept OtherContainerTuple = ContainerTupleType<T>&& ContainerTupleType<U> &&
-                              (!std::same_as<U, std::remove_cvref_t<T>>);
-
+//
 // ViewBase/View Tuples
+//
 template <typename>
 struct is_ViewBaseTuple : std::false_type {
 };
@@ -102,7 +108,9 @@ struct is_ViewTuple<ViewTuple<Args...>> : std::true_type {
 template <typename T>
 concept ViewTupleType = is_ViewTuple<std::remove_cvref_t<T>>::value;
 
-// top level Tuple concepts
+//
+// Tuple concepts
+//
 template <typename>
 struct is_Tuple : std::false_type {
 };
@@ -114,6 +122,10 @@ struct is_Tuple<Tuple<Args...>> : std::true_type {
 template <typename T>
 concept TupleType = is_Tuple<std::remove_cvref_t<T>>::value;
 
+//
+// "Owning" Tuples are those that have the datastructure associated with the view
+// In the current implementation, Owning Tuples always inherit from ContainerTuple
+//
 namespace detail
 {
 template <typename>
@@ -129,6 +141,11 @@ struct has_ContainerTuple<T<Args...>>
 template <typename T>
 concept OwningTuple = detail::has_ContainerTuple<std::remove_cvref_t<T>>::value;
 
+//
+// The concepts are supposed to work with all manner of the tuples in the code (i.e.
+// ViewTuples, ContainerTuples, Tuples, std::tuple, ...).  As a generic test for a tuple
+// we simply check that `get` works
+//
 template <typename T>
 concept TupleLike = requires(T t)
 {
@@ -141,8 +158,10 @@ concept NonOwningTuple = TupleLike<T> && (!OwningTuple<T>);
 template <typename T>
 concept NonTupleRange = rs::input_range<T> && (!TupleLike<T>);
 
-// construct something from a range
-// needed for output ranges and container
+//
+// Check that we canconstruct something from a range needed for output ranges and
+// container
+//
 template <typename From, typename To>
 concept FromRange = ranges::range<From>&& requires(From& r)
 {
@@ -244,48 +263,30 @@ using IndexSeq =
 
 namespace traits
 {
-namespace detail
-{
-template <typename, typename>
-constexpr bool invocable_over_v = false;
 
-template <typename F, template <typename...> typename T, typename... Args>
-constexpr bool invocable_over_v<F, T<Args...>> = (std::invocable<F, Args> && ...) ||
-                                                 (std::invocable<F, Args&> && ...);
+template <typename F, typename... T>
+concept InvocableOver = (!TupleLike<F>)&&(TupleLike<T>&&...) &&
+                        mp_same<IndexSeq<T>...>::value&& mp_apply<
+                            mp_all,
+                            mp_transform_q<mp_bind_front<std::is_invocable, F>,
+                                           std::remove_cvref_t<T>...>>::value;
 
-template <typename, typename, typename>
-constexpr bool templated_invocable_over_v = false;
+template <typename F, typename... T>
+concept IndexedInvocableOver =
+    (!TupleLike<F>)&&(!InvocableOver<F, T...>)&&(TupleLike<T>&&...) &&
+    mp_same<IndexSeq<T>...>::value&& mp_apply<
+        mp_all,
+        mp_transform_q<mp_bind_front<std::is_invocable, F>,
+                       mp_iota<mp_size<mp_front<mp_list<std::remove_cvref_t<T>...>>>>,
+                       std::remove_cvref_t<T>...>>::value;
 
-template <typename F, template <typename...> typename T, typename... Args, auto... Is>
-constexpr bool templated_invocable_over_v<F, T<Args...>, std::index_sequence<Is...>> =
-    (TemplateInvocable<Is, F, Args> && ...);
-
-template <typename, typename>
-constexpr bool tuple_invocable_over_v = false;
-
-template <template <typename...> typename F,
-          template <typename...>
-          typename T,
-          typename... Fs,
-          typename... Ts>
-requires(sizeof...(Fs) ==
-         sizeof...(Ts)) constexpr bool tuple_invocable_over_v<F<Fs...>, T<Ts...>> =
-    (std::invocable<Fs, Ts> && ...) || (std::invocable<Fs, Ts&> && ...);
-} // namespace detail
-
-template <typename F, typename T>
-concept InvocableOver =
-    TupleLike<T> && (!TupleLike<F>)&&detail::invocable_over_v<F, std::remove_cvref_t<T>>;
-
-template <typename F, typename T>
-concept TemplatedInvocableOver =
-    TupleLike<T> &&
-    (!TupleLike<
-        F>)&&detail::templated_invocable_over_v<F, std::remove_cvref_t<T>, IndexSeq<T>>;
-
-template <typename F, typename T>
-concept TupleInvocableOver = TupleLike<T>&& TupleLike<F>&&
-    detail::tuple_invocable_over_v<std::remove_cvref_t<F>, std::remove_cvref_t<T>>;
+template <typename F, typename... T>
+concept TupleInvocableOver = TupleLike<F> && (TupleLike<T> && ...) &&
+                             mp_same<IndexSeq<F>, IndexSeq<T>...>::value&& mp_apply<
+                                 mp_all,
+                                 mp_transform_q<mp_bind_front<std::is_invocable>,
+                                                std::remove_cvref_t<F>,
+                                                std::remove_cvref_t<T>...>>::value;
 
 namespace detail
 {

@@ -35,34 +35,61 @@ struct makeTuple_Fn<T<Ts...>> {
 template <traits::TupleLike T>
 constexpr auto makeTuple = detail::makeTuple_Fn<std::remove_cvref_t<T>>{};
 
-template <traits::TupleLike T, traits::InvocableOver<T> F>
-constexpr auto map(T&& t, F&& f)
+template <auto I, traits::TupleLike... T>
+constexpr auto get_all(T&&... t)
 {
-    return [&]<auto... Is>(std::index_sequence<Is...>)
-    {
-        return makeTuple<T>(std::invoke(f, get<Is>(t))...);
-    }
-    (TupleIndex<T>);
+    return std::forward_as_tuple(get<I>(FWD(t))...);
 }
 
-template <traits::TupleLike T, traits::TemplatedInvocableOver<T> F>
-constexpr auto map(T&& t, F&& f)
+template <auto I, traits::TupleLike... T>
+constexpr auto get_all_with_index(T&&... t)
 {
-    return [&]<auto... Is>(std::index_sequence<Is...>)
-    {
-        return makeTuple<T>(f.template operator()<Is>(get<Is>(t))...);
-    }
-    (TupleIndex<T>);
+    return std::forward_as_tuple(traits::mp_size_t<I>{}, get<I>(FWD(t))...);
 }
 
-template <traits::TupleLike T, traits::TupleInvocableOver<T> F>
-constexpr auto map(T&& t, F&& f)
+template <traits::TupleLike... T, traits::InvocableOver<T...> F>
+constexpr auto transform(F&& f, T&&... t)
 {
-    return [&]<auto... Is>(std::index_sequence<Is...>)
+    static_assert(sizeof...(T) > 0);
+    using namespace traits;
+
+    using U = mp_front<mp_list<std::remove_cvref_t<T>...>>;
+
+    return [&f]<auto... Is>(std::index_sequence<Is...>, auto&&... ts)
     {
-        return makeTuple<T>(std::invoke(get<Is>(f), get<Is>(t))...);
+        return makeTuple<U>(std::apply(f, get_all<Is>(ts...))...);
     }
-    (TupleIndex<T>);
+    (TupleIndex<U>, FWD(t)...);
+}
+
+template <traits::TupleLike... T, traits::IndexedInvocableOver<T...> F>
+constexpr auto transform(F&& f, T&&... t)
+{
+    static_assert(sizeof...(T) > 0);
+    using namespace traits;
+
+    using U = mp_front<mp_list<std::remove_cvref_t<T>...>>;
+
+    return [&f]<auto... Is>(std::index_sequence<Is...>, auto&&... ts)
+    {
+        return makeTuple<U>(std::apply(f, get_all_with_index<Is>(ts...))...);
+    }
+    (TupleIndex<U>, FWD(t)...);
+}
+
+template <traits::TupleLike... T, traits::TupleInvocableOver<T...> F>
+constexpr auto transform(F&& f, T&&... t)
+{
+    static_assert(sizeof...(T) > 0);
+    using namespace traits;
+
+    using U = mp_front<mp_list<std::remove_cvref_t<T>...>>;
+
+    return [&f]<auto... Is>(std::index_sequence<Is...>, auto&&... ts)
+    {
+        return makeTuple<U>(std::apply(get<Is>(f), get_all<Is>(ts...))...);
+    }
+    (TupleIndex<U>, FWD(t)...);
 }
 
 // Map a function `f` over the elements in tuple `t`.  Returns a new tuple.
@@ -80,31 +107,49 @@ constexpr auto tuple_map(F&& f, T&& t)
     (TupleIndex<T>);
 }
 
-template <traits::TupleLike T, traits::InvocableOver<T> F>
-void for_each(T&& t, F&& f)
+template <traits::TupleLike... T, traits::InvocableOver<T...> F>
+void for_each(F&& f, T&&... t)
 {
-    [&]<auto... Is>(std::index_sequence<Is...>) { (std::invoke(f, get<Is>(t)), ...); }
-    (TupleIndex<T>);
+    static_assert(sizeof...(T) > 0);
+    using namespace traits;
+
+    using U = mp_front<mp_list<std::remove_cvref_t<T>...>>;
+
+    [&f]<auto... Is>(std::index_sequence<Is...>, auto&&... ts)
+    {
+        (std::apply(f, get_all<Is>(ts...)), ...);
+    }
+    (TupleIndex<U>, FWD(t)...);
 }
 
-template <traits::TupleLike T, traits::TemplatedInvocableOver<T> F>
-void for_each(T&& t, F&& f)
+template <traits::TupleLike... T, traits::IndexedInvocableOver<T...> F>
+void for_each(F&& f, T&&... t)
 {
-    [&]<auto... Is>(std::index_sequence<Is...>)
+    static_assert(sizeof...(T) > 0);
+    using namespace traits;
+
+    using U = mp_front<mp_list<std::remove_cvref_t<T>...>>;
+
+    [&f]<auto... Is>(std::index_sequence<Is...>, auto&&... ts)
     {
-        (f.template operator()<Is>(get<Is>(t)), ...);
+        (std::apply(f, get_all_with_index<Is>(ts...)), ...);
     }
-    (TupleIndex<T>);
+    (TupleIndex<U>, FWD(t)...);
 }
 
-template <traits::TupleLike T, traits::TupleInvocableOver<T> F>
-void for_each(T&& t, F&& f)
+template <traits::TupleLike... T, traits::TupleInvocableOver<T...> F>
+void for_each(F&& f, T&&... t)
 {
-    [&]<auto... Is>(std::index_sequence<Is...>)
+    static_assert(sizeof...(T) > 0);
+    using namespace traits;
+
+    using U = mp_front<mp_list<std::remove_cvref_t<T>...>>;
+
+    [&f]<auto... Is>(std::index_sequence<Is...>, auto&&... ts)
     {
-        (std::invoke(get<Is>(f), get<Is>(t)), ...);
+        (std::apply(get<Is>(f), get_all<Is>(ts...)), ...);
     }
-    (TupleIndex<T>);
+    (TupleIndex<U>, FWD(t)...);
 }
 
 // Given a container and and input range, attempt to resize the container.
@@ -136,14 +181,13 @@ void resize_and_copy(T&& t, N n)
 template <typename R, traits::OutputTuple<R> T>
 requires(!traits::TupleLike<R>) void resize_and_copy(T&& t, R&& r)
 {
-    for_each(FWD(t), [r = FWD(r)](auto&& e) { resize_and_copy(FWD(e), r); });
+    for_each([r = FWD(r)](auto&& e) { resize_and_copy(FWD(e), r); }, FWD(t));
 }
 
 template <traits::TupleLike R, traits::OutputTuple<R> T>
 void resize_and_copy(T&& t, R&& r)
 {
-    for_each(
-        FWD(t), [r = FWD(r)]<auto I>(auto&& e) { resize_and_copy(FWD(e), get<I>(r)); });
+    for_each([](auto&& e, auto&& r) { resize_and_copy(FWD(e), FWD(r)); }, FWD(t), FWD(r));
 }
 
 // Construct and return a new container from an input container.  Preference
