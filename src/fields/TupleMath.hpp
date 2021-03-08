@@ -12,21 +12,6 @@ namespace ccs::field::tuple::lazy
 {
 
 template <typename T>
-struct ContainterMath;
-
-class ContainterAccess
-{
-    template <typename T>
-    friend class ContainterMath;
-};
-
-template <typename T>
-struct ContainerMath {
-
-private:
-};
-
-template <typename T>
 struct ViewMath;
 
 class ViewMathAccess

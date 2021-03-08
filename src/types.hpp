@@ -60,9 +60,9 @@ inline std::string demangle(const char* name)
 }
 
 template <typename T>
-std::string type(const T& t)
+std::string type()
 {
-    return demangle(typeid(t).name());
+    return demangle(typeid(T).name());
 }
 
 } // namespace debug

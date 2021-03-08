@@ -32,17 +32,6 @@ namespace traits
 {
 using namespace boost::mp11;
 
-template <typename T>
-concept Range = rs::input_range<T> && (!std::same_as<int3, std::remove_cvref_t<T>>);
-
-template <typename T>
-concept AnyOutputRange = rs::range<T>&& rs::output_range<T, rs::range_value_t<T>>;
-
-template <typename Rout, typename Rin>
-concept OutputRange = rs::range<Rout> &&
-                      ((rs::input_range<Rin> &&
-                        rs::output_range<Rout, rs::range_value_t<Rin>>) ||
-                       (rs::output_range<Rout, Rin>));
 } // namespace traits
 
 // Forward decls for main types
@@ -152,11 +141,58 @@ concept TupleLike = requires(T t)
     get<0>(t);
 };
 
+//
+// Define constrained template metafunctions to easily work with mp11
+//
+namespace detail
+{
+template <typename>
+struct is_tuple_like_impl : std::false_type {
+};
+
+template <TupleLike T>
+struct is_tuple_like_impl<T> : std::true_type {
+};
+} // namespace detail
+template <typename T>
+using is_tuple_like = detail::is_tuple_like_impl<T>::type;
+
 template <typename T>
 concept NonOwningTuple = TupleLike<T> && (!OwningTuple<T>);
 
 template <typename T>
 concept NonTupleRange = rs::input_range<T> && (!TupleLike<T>);
+
+//
+// Will need index_sequences for the tuple indices
+//
+template <TupleLike T>
+using Seq = std::make_index_sequence<mp_size<std::remove_cvref_t<T>>::value>;
+
+//
+// The Tuples template arguments are non-req qualified versions of the types that
+// result from using `get` to extract different pieces.  This maps the Tuple to an
+// mp_list of the types produced by applying `get` to access every element
+//
+namespace detail
+{
+template <typename T, typename I>
+struct tuple_get_types_impl;
+template <typename T, auto... Is>
+struct tuple_get_types_impl<T, std::index_sequence<Is...>> {
+    using type = traits::mp_list<decltype(get<Is>(std::declval<T>()))...>;
+};
+} // namespace detail
+
+template <TupleLike T>
+using tuple_get_types = detail::tuple_get_types_impl<T, Seq<T>>::type;
+
+//
+// concept for nested tuples.  Will allow for more intuitive mapping and for_each
+//
+template <typename T>
+concept NestedTupleLike = TupleLike<T>&&
+    mp_apply<mp_all, mp_transform<is_tuple_like, tuple_get_types<T>>>::value;
 
 //
 // Check that we canconstruct something from a range needed for output ranges and
@@ -168,6 +204,62 @@ concept FromRange = ranges::range<From>&& requires(From& r)
     To{rs::begin(r), rs::end(r)};
 };
 
+//
+// Range concepts
+//
+template <typename T>
+concept Range = rs::input_range<T> && (!std::same_as<int3, std::remove_cvref_t<T>>);
+
+template <typename T>
+concept AnyOutputRange = rs::range<T>&& rs::output_range<T, rs::range_value_t<T>>;
+
+//
+// Trait for OutputRange.  Used to constrain self-modify math operations.
+// These need to be based on type traits so they can be mapped over nested tuples
+//
+
+namespace detail
+{
+template <typename Rout, typename Rin>
+struct is_output_range_impl : std::false_type {
+};
+
+template <typename Rout, typename Rin>
+    requires rs::range<Rout> &&
+    ((rs::input_range<Rin> && rs::output_range<Rout, rs::range_value_t<Rin>>) ||
+     (rs::output_range<Rout, Rin>)) struct is_output_range_impl<Rout, Rin>
+    : std::true_type {
+};
+} // namespace detail
+
+template <typename Rout, typename Rin>
+using is_output_range = detail::is_output_range_impl<Rout, Rin>::type;
+
+template <typename Rout, typename Rin>
+concept OutputRange = is_output_range<Rout, Rin>::value;
+
+// namespace detail
+// {
+// template <typename, typename>
+// struct is_nested_output_range_impl;
+// }
+
+// template <typename Rout, typename Rin>
+// using is_nested_output_range = detail::is_nested_output_range_impl<Rout, Rin>::type;
+
+// namespace detail
+// {
+// template <typename Rout, typename Rin>
+// struct is_nested_output_range_impl {
+//     using type = is_output_range<Rout, Rin>;
+// };
+
+// } // namespace detail
+
+// concept OutputRange = rs::range<Rout> &&
+//                       ((rs::input_range<Rin> &&
+//                         rs::output_range<Rout, rs::range_value_t<Rin>>) ||
+//                        (rs::output_range<Rout, Rin>));
 namespace detail
 {
 
@@ -237,12 +329,6 @@ concept FromTuple = FromTupleDirect<From, To> || FromTupleRange<From, To>;
 
 // traits for functions on Tuples
 
-template <auto I, typename F, typename... Args>
-concept TemplateInvocable = requires(F f, Args... args)
-{
-    f.template operator()<I>(args...);
-};
-
 namespace detail
 {
 
@@ -263,14 +349,55 @@ using IndexSeq =
 
 namespace traits
 {
-
+//
+// traits for invoking functions over tuples
+//
+namespace detail
+{
+template <typename, typename...>
+struct is_nested_invocable_impl;
+}
 template <typename F, typename... T>
-concept InvocableOver = (!TupleLike<F>)&&(TupleLike<T>&&...) &&
-                        mp_same<IndexSeq<T>...>::value&& mp_apply<
-                            mp_all,
-                            mp_transform_q<mp_bind_front<std::is_invocable, F>,
-                                           std::remove_cvref_t<T>...>>::value;
+using is_nested_invocable = detail::is_nested_invocable_impl<F, T...>::type;
 
+namespace detail
+{
+template <typename F, typename... Args>
+struct is_nested_invocable_impl {
+    using type = std::is_invocable<F, Args...>;
+};
+
+template <typename F, TupleLike... Args>
+struct is_nested_invocable_impl<F, Args...> {
+    using type = mp_flatten<
+        mp_transform_q<mp_bind_front<is_nested_invocable, F>, tuple_get_types<Args>...>>;
+};
+} // namespace detail
+
+//
+// NestedInvocableOver tests to see if we can recursively drill down to the non-tuple
+// elements of a nested tuple and apply a given function
+//
+template <typename F, typename... T>
+concept NestedInvocableOver =
+    (NestedTupleLike<T> && ...) && mp_apply<mp_all, is_nested_invocable<F, T...>>::value;
+
+//
+// Invokable Over tries to apply the Function to each element of the Tuples.
+// preference is given to NestedInvokable
+//
+template <typename F, typename... T>
+concept InvocableOver =
+    (!NestedInvocableOver<F, T...>)&&(!TupleLike<F>)&&(TupleLike<T>&&...) &&
+    mp_same<IndexSeq<T>...>::value&& mp_apply<
+        mp_all,
+        mp_transform_q<mp_bind_front<std::is_invocable, F>,
+                       tuple_get_types<T>...>>::value;
+
+//
+// It can be convenient to invoke a Function whose first argument is an mp_size_t<I>
+// Currently we don't have a use for a nested version
+//
 template <typename F, typename... T>
 concept IndexedInvocableOver =
     (!TupleLike<F>)&&(!InvocableOver<F, T...>)&&(TupleLike<T>&&...) &&
@@ -278,51 +405,77 @@ concept IndexedInvocableOver =
         mp_all,
         mp_transform_q<mp_bind_front<std::is_invocable, F>,
                        mp_iota<mp_size<mp_front<mp_list<std::remove_cvref_t<T>...>>>>,
-                       std::remove_cvref_t<T>...>>::value;
+                       tuple_get_types<T>...>>::value;
 
+//
+// Invoke a Tuple-of-functions over a tuple
+//
 template <typename F, typename... T>
 concept TupleInvocableOver = TupleLike<F> && (TupleLike<T> && ...) &&
                              mp_same<IndexSeq<F>, IndexSeq<T>...>::value&& mp_apply<
                                  mp_all,
                                  mp_transform_q<mp_bind_front<std::is_invocable>,
-                                                std::remove_cvref_t<F>,
-                                                std::remove_cvref_t<T>...>>::value;
+                                                tuple_get_types<F>,
+                                                tuple_get_types<T>...>>::value;
 
 namespace detail
 {
-// concepts for view closures
-template <auto I, typename F, typename T>
-concept pipeable_element = requires(F f, T t)
-{
-    get<I>(t) | f;
+template <typename, typename>
+struct is_pipeable_impl : std::false_type {
 };
 
-// get based
-template <typename...>
-constexpr bool pipeable_over_v = false;
-
-template <typename ViewFn, typename T, auto... Is>
-constexpr bool pipeable_over_v<vs::view_closure<ViewFn>, T, std::index_sequence<Is...>> =
-    (pipeable_element<Is, vs::view_closure<ViewFn>, T> && ...);
-
-template <typename...>
-constexpr bool tuple_pipeable_over_v = false;
-
-template <template <typename...> typename F, typename... Fs, typename T, auto... Is>
-requires(sizeof...(Fs) ==
-         sizeof...(Is)) constexpr bool tuple_pipeable_over_v<F<vs::view_closure<Fs>...>,
-                                                             T,
-                                                             std::index_sequence<Is...>> =
-    (pipeable_element<Is, vs::view_closure<Fs>, T> && ...);
+template <typename F, typename T>
+requires requires(F f, T t)
+{
+    t | f;
+}
+struct is_pipeable_impl<F, T> : std::true_type {
+};
 } // namespace detail
 
 template <typename F, typename T>
-concept PipeableOver = TupleLike<T>&& detail::pipeable_over_v<F, T, IndexSeq<T>>;
+using is_pipeable = detail::is_pipeable_impl<F, T>::type;
+
+//
+// traits for nested pipeables
+//
+namespace detail
+{
+template <typename, typename>
+struct is_nested_pipeable_impl;
+}
 
 template <typename F, typename T>
-concept TuplePipeableOver = TupleLike<T>&& TupleLike<F>&&
-    detail::tuple_pipeable_over_v<std::remove_cvref_t<F>, T, IndexSeq<T>>;
+using is_nested_pipeable = detail::is_nested_pipeable_impl<F, T>::type;
 
+namespace detail
+{
+template <typename F, typename T>
+struct is_nested_pipeable_impl {
+    using type = is_pipeable<F, T>;
+};
+
+template <typename F, TupleLike T>
+struct is_nested_pipeable_impl<F, T> {
+    using type = mp_flatten<
+        mp_transform_q<mp_bind_front<is_nested_pipeable, F>, tuple_get_types<T>>>;
+};
+} // namespace detail
+
+//
+// PipeableOver tests for applying operator| to each element of a potentially nested
+// Tuple. Since the constrained algorithms simply call transform there is no need to make
+// a distinction here
+//
+template <typename F, typename T>
+concept PipeableOver = TupleLike<T>&& mp_apply<mp_all, is_nested_pipeable<F, T>>::value;
+
+template <typename F, typename T>
+concept TuplePipeableOver = TupleLike<T>&& TupleLike<F>&& mp_same<Seq<F>, Seq<T>>::value&&
+    mp_apply<mp_all,
+             mp_transform_q<mp_bind_front<is_pipeable>,
+                            tuple_get_types<F>,
+                            tuple_get_types<T>>>::value;
 } // namespace traits
 
 template <typename...>

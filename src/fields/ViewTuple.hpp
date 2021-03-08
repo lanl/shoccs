@@ -6,6 +6,8 @@
 #include "TuplePipe.hpp"
 #include "TupleUtils.hpp"
 
+#include <iostream>
+
 namespace ccs::field::tuple
 {
 // this base class stores the view of (or pointer to) the data in a tuple.  It should be
@@ -104,6 +106,7 @@ public:
         requires(!traits::OwningTuple<T>) &&
         traits::OutputTuple<ViewBaseTuple, T> ViewBaseTuple& operator=(T&& t)
     {
+        // calling here
         resize_and_copy(*this, FWD(t));
         return *this;
     }
@@ -117,7 +120,7 @@ template <typename... Args>
 ViewBaseTuple(Args&&...) -> ViewBaseTuple<Args...>;
 
 template <std::size_t I, traits::ViewBaseTupleType V>
-constexpr auto get(V&& v) noexcept
+constexpr decltype(auto) get(V&& v) noexcept
 {
     return std::get<I>(FWD(v).v);
 }

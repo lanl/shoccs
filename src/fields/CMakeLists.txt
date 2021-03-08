@@ -1,7 +1,7 @@
 add_library(fields INTERFACE)
 
 target_include_directories(fields INTERFACE ..)
-target_link_libraries(fields INTERFACE range-v3::range-v3 cppcoro)
+target_link_libraries(fields INTERFACE range-v3::range-v3 cppcoro Boost::boost)
 
 #add_unit_test(result_field "fields" fields)
 #add_unit_test(scalar_field "fields" fields)
@@ -9,6 +9,7 @@ target_link_libraries(fields INTERFACE range-v3::range-v3 cppcoro)
 #add_unit_test(scalar "fields" fields)
 add_unit_test(range_concepts "concepts" fields)
 add_unit_test(TupleUtils "fields" fields)
+add_unit_test(TuplePipe "field" fields)
 add_unit_test(algorithms "fields" fields)
 add_unit_test(ContainerTuple "fields" fields)
 add_unit_test(ViewTuple "fields" fields)

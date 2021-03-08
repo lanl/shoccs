@@ -47,6 +47,9 @@ constexpr auto get_all_with_index(T&&... t)
     return std::forward_as_tuple(traits::mp_size_t<I>{}, get<I>(FWD(t))...);
 }
 
+//
+// Return a tuple of F applied to the elements of T...
+//
 template <traits::TupleLike... T, traits::InvocableOver<T...> F>
 constexpr auto transform(F&& f, T&&... t)
 {
@@ -62,6 +65,10 @@ constexpr auto transform(F&& f, T&&... t)
     (TupleIndex<U>, FWD(t)...);
 }
 
+//
+// Return a tuple of F applied to the elements of T... where the first
+// argument of F is an mp_size_t which can be used as constant expression to index a tuple
+//
 template <traits::TupleLike... T, traits::IndexedInvocableOver<T...> F>
 constexpr auto transform(F&& f, T&&... t)
 {
@@ -77,6 +84,9 @@ constexpr auto transform(F&& f, T&&... t)
     (TupleIndex<U>, FWD(t)...);
 }
 
+//
+// Return a tuple of apply the tuple-of-functions F, to the elements of tuples T...
+//
 template <traits::TupleLike... T, traits::TupleInvocableOver<T...> F>
 constexpr auto transform(F&& f, T&&... t)
 {
@@ -88,6 +98,26 @@ constexpr auto transform(F&& f, T&&... t)
     return [&f]<auto... Is>(std::index_sequence<Is...>, auto&&... ts)
     {
         return makeTuple<U>(std::apply(get<Is>(f), get_all<Is>(ts...))...);
+    }
+    (TupleIndex<U>, FWD(t)...);
+}
+
+//
+// Return a tuple of apply the tuple-of-functions F, to the elements of tuples T...
+//
+template <traits::NestedTupleLike... T, traits::NestedInvocableOver<T...> F>
+constexpr auto transform(F&& f, T&&... t)
+{
+    static_assert(sizeof...(T) > 0);
+    using namespace traits;
+
+    using U = mp_front<mp_list<std::remove_cvref_t<T>...>>;
+
+    return [&f]<auto... Is>(std::index_sequence<Is...>, auto&&... ts)
+    {
+        return makeTuple<U>(
+            std::apply([&f](auto&&... args) { return transform(f, FWD(args)...); },
+                       get_all<Is>(ts...))...);
     }
     (TupleIndex<U>, FWD(t)...);
 }
@@ -152,6 +182,23 @@ void for_each(F&& f, T&&... t)
     (TupleIndex<U>, FWD(t)...);
 }
 
+template <traits::NestedTupleLike... T, traits::NestedInvocableOver<T...> F>
+void for_each(F&& f, T&&... t)
+{
+    static_assert(sizeof...(T) > 0);
+    using namespace traits;
+
+    using U = mp_front<mp_list<std::remove_cvref_t<T>...>>;
+
+    [&f]<auto... Is>(std::index_sequence<Is...>, auto&&... ts)
+    {
+        (std::apply([&f](auto&&... args) { for_each(f, FWD(args)...); },
+                    get_all<Is>(ts...)),
+         ...);
+    }
+    (TupleIndex<U>, FWD(t)...);
+}
+
 // Given a container and and input range, attempt to resize the container.
 // Either way, copy the input range into the container - may not be safe.
 template <traits::Range R, traits::OutputRange<R> C>
@@ -187,6 +234,7 @@ requires(!traits::TupleLike<R>) void resize_and_copy(T&& t, R&& r)
 template <traits::TupleLike R, traits::OutputTuple<R> T>
 void resize_and_copy(T&& t, R&& r)
 {
+    // here
     for_each([](auto&& e, auto&& r) { resize_and_copy(FWD(e), FWD(r)); }, FWD(t), FWD(r));
 }
 

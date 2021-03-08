@@ -14,7 +14,7 @@
 
 int main()
 {
- using namespace ccs;
+    using namespace ccs;
     using namespace ccs::field::tuple;
     using T = std::vector<real>;
 
@@ -25,7 +25,7 @@ int main()
     auto u = T{4, 5, 6};
     ViewBaseTuple<T&> y{u};
 
-    x = y;
-    std::cout << rs::equal(v, T{4, 5, 6}) << '\n';
-    
+    //    x = y;
+    resize_and_copy(x, y);
+    // std::cout << rs::equal(v, T{4, 5, 6}) << '\n';
 }

@@ -26,17 +26,14 @@ private:
     requires std::derived_from<std::remove_cvref_t<U>, Type> friend constexpr auto
     operator|(U&& u, F f)
     {
-
         return transform([f](auto&& e) { return e | f; }, FWD(u));
     }
 
     template <typename U, traits::TuplePipeableOver<U> F>
     requires std::derived_from<std::remove_cvref_t<U>, Type> friend constexpr auto
-    operator|(U&& u, F f)
+    operator|(U&& u, F&& f)
     {
-        // what map(std::operator|{}, FWD(u), f)
-        return transform(
-            [f]<auto I>(traits::mp_size_t<I>, auto&& e) { return FWD(e) | get<I>(f); }, FWD(u));
+        return transform([](auto&& e, auto fn) { return FWD(e) | fn; }, FWD(u), FWD(f));
     }
 };
 

@@ -45,6 +45,7 @@ TEST_CASE("OutputTuple")
     using T = std::vector<real>;
 
     REQUIRE(traits::OutputTuple<std::tuple<T, T>, real>);
+    // REQUIRE(traits::OutputTuple<std::tuple<std::tuple<T>, std::tuple<T, T, T>>, real>);
     REQUIRE(traits::OutputTuple<std::tuple<T, T>, int>);
     REQUIRE(traits::OutputTuple<std::tuple<T&, T&>, T>);
     REQUIRE(!traits::OutputTuple<std::tuple<const T&, const T&>, T>);
@@ -123,19 +124,4 @@ TEST_CASE("FromTuple")
     static_assert(FromRange<U, T>);
     static_assert(FromTuple<std::tuple<U, U>, std::tuple<T, T>>);
     static_assert(FromTuple<std::tuple<const U&>&, std::tuple<T>>);
-}
-
-TEST_CASE("Pipeable Over")
-{
-    using namespace ccs;
-    using namespace field::tuple;
-
-    using F = decltype(vs::transform([](auto&& j) { return j; }));
-    using U = ContainerTuple<std::vector<int>>;
-
-    static_assert(traits::detail::pipeable_element<0, F, U>);
-    static_assert(traits::PipeableOver<F, U>);
-
-    static_assert(traits::TuplePipeableOver<std::tuple<F>, U>);
-    static_assert(!traits::TuplePipeableOver<std::tuple<F&>, U>);
 }
