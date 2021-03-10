@@ -10,6 +10,7 @@
 #include <range/v3/view/all.hpp>
 #include <range/v3/view/common.hpp>
 #include <range/v3/view/view.hpp>
+#include <range/v3/view/zip_with.hpp>
 
 namespace ccs::field::tuple
 {
@@ -238,6 +239,10 @@ void resize_and_copy(T&& t, R&& r)
     for_each([](auto&& e, auto&& r) { resize_and_copy(FWD(e), FWD(r)); }, FWD(t), FWD(r));
 }
 
+//
+// `to` is used to recursively construct one tuple from another tuple where the elements
+// must be either directly constructible from one another or constructible from begin/end
+//
 template <typename R, typename Arg>
 requires std::constructible_from<R, Arg> constexpr R to(Arg&& arg)
 {
@@ -267,27 +272,19 @@ template <typename R, typename Arg>
     (TupleIndex<R>, FWD(arg));
 }
 
-// Construct a container from a view by converting the view to a
-// common range.  As above, prefer to delegate construction directly
-// if possible.  This is helpful for constructing owning r_tuples with sizes.
-template <typename... Args, typename T>
-auto container_from_view(const T& t)
+//
+// lifting a function allows us to more easily call the function on each element
+// of the ranges of the tuple
+//
+template <typename Fn>
+constexpr auto lift(Fn fn)
 {
-    return [&t]<auto... Is>(std::index_sequence<Is...>)
-    {
-        constexpr bool direct = requires(T t)
-        {
-            std::tuple<Args...>{Args(view<Is>(t))...};
-        };
-
-        if constexpr (direct) {
-            return std::tuple<Args...>{Args(view<Is>(t))...};
-        } else {
-            auto x = std::tuple{vs::common(view<Is>(t))...};
-            return std::tuple<Args...>{
-                Args{rs::begin(get<Is>(x)), rs::end(get<Is>(x))}...};
-        }
-    }
-    (std::make_index_sequence<sizeof...(Args)>{});
+    return [fn](auto&&... tup) {
+        return transform(
+            [fn]<rs::range... Args>(Args && ... rngs) {
+                return vs::zip_with(fn, FWD(rngs)...);
+            },
+            FWD(tup)...);
+    };
 }
 } // namespace ccs::field::tuple

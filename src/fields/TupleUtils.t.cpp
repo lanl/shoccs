@@ -336,6 +336,39 @@ TEST_CASE("nested transform")
     REQUIRE(rs::equal(get<1>(get<1>(b)), T{9}));
 }
 
+TEST_CASE("lift")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+
+    using T = std::vector<int>;
+
+    auto s = std::tuple{std::tuple{T{1, 2}}, std::tuple{T{3, 4}, T{5}}};
+    constexpr auto lift1 = lift([](auto&& arg) { return arg + 1; });
+
+    auto a = lift1(s);
+
+    REQUIRE(rs::equal(get<0>(get<0>(a)), T{2, 3}));
+    REQUIRE(rs::equal(get<0>(get<1>(a)), T{4, 5}));
+    REQUIRE(rs::equal(get<1>(get<1>(a)), T{6}));
+
+    auto t = std::tuple{std::tuple{T{0, 1}}, std::tuple{T{2, 3}, T{4}}};
+
+    constexpr auto lift2 = lift([](auto&&... args) { return (args + ...); });
+    auto b = lift2(s, t);
+
+    REQUIRE(rs::equal(get<0>(get<0>(b)), T{1, 3}));
+    REQUIRE(rs::equal(get<0>(get<1>(b)), T{5, 7}));
+    REQUIRE(rs::equal(get<1>(get<1>(b)), T{9}));
+
+    constexpr auto lift_plus = lift(std::plus{});
+    auto c = lift_plus(s, t);
+
+    REQUIRE(rs::equal(get<0>(get<0>(c)), T{1, 3}));
+    REQUIRE(rs::equal(get<0>(get<1>(c)), T{5, 7}));
+    REQUIRE(rs::equal(get<1>(get<1>(c)), T{9}));
+}
+
 TEST_CASE("resize_and_copy vector")
 {
     using namespace ccs;

@@ -2,7 +2,6 @@
 
 //#include "Selector.hpp"
 
-//#include "lift.hpp"
 //#include "views.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -76,7 +75,7 @@ TEST_CASE("conversion")
 TEST_CASE("selection")
 {
     using namespace ccs;
-    using namespace field::tuple;
+    using namespace field;
     // some initialization
     auto v = std::vector{1, 2};
     auto rx = std::vector{3, 4};
@@ -159,7 +158,7 @@ TEST_CASE("lifting single arg")
     auto s = Scalar<std::vector<int>>{
         Tuple{vs::iota(1, 5)}, Tuple{vs::iota(6, 10), vs::iota(6, 12), vs::iota(10, 15)}};
 
-    constexpr auto f = lift([](auto&& x) { return std::abs(x) + 1; });
+    constexpr auto f = tuple::lift([](auto&& x) { return std::abs(x) + 1; });
 
     auto j = f(s);
     auto k = s + 1;
@@ -169,31 +168,29 @@ TEST_CASE("lifting single arg")
     REQUIRE(rs::equal(get<1, 1>(j), get<1, 1>(k)));
     REQUIRE(rs::equal(get<2, 1>(j), get<2, 1>(k)));
 }
-#if 0
 
 TEST_CASE("lifting multiple args")
 {
     using namespace ccs;
     using namespace ccs::field;
-    auto x = SimpleScalar<std::vector<int>>{
-        &global::loc,
+    auto x = Scalar<std::vector<int>>{
         Tuple{vs::iota(1, 5)},
         Tuple{vs::iota(6, 10), vs::iota(6, 12), std::vector{-4, 5, -10, 6}}};
-    auto y = SimpleScalar<std::vector<int>>{
-        &global::loc,
+    auto y = Scalar<std::vector<int>>{
         Tuple{vs::iota(2, 6)},
         Tuple{vs::iota(5, 9), vs::iota(-6, 0), std::vector{10, -8, 2, -7}}};
 
-    constexpr auto f =
-        lift([](auto&& x, auto&& y) { return std::max(std::abs(x), std::abs(y)); });
+    constexpr auto f = tuple::lift(
+        [](auto&& x, auto&& y) { return std::max(std::abs(x), std::abs(y)); });
 
     auto z = f(x, y);
 
-    REQUIRE(rs::equal(z | selector::D, vs::iota(2, 6)));
-    REQUIRE(rs::equal(z | selector::Rx, vs::iota(6, 10)));
-    REQUIRE(rs::equal(z | selector::Ry, vs::iota(6, 12)));
-    REQUIRE(rs::equal(z | selector::Rz, std::vector{10, 8, 10, 7}));
+    REQUIRE(rs::equal(get<0>(z), vs::iota(2, 6)));
+    REQUIRE(rs::equal(get<0, 1>(z), vs::iota(6, 10)));
+    REQUIRE(rs::equal(get<1, 1>(z), vs::iota(6, 12)));
+    REQUIRE(rs::equal(get<2, 1>(z), std::vector{10, 8, 10, 7}));
 }
+#if 0
 
 TEST_CASE("mesh location vector")
 {
