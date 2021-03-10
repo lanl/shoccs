@@ -492,21 +492,40 @@ TEST_CASE("to_tuple")
     using namespace ccs;
     using namespace field::tuple;
 
-    std::tuple<int, int, int> x{to_tuple<std::tuple<int, int, int>>(std::tuple{0, 1, 2})};
-    REQUIRE(get<0>(x) == 0);
-    REQUIRE(get<1>(x) == 1);
-    REQUIRE(get<2>(x) == 2);
+    const auto i = vs::iota(0, 10);
+    const auto j = vs::iota(1, 5);
+    const auto k = vs::iota(10, 30);
 
     using T = std::vector<real>;
-    auto y = to_tuple<std::tuple<T, T>>(std::tuple{T{1, 2, 3}, T{4, 5, 6}});
-    REQUIRE(rs::equal(get<0>(y), T{1, 2, 3}));
-    REQUIRE(rs::equal(get<1>(y), T{4, 5, 6}));
+    {
+        auto t = T{1, 2, 3};
+        auto s = to<std::span<const real>>(t);
+        REQUIRE(rs::equal(t, s));
+    }
 
-    const auto i = vs::iota(5, 20);
-    const auto j = vs::iota(-100, 0);
-    auto z = to_tuple<std::tuple<T, T>>(std::tuple{i, j});
-    REQUIRE(rs::equal(get<0>(z), i));
-    REQUIRE(rs::equal(get<1>(z), j));
+    {
+        auto t = to<std::vector<int>>(i);
+        REQUIRE(rs::equal(t, i));
+    }
+
+    {
+        auto t = to<std::tuple<T>>(std::tuple{i});
+        REQUIRE(rs::equal(get<0>(t), i));
+    }
+
+    {
+        auto t = to<std::tuple<T, T>>(std::tuple{i, j});
+        REQUIRE(rs::equal(get<0>(t), i));
+        REQUIRE(rs::equal(get<1>(t), j));
+    }
+
+    {
+        auto t = to<std::tuple<std::tuple<T>, std::tuple<T, T>>>(
+            std::tuple{std::tuple{i}, std::tuple{j, k}});
+        REQUIRE(rs::equal(get<0>(get<0>(t)), i));
+        REQUIRE(rs::equal(get<0>(get<1>(t)), j));
+        REQUIRE(rs::equal(get<1>(get<1>(t)), k));
+    }
 }
 
 TEST_CASE("makeTuple")

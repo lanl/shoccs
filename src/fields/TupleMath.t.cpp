@@ -60,8 +60,118 @@ TEST_CASE("container math")
                       vs::zip_with(std::plus{}, vs::iota(95, 103), vs::iota(-5, 3))));
     REQUIRE(rs::equal(get<1>(xx),
                       vs::zip_with(std::plus{}, vs::iota(90, 101), vs::iota(-10, 1))));
+    // nested;
+    const auto i = vs::iota(0, 10);
+    const auto j = vs::iota(-1, 10);
+    const auto k = vs::iota(-2, 20);
+    Tuple<Tuple<T>, Tuple<T, T>> a{Tuple{i}, Tuple{j, k}};
+    a += 1;
+
+    REQUIRE(rs::equal(get<0>(get<0>(a)), vs::iota(1, 11)));
+    REQUIRE(rs::equal(get<0>(get<1>(a)), vs::iota(0, 11)));
+    REQUIRE(rs::equal(get<1>(get<1>(a)), vs::iota(-1, 21)));
+
+    Tuple<Tuple<T>, Tuple<T, T>> b{Tuple{i}, Tuple{j, k}};
+    a += b;
+
+    REQUIRE(rs::equal(get<0>(get<0>(a)), vs::zip_with(std::plus{}, vs::iota(1, 11), i)));
+    REQUIRE(rs::equal(get<0>(get<1>(a)), vs::zip_with(std::plus{}, vs::iota(0, 11), j)));
+    REQUIRE(rs::equal(get<1>(get<1>(a)), vs::zip_with(std::plus{}, vs::iota(-1, 21), k)));
 }
-#if 0
+
+TEST_CASE("conversions with math")
+{
+    using namespace ccs;
+    using namespace ccs::field::tuple;
+    using T = std::vector<real>;
+    using U = std::span<real>;
+
+    const auto i = vs::iota(0, 10);
+    const auto j = vs::iota(5, 7);
+    const auto k = vs::iota(50, 100);
+
+    constexpr auto plus = [](auto&& a, auto&& b) {
+        return vs::zip_with(std::plus{}, FWD(a), FWD(b));
+    };
+
+    SECTION("one tuple")
+    {
+        Tuple<T> x{i};
+        auto q = x + 1;
+        auto r = q + x;
+        Tuple<T> y{r};
+        REQUIRE(rs::equal(y, plus(vs::iota(1, 11), i)));
+
+        Tuple<T> z = r;
+        REQUIRE(rs::equal(z, r));
+
+        Tuple<T> a{};
+        a = r;
+        REQUIRE(rs::equal(a, r));
+
+        Tuple<T> b{rs::size(a)};
+        Tuple<U> c = b;
+        c = r;
+        REQUIRE(rs::equal(c, r));
+    }
+
+    SECTION("two tuple")
+    {
+        Tuple<T, T> x{i, j};
+        auto q = x + 1;
+        auto r = q + x;
+        Tuple<T, T> y{r};
+        REQUIRE(rs::equal(get<0>(y), plus(vs::iota(1, 11), i)));
+        REQUIRE(rs::equal(get<1>(y), plus(vs::iota(6, 8), j)));
+
+        Tuple<T, T> z = r;
+        REQUIRE(rs::equal(get<0>(z), get<0>(r)));
+        REQUIRE(rs::equal(get<1>(z), get<1>(r)));
+
+        Tuple<T, T> a{};
+        a = r;
+        REQUIRE(rs::equal(get<0>(a), get<0>(r)));
+        REQUIRE(rs::equal(get<1>(a), get<1>(r)));
+
+        Tuple<T, T> b{x};
+        Tuple<U, U> c = b;
+        c = r;
+        REQUIRE(rs::equal(get<0>(c), get<0>(r)));
+        REQUIRE(rs::equal(get<1>(c), get<1>(r)));
+    }
+
+    SECTION("Nested")
+    {
+        using namespace traits;
+        using V = Tuple<Tuple<T>, Tuple<T, T>>;
+        V x{Tuple{i}, Tuple{j, k}};
+        auto q = x + 1;
+        auto r = q + x;
+
+        V y{r};
+        REQUIRE(rs::equal(get<0, 0>(y), plus(vs::iota(1, 11), i)));
+        REQUIRE(rs::equal(get<0, 1>(y), plus(vs::iota(6, 8), j)));
+        REQUIRE(rs::equal(get<1, 1>(y), plus(vs::iota(51, 101), k)));
+
+        V z = r;
+        REQUIRE(rs::equal(get<0, 0>(z), get<0, 0>(r)));
+        REQUIRE(rs::equal(get<0, 1>(z), get<0, 1>(r)));
+        REQUIRE(rs::equal(get<1, 1>(z), get<1, 1>(r)));
+
+        V a{};
+        a = r;
+        REQUIRE(rs::equal(get<0, 0>(a), get<0, 0>(r)));
+        REQUIRE(rs::equal(get<0, 1>(a), get<0, 1>(r)));
+        REQUIRE(rs::equal(get<1, 1>(a), get<1, 1>(r)));
+
+        V b{x};
+        Tuple<Tuple<U>, Tuple<U, U>> c = b;
+        c = r;
+        REQUIRE(rs::equal(get<0, 0>(c), get<0, 0>(r)));
+        REQUIRE(rs::equal(get<0, 1>(c), get<0, 1>(r)));
+        REQUIRE(rs::equal(get<1, 1>(c), get<1, 1>(r)));
+    }
+}
 
 TEST_CASE("view math with numeric")
 {
@@ -88,9 +198,9 @@ TEST_CASE("view math with numeric")
 
             auto o = vs::repeat(6);
 
-            REQUIRE(rs::equal(view<0>(zz), vs::zip_with(std::plus{}, vx, o)));
-            REQUIRE(rs::equal(view<1>(zz), vs::zip_with(std::plus{}, vy, o)));
-            REQUIRE(rs::equal(view<2>(zz), vs::zip_with(std::plus{}, vz, o)));
+            REQUIRE(rs::equal(get<0>(zz), vs::zip_with(std::plus{}, vx, o)));
+            REQUIRE(rs::equal(get<1>(zz), vs::zip_with(std::plus{}, vy, o)));
+            REQUIRE(rs::equal(get<2>(zz), vs::zip_with(std::plus{}, vz, o)));
         }
 
         {
@@ -99,11 +209,24 @@ TEST_CASE("view math with numeric")
             auto z = vs::iota(2 * i, 3 * i);
             auto xyz = Tuple<T, T, T>(x, y, z);
 
-            auto s = xyz + Tuple{x};
+            auto s = xyz + Tuple{x, y, z};
 
-            REQUIRE(rs::equal(view<0>(s), vs::zip_with(std::plus{}, x, x)));
-            REQUIRE(rs::equal(view<1>(s), vs::zip_with(std::plus{}, y, x)));
-            REQUIRE(rs::equal(view<2>(s), vs::zip_with(std::plus{}, z, x)));
+            REQUIRE(rs::equal(get<0>(s), vs::zip_with(std::plus{}, x, x)));
+            REQUIRE(rs::equal(get<1>(s), vs::zip_with(std::plus{}, y, y)));
+            REQUIRE(rs::equal(get<2>(s), vs::zip_with(std::plus{}, z, z)));
+        }
+
+        {
+            auto x = vs::iota(0, i);
+            auto y = vs::iota(i, 2 * i);
+            auto z = vs::iota(2 * i, 3 * i);
+            auto xyz = Tuple<Tuple<T>, Tuple<T, T>>{Tuple{x}, Tuple{y, z}};
+
+            auto s = xyz + Tuple{Tuple{x}, Tuple{y, z}};
+
+            REQUIRE(rs::equal(get<0>(get<0>(s)), vs::zip_with(std::plus{}, x, x)));
+            REQUIRE(rs::equal(get<0>(get<1>(s)), vs::zip_with(std::plus{}, y, y)));
+            REQUIRE(rs::equal(get<1>(get<1>(s)), vs::zip_with(std::plus{}, z, z)));
         }
     }
 }
@@ -135,20 +258,4 @@ TEST_CASE("view math with tuples")
         yy = x + y;
         REQUIRE(rs::equal(yy, xx));
     }
-
-    {
-        auto xx = Tuple<T, T, T>{x + y, z + x + x + y, z + z + x};
-        REQUIRE(rs::equal(view<0>(xx), z));
-        REQUIRE(rs::equal(view<1>(xx), g));
-        REQUIRE(rs::equal(view<2>(xx), h));
-
-        // This functionality complicates the constraints on Tuple construction and I
-        // don't think we actually need it.
-        // auto yy = Tuple<T, T, T>{};
-        // yy = Tuple{x + y, z + x + x + y, z + z + x};
-        // REQUIRE(rs::equal(view<0>(yy), z));
-        // REQUIRE(rs::equal(view<1>(yy), g));
-        // REQUIRE(rs::equal(view<2>(yy), h));
-    }
 }
-#endif

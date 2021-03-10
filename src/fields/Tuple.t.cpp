@@ -387,21 +387,33 @@ TEST_CASE("Conversion Nested ThreeTuples")
 
     Tuple<Tuple<U>, Tuple<U, U, U>> y = x;
     REQUIRE(rs::equal(get<0>(x), get<0>(y)));
-    REQUIRE(rs::equal(get<0>(get<1>(x)), get<0>(get<1>(y))));
-    REQUIRE(rs::equal(get<1>(get<1>(x)), get<1>(get<1>(y))));
-    REQUIRE(rs::equal(get<2>(get<1>(x)), get<2>(get<1>(y))));
+    REQUIRE(rs::equal(get<0, 1>(x), get<0, 1>(y)));
+    REQUIRE(rs::equal(get<1, 1>(x), get<1, 1>(y)));
+    REQUIRE(rs::equal(get<2, 1>(x), get<2, 1>(y)));
 
     Tuple<Tuple<V>, Tuple<V, V, V>> z = x;
     REQUIRE(rs::equal(get<0>(x), get<0>(z)));
-    REQUIRE(rs::equal(get<0>(get<1>(x)), get<0>(get<1>(z))));
-    REQUIRE(rs::equal(get<1>(get<1>(x)), get<1>(get<1>(z))));
-    REQUIRE(rs::equal(get<2>(get<1>(x)), get<2>(get<1>(z))));
+    REQUIRE(rs::equal(get<0, 1>(x), get<0, 1>(z)));
+    REQUIRE(rs::equal(get<1, 1>(x), get<1, 1>(z)));
+    REQUIRE(rs::equal(get<2, 1>(x), get<2, 1>(z)));
 
     Tuple<Tuple<V>, Tuple<V, V, V>> zz = y;
     REQUIRE(rs::equal(get<0>(x), get<0>(zz)));
-    REQUIRE(rs::equal(get<0>(get<1>(x)), get<0>(get<1>(zz))));
-    REQUIRE(rs::equal(get<1>(get<1>(x)), get<1>(get<1>(zz))));
-    REQUIRE(rs::equal(get<2>(get<1>(x)), get<2>(get<1>(zz))));
+    REQUIRE(rs::equal(get<0, 1>(x), get<0, 1>(zz)));
+    REQUIRE(rs::equal(get<1, 1>(x), get<1, 1>(zz)));
+    REQUIRE(rs::equal(get<2, 1>(x), get<2, 1>(zz)));
+
+    Tuple<Tuple<T>, Tuple<T, T, T>> a = x;
+    REQUIRE(rs::equal(get<0>(x), get<0>(a)));
+    REQUIRE(rs::equal(get<0, 1>(x), get<0, 1>(a)));
+    REQUIRE(rs::equal(get<1, 1>(x), get<1, 1>(a)));
+    REQUIRE(rs::equal(get<2, 1>(x), get<2, 1>(a)));
+
+    Tuple<Tuple<T>, Tuple<T, T, T>> b = zz;
+    REQUIRE(rs::equal(get<0>(x), get<0>(b)));
+    REQUIRE(rs::equal(get<0, 1>(x), get<0, 1>(b)));
+    REQUIRE(rs::equal(get<1, 1>(x), get<1, 1>(b)));
+    REQUIRE(rs::equal(get<2, 1>(x), get<2, 1>(b)));
 }
 
 TEST_CASE("numeric assignment with owning tuple")

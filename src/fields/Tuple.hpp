@@ -68,6 +68,10 @@ struct Tuple : ContainerTuple<Args...>, ViewTuple<Args&...> {
         View::operator=(*this);
         return *this;
     }
+
+    Tuple& as_Tuple() & { return *this; }
+    const Tuple& as_Tuple() const& { return *this; }
+    Tuple&& as_Tuple() && { return MOVE(*this); }
 };
 
 //
@@ -95,6 +99,10 @@ struct Tuple<Args...> : ViewTuple<Args...> {
         View::operator=(FWD(t));
         return *this;
     }
+
+    Tuple& as_Tuple() & { return *this; }
+    const Tuple& as_Tuple() const& { return *this; }
+    Tuple&& as_Tuple() && { return MOVE(*this); }
 };
 
 template <typename... Args>
@@ -116,6 +124,12 @@ constexpr decltype(auto) get(C&& c)
         return get<I>(FWD(c).as_Container());
     else
         return get<I>(FWD(c).as_ViewTuple());
+}
+
+template <std::size_t I, std::size_t J, traits::TupleType C>
+constexpr decltype(auto) get(C&& c)
+{
+    return get<I>(get<J>(FWD(c)));
 }
 
 } // namespace ccs::field::tuple

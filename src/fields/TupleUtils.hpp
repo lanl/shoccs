@@ -238,29 +238,33 @@ void resize_and_copy(T&& t, R&& r)
     for_each([](auto&& e, auto&& r) { resize_and_copy(FWD(e), FWD(r)); }, FWD(t), FWD(r));
 }
 
-// Construct and return a new container from an input container.  Preference
-// is given to delegating to direct construction.  Falls back to construction
-// via input ranges.
-template <typename To, traits::FromTupleDirect<To> T>
-auto to_tuple(T&& t)
+template <typename R, typename Arg>
+requires std::constructible_from<R, Arg> constexpr R to(Arg&& arg)
 {
-    return [&]<auto... Is>(std::index_sequence<Is...>)
-    {
-        return std::tuple<std::tuple_element_t<Is, To>...>{
-            std::tuple_element_t<Is, To>(get<Is>(t))...};
-    }
-    (TupleIndex<T>);
+    return R{FWD(arg)};
 }
 
-template <typename To, traits::FromTupleRange<To> T>
-requires(!traits::FromTupleDirect<T, To>) auto to_tuple(T&& t)
+template <typename R, typename Arg>
+    requires(!std::constructible_from<R, Arg>) &&
+    traits::ConstructibleFromRange<R, Arg> constexpr R to(Arg&& arg)
 {
-    return [&]<auto... Is>(std::index_sequence<Is...>)
-    {
-        return std::tuple<std::tuple_element_t<Is, To>...>{
-            std::tuple_element_t<Is, To>(rs::begin(get<Is>(t)), rs::end(get<Is>(t)))...};
+    if constexpr (rs::common_range<Arg>) {
+        return R(rs::begin(arg), rs::end(arg));
+    } else {
+        auto rng = vs::common(arg);
+        return R(rs::begin(rng), rs::end(rng));
     }
-    (TupleIndex<T>);
+}
+
+template <typename R, typename Arg>
+    requires(!std::constructible_from<R, Arg>) &&
+    traits::TupleFromTuple<R, Arg> constexpr R to(Arg&& arg)
+{
+    return []<auto... Is>(std::index_sequence<Is...>, auto&& x)
+    {
+        return makeTuple<R>(to<std::tuple_element_t<Is, R>>(get<Is>(x))...);
+    }
+    (TupleIndex<R>, FWD(arg));
 }
 
 // Construct a container from a view by converting the view to a

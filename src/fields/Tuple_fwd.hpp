@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include <concepts>
 #include <range/v3/range/concepts.hpp>
+#include <range/v3/view/common.hpp>
 #include <range/v3/view/view.hpp>
 
 #include <boost/mp11.hpp>
@@ -16,9 +17,6 @@ namespace ccs::field::tuple
 {
 
 using std::get;
-
-template <int I, typename R>
-constexpr auto view(R&&);
 
 // Concept for being able to apply vs::all.  Need to exclude int3 as
 // an "Allable" range to trigger proper tuple construction calls
@@ -195,14 +193,33 @@ concept NestedTupleLike = TupleLike<T>&&
     mp_apply<mp_all, mp_transform<is_tuple_like, tuple_get_types<T>>>::value;
 
 //
-// Check that we canconstruct something from a range needed for output ranges and
-// container
+// need to determine the shape of tuples to make sure we only appy the mp11 function
+// on similarly shaped tuples to prevent disasters
 //
-template <typename From, typename To>
-concept FromRange = ranges::range<From>&& requires(From& r)
+namespace detail
 {
-    To{rs::begin(r), rs::end(r)};
+template <typename>
+struct tuple_shape_impl;
+}
+template <TupleLike T>
+using tuple_shape = typename detail::tuple_shape_impl<std::remove_cvref_t<T>>::type;
+
+namespace detail
+{
+template <typename T>
+struct tuple_shape_impl {
+    using type = mp_list<mp_size<T>>;
 };
+
+template <NestedTupleLike T>
+struct tuple_shape_impl<T> {
+    using type = mp_transform<tuple_shape, mp_apply<mp_list, T>>;
+};
+} // namespace detail
+
+template <typename T, typename U>
+concept SimilarTuples =
+    TupleLike<T>&& TupleLike<U>&& std::same_as<tuple_shape<T>, tuple_shape<U>>;
 
 //
 // Range concepts
@@ -238,94 +255,149 @@ using is_output_range = detail::is_output_range_impl<Rout, Rin>::type;
 template <typename Rout, typename Rin>
 concept OutputRange = is_output_range<Rout, Rin>::value;
 
-// namespace detail
-// {
-// template <typename, typename>
-// struct is_nested_output_range_impl;
-// }
-
-// template <typename Rout, typename Rin>
-// using is_nested_output_range = detail::is_nested_output_range_impl<Rout, Rin>::type;
-
-// namespace detail
-// {
-// template <typename Rout, typename Rin>
-// struct is_nested_output_range_impl {
-//     using type = is_output_range<Rout, Rin>;
-// };
-
-// } // namespace detail
-
-// concept OutputRange = rs::range<Rout> &&
-//                       ((rs::input_range<Rin> &&
-//                         rs::output_range<Rout, rs::range_value_t<Rin>>) ||
-//                        (rs::output_range<Rout, Rin>));
 namespace detail
 {
-
 template <typename, typename>
-constexpr bool OutputTuple_v = false;
+struct is_output_tuple_impl;
+}
+template <typename Out, typename In>
+using is_output_tuple = detail::is_output_tuple_impl<Out, In>::type;
 
-template <template <typename...> typename Out, typename In, typename... Os>
-requires(!TupleLike<In>) constexpr bool OutputTuple_v<Out<Os...>, In> =
-    (OutputRange<Os, In> && ...);
+namespace detail
+{
+template <typename Out, typename In>
+struct is_output_tuple_impl {
+    using type = is_output_range<Out, In>;
+};
 
-template <template <typename...> typename Out,
-          template <typename...>
-          typename In,
-          typename... Os,
-          typename... Is>
-requires(TupleLike<In<Is...>> &&
-         sizeof...(Is) ==
-             sizeof...(Os)) constexpr bool OutputTuple_v<Out<Os...>, In<Is...>> =
-    (OutputRange<Os, Is> && ...);
+template <TupleLike Out, typename In>
+struct is_output_tuple_impl<Out, In> {
+    using type = mp_flatten<
+        mp_transform_q<mp_bind_back<is_output_tuple, In>, tuple_get_types<Out>>>;
+};
+
+template <TupleLike Out, TupleLike In>
+struct is_output_tuple_impl<Out, In> {
+    using type = mp_flatten<
+        mp_transform<is_output_tuple, tuple_get_types<Out>, tuple_get_types<In>>>;
+};
 
 } // namespace detail
 
 template <typename Out, typename In>
-concept OutputTuple = TupleLike<Out>&&
-    detail::OutputTuple_v<std::remove_reference_t<Out>, std::remove_cvref_t<In>>;
+concept OutputTuple = TupleLike<Out>&& mp_apply<mp_all, is_output_tuple<Out, In>>::value;
+
+//
+// Check that we canconstruct something from a range needed for output ranges and
+// container
+//
+namespace detail
+{
+template <typename, typename>
+struct constructible_from_range_impl {
+    using type = std::false_type;
+};
+template <typename T, NonTupleRange Arg>
+struct constructible_from_range_impl<T, Arg> {
+    using C = decltype(vs::common(std::declval<Arg>()));
+    using type = std::is_constructible<T, rs::iterator_t<C>, rs::sentinel_t<C>>;
+};
+
+template <typename T, NonTupleRange Arg>
+requires rs::common_range<Arg> struct constructible_from_range_impl<T, Arg> {
+    using type = std::is_constructible<T, rs::iterator_t<Arg>, rs::sentinel_t<Arg>>;
+};
+} // namespace detail
+
+template <typename T, typename Arg>
+using is_constructible_from_range = detail::constructible_from_range_impl<T, Arg>::type;
+
+template <typename T, typename Arg>
+concept ConstructibleFromRange = is_constructible_from_range<T, Arg>::value;
+
+//
+// Combine all supported construction methods into a single trait
+//
+template <typename T, typename Arg>
+using is_constructible_from =
+    mp_or<is_constructible_from_range<T, Arg>, std::is_constructible<T, Arg>>;
+
+//
+// Traits for nested construction
+//
+namespace detail
+{
+template <typename, typename>
+struct is_tuple_constructible_from_impl;
+}
+template <typename T, typename Arg>
+using is_tuple_constructible_from =
+    detail::is_tuple_constructible_from_impl<T, Arg>::type;
 
 namespace detail
 {
+template <typename T, typename Arg>
+struct is_tuple_constructible_from_impl {
+    using type = is_constructible_from<T, Arg>;
+};
 
-template <typename, typename>
-constexpr bool direct_construct_v = false;
+// Note that we can't use tuple_get_types here for T since that adds references via get
+// which change the constructibility of the components of T
+template <TupleLike T, TupleLike Arg>
+requires(mp_size<std::remove_cvref_t<T>>::value ==
+         mp_size<std::remove_cvref_t<Arg>>::
+             value) struct is_tuple_constructible_from_impl<T, Arg> {
+    using type = mp_flatten<mp_transform<is_tuple_constructible_from,
+                                         // tuple_get_types<T>,
+                                         mp_rename<std::remove_reference_t<T>, mp_list>,
+                                         tuple_get_types<Arg>>>;
+};
 
-template <template <typename...> typename To,
-          template <typename...>
-          typename From,
-          typename... Ts,
-          typename... Fs>
-requires(sizeof...(Ts) ==
-         sizeof...(Fs)) constexpr bool direct_construct_v<From<Fs...>, To<Ts...>> =
-    (std::constructible_from<Ts, Fs> && ...);
+// template <typename, typename>
+// constexpr bool direct_construct_v = false;
 
-template <typename, typename>
-constexpr bool from_range_v = false;
+// template <template <typename...> typename To,
+//           template <typename...>
+//           typename From,
+//           typename... Ts,
+//           typename... Fs>
+// requires(sizeof...(Ts) ==
+//          sizeof...(Fs)) constexpr bool direct_construct_v<From<Fs...>, To<Ts...>> =
+//     (std::constructible_from<Ts, Fs> && ...);
 
-template <template <typename...> typename To,
-          template <typename...>
-          typename From,
-          typename... Ts,
-          typename... Fs>
-requires(sizeof...(Ts) ==
-         sizeof...(Fs)) constexpr bool from_range_v<From<Fs...>, To<Ts...>> =
-    (FromRange<Fs, Ts> && ...);
+// template <typename, typename>
+// constexpr bool from_range_v = false;
+
+// template <template <typename...> typename To,
+//           template <typename...>
+//           typename From,
+//           typename... Ts,
+//           typename... Fs>
+// requires(sizeof...(Ts) ==
+//          sizeof...(Fs)) constexpr bool from_range_v<From<Fs...>, To<Ts...>> =
+//     (ConstructibleFromRange<Fs, Ts> && ...);
 
 } // namespace detail
 
-template <typename From, typename To>
-concept FromTupleDirect = TupleLike<To>&& TupleLike<From>&&
-    detail::direct_construct_v<std::remove_cvref_t<From>, To>;
+template <typename T, typename Arg>
+concept TupleFromTuple =
+    SimilarTuples<T, Arg>&& mp_apply<mp_all, is_tuple_constructible_from<T, Arg>>::value;
 
-template <typename From, typename To>
-concept FromTupleRange =
-    TupleLike<To>&& TupleLike<From>&& detail::from_range_v<std::remove_cvref_t<From>, To>;
+template <typename Arg, typename T>
+concept TupleToTuple = TupleFromTuple<T, Arg>;
 
-// Needed to simplify construction of ContainerTuples
-template <typename From, typename To>
-concept FromTuple = FromTupleDirect<From, To> || FromTupleRange<From, To>;
+// template <typename From, typename To>
+// concept FromTupleDirect = TupleLike<To>&& TupleLike<From>&&
+//     detail::direct_construct_v<std::remove_cvref_t<From>, To>;
+
+// template <typename From, typename To>
+// concept FromTupleRange =
+//     TupleLike<To>&& TupleLike<From>&& detail::from_range_v<std::remove_cvref_t<From>,
+//     To>;
+
+// // Needed to simplify construction of ContainerTuples
+// template <typename From, typename To>
+// concept FromTuple = FromTupleDirect<From, To> || FromTupleRange<From, To>;
 
 // traits for functions on Tuples
 

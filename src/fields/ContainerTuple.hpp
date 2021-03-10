@@ -22,20 +22,21 @@ public:
     ContainerTuple(Args&&... args) : c{FWD(args)...} {}
 
     template <typename... T>
-    requires(std::constructible_from<Args, T>&&...) explicit ContainerTuple(T&&... args)
+    requires(std::constructible_from<Args, T>&&...) ContainerTuple(T&&... args)
         : c(FWD(args)...)
     {
     }
 
     // allow for constructing and assigning from input_ranges
     template <traits::NonTupleRange... Ranges>
-    requires(traits::FromRange<Ranges, Args>&&...) ContainerTuple(Ranges&&... r)
+    requires(traits::ConstructibleFromRange<Args, Ranges>&&...)
+        ContainerTuple(Ranges&&... r)
         : c{Args{rs::begin(r), rs::end(r)}...}
     {
     }
 
-    template <traits::FromTuple<ContainerTuple> T>
-    ContainerTuple(T&& t) : c{to_tuple<ContainerTuple>(FWD(t))}
+    template <traits::TupleToTuple<ContainerTuple> T>
+    ContainerTuple(T&& t) : c{to<std::tuple<Args...>>(FWD(t))}
     {
     }
 

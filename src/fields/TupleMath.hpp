@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Tuple_fwd.hpp"
-#include "types.hpp"
+#include "TupleUtils.hpp"
+
 #include <range/v3/view/repeat.hpp>
 #include <range/v3/view/repeat_n.hpp>
 #include <range/v3/view/zip.hpp>
@@ -126,16 +126,11 @@ private:
     template <std::derived_from<T> U, Numeric V>
     requires traits::OutputTuple<U, V> friend U& operator+=(U& u, V v)
     {
-        constexpr auto N = std::tuple_size_v<U>;
-
-        [&u, v ]<auto... Is>(std::index_sequence<Is...>)
-        {
-            auto f = [v](auto&& r) {
-                for (auto&& x : r) x += v;
-            };
-            (f(get<Is>(u)), ...);
-        }
-        (std::make_index_sequence<N>{});
+        for_each(
+            [v](auto&& rng) {
+                for (auto&& x : rng) x += v;
+            },
+            u);
 
         return u;
     }
@@ -143,99 +138,50 @@ private:
     template <std::derived_from<T> U, traits::TupleLike V>
     requires traits::OutputTuple<U, V> friend U& operator+=(U& u, V&& v)
     {
-        constexpr auto N = std::tuple_size_v<U>;
-
-        [&]<auto... Is>(std::index_sequence<Is...>)
-        {
-            auto f = [](auto&& self, auto&& other) {
-                for (auto&& [x, y] : vs::zip(self, other)) x += y;
-            };
-            (f(get<Is>(u), get<Is>(v)), ...);
-        }
-        (std::make_index_sequence<N>{});
+        for_each(
+            [](auto&& out, auto&& in) {
+                for (auto&& [o, i] : vs::zip(out, in)) o += i;
+            },
+            u,
+            FWD(v));
 
         return u;
     }
 
     template <typename U, Numeric V>
-    requires std::derived_from<std::remove_cvref_t<U>, T>&&
-        From_View<U> friend constexpr auto
-        operator+(U&& u, V v)
+    requires std::derived_from<std::remove_cvref_t<U>, T> friend constexpr auto
+    operator+(U&& u, V v)
     {
-        constexpr auto N = std::tuple_size_v<std::remove_cvref_t<U>>;
-        constexpr bool nested = requires(U u, V v) { operator+(get<0>(u), v); };
-
-        if constexpr (nested) {
-            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto v)
-            {
-                return std::invoke(create_from_view<U>, u, operator+(get<Is>(u), v)...);
-            }
-            (std::make_index_sequence<N>{}, FWD(u), v);
-        } else {
-            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto v)
-            {
-                return std::invoke(create_from_view<U>,
-                                   u,
-                                   vs::zip_with(std::plus{},
-                                                get<Is>(u),
-                                                vs::repeat_n(v, get<Is>(u).size()))...);
-            }
-            (std::make_index_sequence<N>{}, FWD(u), v);
-        }
+        return transform(
+            [v](auto&& rng) {
+                const auto sz = rs::size(rng);
+                return vs::zip_with(std::plus{}, FWD(rng), vs::repeat_n(v, sz));
+            },
+            FWD(u));
     }
 
     template <typename U, Numeric V>
-    requires std::derived_from<std::remove_cvref_t<U>, T>&&
-        From_View<U> friend constexpr auto
-        operator+(V v, U&& u)
+    requires std::derived_from<std::remove_cvref_t<U>, T> friend constexpr auto
+    operator+(V v, U&& u)
     {
-        constexpr auto N = std::tuple_size_v<std::remove_cvref_t<U>>;
-        constexpr bool nested = requires(U u, V v) { operator+(v, get<0>(u)); };
-
-        if constexpr (nested) {
-            return []<auto... Is>(std::index_sequence<Is...>, auto v, auto&& u)
-            {
-                return std::invoke(create_from_view<U>, u, operator+(v, get<Is>(u))...);
-            }
-            (std::make_index_sequence<N>{}, v, FWD(u));
-        } else {
-            return []<auto... Is>(std::index_sequence<Is...>, auto v, auto&& u)
-            {
-                return std::invoke(create_from_view<U>,
-                                   u,
-                                   vs::zip_with(std::plus{},
-                                                vs::repeat_n(v, get<Is>(u).size()),
-                                                get<Is>(u))...);
-            }
-            (std::make_index_sequence<N>{}, v, FWD(u));
-        }
+        return transform(
+            [v](auto&& rng) {
+                const auto sz = rs::size(rng);
+                return vs::zip_with(std::plus{}, vs::repeat_n(v, sz), FWD(rng));
+            },
+            FWD(u));
     }
 
     template <typename U, typename V>
     requires std::derived_from<std::remove_cvref_t<U>, T>&&
-        From_View<U, V> friend constexpr auto
+        traits::mp_similar<std::remove_cvref_t<U>,
+                           std::remove_cvref_t<V>>::value friend constexpr auto
         operator+(U&& u, V&& v)
     {
-        constexpr auto N = std::tuple_size_v<std::remove_cvref_t<U>>;
-        constexpr bool nested = requires(U u, V v) { operator+(get<0>(u), get<0>(v)); };
-
-        if constexpr (nested) {
-            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto&& v)
-            {
-                return std::invoke(
-                    create_from_view<U, V>, u, v, operator+(get<Is>(u), get<Is>(v))...);
-            }
-            (std::make_index_sequence<N>{}, v, FWD(u));
-        } else {
-            return []<auto... Is>(std::index_sequence<Is...>, auto&& u, auto&& v)
-            {
-                return std::invoke(create_from_view<U, V>,
-                                   u,
-                                   v,
-                                   vs::zip_with(std::plus{}, get<Is>(u), get<Is>(v))...);
-            }
-            (std::make_index_sequence<N>{}, FWD(u), FWD(v));
-        }
+        return transform(
+            [](auto&& a, auto&& b) { return vs::zip_with(std::plus{}, FWD(a), FWD(b)); },
+            FWD(u),
+            FWD(v));
     }
 
 #if 0

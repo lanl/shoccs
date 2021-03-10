@@ -45,7 +45,7 @@ TEST_CASE("OutputTuple")
     using T = std::vector<real>;
 
     REQUIRE(traits::OutputTuple<std::tuple<T, T>, real>);
-    // REQUIRE(traits::OutputTuple<std::tuple<std::tuple<T>, std::tuple<T, T, T>>, real>);
+    REQUIRE(traits::OutputTuple<std::tuple<std::tuple<T>, std::tuple<T, T, T>>, real>);
     REQUIRE(traits::OutputTuple<std::tuple<T, T>, int>);
     REQUIRE(traits::OutputTuple<std::tuple<T&, T&>, T>);
     REQUIRE(!traits::OutputTuple<std::tuple<const T&, const T&>, T>);
@@ -100,28 +100,38 @@ TEST_CASE("NotTupleRanges")
     REQUIRE(traits::NonTupleRange<std::span<const real>>);
 }
 
-TEST_CASE("FromRange")
+TEST_CASE("From")
 {
     using namespace ccs;
     using namespace ccs::field::tuple;
 
-    REQUIRE(traits::FromRange<std::vector<int>, std::span<int>>);
-    REQUIRE(traits::FromRange<std::span<int>, std::vector<int>>);
-    REQUIRE(!traits::FromRange<real, std::vector<int>>);
-    REQUIRE(traits::FromRange<decltype(vs::iota(0, 10)), std::vector<int>>);
+    using T = std::vector<int>;
+    using I = decltype(vs::iota(0, 10));
+    using Z = decltype(vs::zip_with(std::plus{}, vs::iota(0, 10), vs::iota(1, 11)));
+
+    REQUIRE(traits::is_constructible_from_range<std::span<const int>, T>::value);
+    REQUIRE(traits::is_constructible_from_range<T, I>::value);
+    REQUIRE(traits::is_constructible_from<std::span<const int>, const T&>::value);
+    REQUIRE(traits::is_constructible_from<T, I>::value);
+    REQUIRE(traits::is_constructible_from<T, Z>::value);
+
+    REQUIRE(traits::TupleFromTuple<std::tuple<T>, std::tuple<I>>);
+    REQUIRE(traits::TupleFromTuple<std::tuple<T, T>, std::tuple<Z, I>>);
+    REQUIRE(traits::TupleFromTuple<std::tuple<std::tuple<T>, std::tuple<T, T>>,
+                                   std::tuple<std::tuple<Z>, std::tuple<I, Z>>>);
 }
 
-TEST_CASE("FromTuple")
+TEST_CASE("tuple shape")
 {
-    using namespace ccs;
-    using namespace field::tuple::traits;
+    using namespace ccs::field::tuple::traits;
 
-    static_assert(std::constructible_from<int, int>);
-    static_assert(FromTuple<std::tuple<int>, std::tuple<std::vector<real>>>);
-    static_assert(!FromTuple<std::tuple<void*>, std::tuple<std::vector<real>>>);
-    using T = std::vector<real>;
-    using U = decltype(vs::iota(0, 10));
-    static_assert(FromRange<U, T>);
-    static_assert(FromTuple<std::tuple<U, U>, std::tuple<T, T>>);
-    static_assert(FromTuple<std::tuple<const U&>&, std::tuple<T>>);
+    REQUIRE(SimilarTuples<std::tuple<int>, std::tuple<double>>);
+    REQUIRE(SimilarTuples<std::tuple<std::tuple<int>>, std::tuple<std::tuple<void*>>>);
+    REQUIRE(!SimilarTuples<std::tuple<std::tuple<int>>, std::tuple<void*>>);
+    REQUIRE(
+        SimilarTuples<std::tuple<std::tuple<int>, std::tuple<int, int, int>>,
+                      std::tuple<std::tuple<void*>, std::tuple<void*, char, double>>>);
+    REQUIRE(
+        !SimilarTuples<std::tuple<std::tuple<int, int, int>, std::tuple<void*>>,
+                       std::tuple<std::tuple<void*>, std::tuple<void*, char, double>>>);
 }

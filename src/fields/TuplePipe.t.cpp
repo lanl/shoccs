@@ -166,8 +166,8 @@ TEST_CASE("Nested Pipe")
               Tuple{std::vector{-1, -2, -3}}};
     auto y = x | vs::transform([](auto&& i) { return i + 2; });
 
-    REQUIRE(rs::equal(get<0>(get<0>(y)), std::vector{3, 4, 5}));
-    REQUIRE(rs::equal(get<1>(get<0>(y)), std::vector{6, 7}));
-    REQUIRE(rs::equal(get<2>(get<0>(y)), std::vector{6, 5, 4, 3}));
-    REQUIRE(rs::equal(get<0>(get<1>(y)), std::vector{1, 0, -1}));
+    REQUIRE(rs::equal(get<0, 0>(y), std::vector{3, 4, 5}));
+    REQUIRE(rs::equal(get<1, 0>(y), std::vector{6, 7}));
+    REQUIRE(rs::equal(get<2, 0>(y), std::vector{6, 5, 4, 3}));
+    REQUIRE(rs::equal(get<0, 1>(y), std::vector{1, 0, -1}));
 }

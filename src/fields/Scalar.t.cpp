@@ -1,11 +1,9 @@
-#include "types.hpp"
-
 #include "Scalar.hpp"
 
-#include "Selector.hpp"
+//#include "Selector.hpp"
 
-#include "lift.hpp"
-#include "views.hpp"
+//#include "lift.hpp"
+//#include "views.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <range/v3/algorithm/equal.hpp>
@@ -17,56 +15,63 @@
 #include <range/v3/view/zip_with.hpp>
 
 // construct simple mesh geometry
-namespace global
-{
+// namespace global
+// {
 
-const auto x = std::vector<ccs::real>{0, 1, 2, 3, 4};
-const auto y = std::vector<ccs::real>{-2, -1};
-const auto z = std::vector<ccs::real>{6, 7, 8, 9};
-const auto rx = std::vector<ccs::real3>{{0.5, -2, 6}, {1.5, -1, 9}};
-const auto ry = std::vector<ccs::real3>{{1, -1.75, 7}, {4, -1.25, 7}, {3, -1.1, 9}};
-const auto rz = std::vector<ccs::real3>{{0, -2, 6.1}};
-const auto loc = ccs::mesh::Location{x, y, z, rx, ry, rz};
+// const auto x = std::vector<ccs::real>{0, 1, 2, 3, 4};
+// const auto y = std::vector<ccs::real>{-2, -1};
+// const auto z = std::vector<ccs::real>{6, 7, 8, 9};
+// const auto rx = std::vector<ccs::real3>{{0.5, -2, 6}, {1.5, -1, 9}};
+// const auto ry = std::vector<ccs::real3>{{1, -1.75, 7}, {4, -1.25, 7}, {3, -1.1, 9}};
+// const auto rz = std::vector<ccs::real3>{{0, -2, 6.1}};
+// const auto loc = ccs::mesh::Location{x, y, z, rx, ry, rz};
 
-} // namespace global
+// } // namespace global
 
 TEST_CASE("construction")
 {
-    using namespace ccs::field;
+    using namespace ccs;
+    using namespace field;
     using T = std::vector<int>;
-    auto s = SimpleScalar<T>{};
-    auto r = SimpleScalar<T>{&global::loc};
+    Scalar<T> s{Tuple{vs::iota(0, 10)},
+                Tuple{vs::iota(0, 3), vs::iota(3, 6), vs::iota(-1, 2)}};
+
+    auto&& [D, Rxyz] = s;
+    REQUIRE(rs::equal(get<0>(D), vs::iota(0, 10)));
+    REQUIRE(rs::equal(get<0>(Rxyz), vs::iota(0, 3)));
+    REQUIRE(rs::equal(get<1>(Rxyz), vs::iota(3, 6)));
+    REQUIRE(rs::equal(get<2>(Rxyz), vs::iota(-1, 2)));
 }
 
 TEST_CASE("conversion")
 {
     using namespace ccs;
-    using namespace ccs::field;
+    using namespace field;
 
-    auto s = SimpleScalar<std::vector<int>>{
-        &global::loc,
+    auto s = Scalar<std::vector<int>>{
         Tuple{std::vector{1, 2, 3}},
         Tuple{std::vector{1}, std::vector{2, 3}, std::vector{4, 5, 6}}};
 
-    SimpleScalar<std::span<const int>> r = s;
+    Scalar<std::span<const int>> r = s;
 
-    REQUIRE((s | selector::D).size() == (r | selector::D).size());
-    REQUIRE(rs::equal(s | selector::D, r | selector::D));
+    REQUIRE(get<0>(s).size() == get<0>(r).size());
+    REQUIRE(rs::equal(get<0>(s), get<0>(r)));
 
-    auto f = [](SimpleScalar<std::span<int>> x) {
-        auto q = SimpleScalar<std::vector<int>>{
-            &global::loc,
-            Tuple{std::vector{1, 2, 3}},
-            Tuple{std::vector{1}, std::vector{2, 3}, std::vector{4, 5, 6}}};
-        x = 2 * q;
-    };
+    // auto f = [](SimpleScalar<std::span<int>> x) {
+    //     auto q = SimpleScalar<std::vector<int>>{
+    //         &global::loc,
+    //         Tuple{std::vector{1, 2, 3}},
+    //         Tuple{std::vector{1}, std::vector{2, 3}, std::vector{4, 5, 6}}};
+    //     x = 2 * q;
+    // };
 
-    s = f;
-    REQUIRE(rs::equal(s | selector::D, std::vector{2, 4, 6}));
-    REQUIRE(rs::equal(s | selector::Rx, std::vector{2}));
-    REQUIRE(rs::equal(s | selector::Ry, std::vector{4, 6}));
-    REQUIRE(rs::equal(s | selector::Rz, std::vector{8, 10, 12}));
+    // s = f;
+    // REQUIRE(rs::equal(s | selector::D, std::vector{2, 4, 6}));
+    // REQUIRE(rs::equal(s | selector::Rx, std::vector{2}));
+    // REQUIRE(rs::equal(s | selector::Ry, std::vector{4, 6}));
+    // REQUIRE(rs::equal(s | selector::Rz, std::vector{8, 10, 12}));
 }
+#if 0
 
 TEST_CASE("selection")
 {
@@ -113,52 +118,58 @@ TEST_CASE("selection")
     REQUIRE(rs::equal(v, vs::repeat_n(0, 2)));
     REQUIRE(rs::equal(rx, vs::repeat_n(2, 2)));
 }
-
+#endif
 TEST_CASE("math")
 {
     using namespace ccs;
-    using namespace ccs::field;
-    auto s = SimpleScalar<std::vector<int>>{
-        &global::loc,
-        Tuple{vs::iota(1, 5)},
-        Tuple{vs::iota(6, 10), vs::iota(6, 12), vs::iota(10, 15)}};
+    using namespace field;
+    auto s = Scalar<std::vector<int>>{
+        Tuple{vs::iota(1, 5)}, Tuple{vs::iota(6, 10), vs::iota(6, 12), vs::iota(10, 15)}};
 
     auto q = s + 1;
-    REQUIRE(rs::equal(vs::iota(2, 6), q | selector::D));
-    REQUIRE(rs::equal(vs::iota(7, 11), q | selector::Rx));
-    REQUIRE(rs::equal(vs::iota(7, 13), q | selector::Ry));
-    REQUIRE(rs::equal(vs::iota(11, 16), q | selector::Rz));
+    REQUIRE(rs::equal(vs::iota(2, 6), get<0>(q)));
+    REQUIRE(rs::equal(vs::iota(7, 11), get<0, 1>(q)));
+    REQUIRE(rs::equal(vs::iota(7, 13), get<1, 1>(q)));
+    REQUIRE(rs::equal(vs::iota(11, 16), get<2, 1>(q)));
     auto r = q + s;
     constexpr auto plus = [](auto&& a, auto&& b) {
         return vs::zip_with(std::plus{}, FWD(a), FWD(b));
     };
-    REQUIRE(rs::equal(plus(vs::iota(2, 6), vs::iota(1, 5)), r | selector::D));
-    REQUIRE(rs::equal(plus(vs::iota(11, 16), vs::iota(10, 15)), r | selector::Rz));
+    REQUIRE(rs::equal(plus(vs::iota(2, 6), vs::iota(1, 5)), get<0>(r)));
+    REQUIRE(rs::equal(plus(vs::iota(11, 16), vs::iota(10, 15)), get<2, 1>(r)));
 
-    SimpleScalar<std::vector<int>> t{r};
-    REQUIRE(rs::equal(t | selector::D, r | selector::D));
-    REQUIRE(rs::equal(t | selector::Ry, r | selector::Ry));
+    Scalar<std::vector<int>> t = r;
+    REQUIRE(rs::equal(get<0>(t), get<0>(r)));
+    REQUIRE(rs::equal(get<0, 1>(t), get<0, 1>(r)));
+    REQUIRE(rs::equal(get<1, 1>(t), get<1, 1>(r)));
+    REQUIRE(rs::equal(get<2, 1>(t), get<2, 1>(r)));
+
+    Scalar<std::vector<int>> a{s};
+    Scalar<std::span<int>> b = a;
+    b = r;
+    REQUIRE(rs::equal(get<0>(b), get<0>(r)));
+    REQUIRE(rs::equal(get<0, 1>(b), get<0, 1>(r)));
+    REQUIRE(rs::equal(get<1, 1>(b), get<1, 1>(r)));
+    REQUIRE(rs::equal(get<2, 1>(b), get<2, 1>(r)));
 }
-
 TEST_CASE("lifting single arg")
 {
     using namespace ccs;
     using namespace ccs::field;
-    auto s = SimpleScalar<std::vector<int>>{
-        &global::loc,
-        Tuple{vs::iota(1, 5)},
-        Tuple{vs::iota(6, 10), vs::iota(6, 12), vs::iota(10, 15)}};
+    auto s = Scalar<std::vector<int>>{
+        Tuple{vs::iota(1, 5)}, Tuple{vs::iota(6, 10), vs::iota(6, 12), vs::iota(10, 15)}};
 
     constexpr auto f = lift([](auto&& x) { return std::abs(x) + 1; });
 
     auto j = f(s);
     auto k = s + 1;
 
-    REQUIRE(rs::equal(j | selector::D, k | selector::D));
-    REQUIRE(rs::equal(j | selector::Rx, k | selector::Rx));
-    REQUIRE(rs::equal(j | selector::Ry, k | selector::Ry));
-    REQUIRE(rs::equal(j | selector::Rz, k | selector::Rz));
+    REQUIRE(rs::equal(get<0>(j), get<0>(k)));
+    REQUIRE(rs::equal(get<0, 1>(j), get<0, 1>(k)));
+    REQUIRE(rs::equal(get<1, 1>(j), get<1, 1>(k)));
+    REQUIRE(rs::equal(get<2, 1>(j), get<2, 1>(k)));
 }
+#if 0
 
 TEST_CASE("lifting multiple args")
 {
@@ -288,3 +299,4 @@ TEST_CASE("mesh location span")
     REQUIRE(rs::equal(v, ry | vs::transform(loc_fn<1>{})));
     REQUIRE(rs::equal(w, rz | vs::transform(loc_fn<2>{})));
 }
+#endif
