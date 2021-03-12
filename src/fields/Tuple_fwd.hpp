@@ -162,6 +162,32 @@ template <typename T>
 concept NonTupleRange = rs::input_range<T> && (!TupleLike<T>);
 
 //
+// Determine the nesting level of the tuples.  Will be needed for smart selections
+//
+namespace detail
+{
+template <typename T, typename V>
+struct tuple_levels_impl;
+}
+template <typename T, typename V = mp_size_t<0>>
+using tuple_levels = detail::tuple_levels_impl<T, V>::type;
+
+namespace detail
+{
+template <typename T, typename V>
+struct tuple_levels_impl {
+    using type = V;
+};
+
+template <TupleLike T, auto I>
+struct tuple_levels_impl<T, mp_size_t<I>> {
+    using type = tuple_levels<mp_first<std::remove_cvref_t<T>>, mp_size_t<I + 1>>;
+};
+} // namespace detail
+template <typename T>
+constexpr auto tuple_levels_v = tuple_levels<T>::value;
+
+//
 // Will need index_sequences for the tuple indices
 //
 template <TupleLike T>
@@ -353,30 +379,6 @@ requires(mp_size<std::remove_cvref_t<T>>::value ==
                                          tuple_get_types<Arg>>>;
 };
 
-// template <typename, typename>
-// constexpr bool direct_construct_v = false;
-
-// template <template <typename...> typename To,
-//           template <typename...>
-//           typename From,
-//           typename... Ts,
-//           typename... Fs>
-// requires(sizeof...(Ts) ==
-//          sizeof...(Fs)) constexpr bool direct_construct_v<From<Fs...>, To<Ts...>> =
-//     (std::constructible_from<Ts, Fs> && ...);
-
-// template <typename, typename>
-// constexpr bool from_range_v = false;
-
-// template <template <typename...> typename To,
-//           template <typename...>
-//           typename From,
-//           typename... Ts,
-//           typename... Fs>
-// requires(sizeof...(Ts) ==
-//          sizeof...(Fs)) constexpr bool from_range_v<From<Fs...>, To<Ts...>> =
-//     (ConstructibleFromRange<Fs, Ts> && ...);
-
 } // namespace detail
 
 template <typename T, typename Arg>
@@ -385,19 +387,6 @@ concept TupleFromTuple =
 
 template <typename Arg, typename T>
 concept TupleToTuple = TupleFromTuple<T, Arg>;
-
-// template <typename From, typename To>
-// concept FromTupleDirect = TupleLike<To>&& TupleLike<From>&&
-//     detail::direct_construct_v<std::remove_cvref_t<From>, To>;
-
-// template <typename From, typename To>
-// concept FromTupleRange =
-//     TupleLike<To>&& TupleLike<From>&& detail::from_range_v<std::remove_cvref_t<From>,
-//     To>;
-
-// // Needed to simplify construction of ContainerTuples
-// template <typename From, typename To>
-// concept FromTuple = FromTupleDirect<From, To> || FromTupleRange<From, To>;
 
 // traits for functions on Tuples
 
@@ -548,52 +537,55 @@ concept TuplePipeableOver = TupleLike<T>&& TupleLike<F>&& mp_same<Seq<F>, Seq<T>
              mp_transform_q<mp_bind_front<is_pipeable>,
                             tuple_get_types<F>,
                             tuple_get_types<T>>>::value;
-} // namespace traits
 
-template <typename...>
-struct from_view {
-};
-
-// ViewTuple is mainly used for testing
-template <traits::ViewTupleType U>
-struct from_view<U> {
-    static constexpr auto create = [](auto&&, auto&&... args) {
-        return ViewTuple{FWD(args)...};
-    };
-};
-
-// ViewTuple is mainly used for testing
-template <traits::ViewTupleType U, traits::ViewTupleType V>
-struct from_view<U, V> {
-    static constexpr auto create = [](auto&&, auto&&, auto&&... args) {
-        return ViewTuple{FWD(args)...};
-    };
-};
-
-// single argument views
-template <traits::TupleType U>
-struct from_view<U> {
-    static constexpr auto create = [](auto&&, auto&&... args) {
-        return Tuple{tag{}, FWD(args)...};
-    };
-};
-
-// Combination views
-template <traits::TupleType U, traits::TupleType V>
-struct from_view<U, V> {
-    static constexpr auto create = [](auto&&, auto&&, auto&&... args) {
-        return Tuple{tag{}, FWD(args)...};
-    };
-};
-
-template <typename... T>
-static constexpr auto create_from_view = from_view<std::remove_cvref_t<T>...>::create;
-
-template <typename... T>
-concept From_View = requires
+//
+// Traits for view_closures and Tuples of view_closures
+//
+namespace detail
 {
-    from_view<std::remove_cvref_t<T>...>::create;
+template <typename T>
+struct is_view_closure_impl : std::false_type {
 };
+
+template <typename Fn>
+struct is_view_closure_impl<vs::view_closure<Fn>> : std::true_type {
+};
+} // namespace detail
+
+template <typename T>
+using is_view_closure = detail::is_view_closure_impl<std::remove_cvref_t<T>>::type;
+
+namespace detail
+{
+template <typename>
+struct is_nested_view_closure_impl;
+}
+template <typename T>
+using is_nested_view_closure =
+    detail::is_nested_view_closure_impl<std::remove_cvref_t<T>>::type;
+
+namespace detail
+{
+template <typename T>
+struct is_nested_view_closure_impl {
+    using type = mp_list<is_view_closure<T>>;
+};
+
+template <TupleLike T>
+struct is_nested_view_closure_impl<T> {
+    using type = mp_flatten<mp_transform<is_nested_view_closure,
+                                         mp_rename<std::remove_reference_t<T>, mp_list>>>;
+};
+
+} // namespace detail
+
+template <typename T>
+concept ViewClosure = is_view_closure<T>::value;
+
+template <typename T>
+concept ViewClosures = mp_apply<mp_all, is_nested_view_closure<T>>::value;
+
+} // namespace traits
 
 } // namespace ccs::field::tuple
 

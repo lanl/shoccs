@@ -1,7 +1,7 @@
 #include "Scalar.hpp"
 
-//#include "Selector.hpp"
-
+#include "Location.hpp"
+#include "Selector.hpp"
 //#include "views.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -14,18 +14,18 @@
 #include <range/v3/view/zip_with.hpp>
 
 // construct simple mesh geometry
-// namespace global
-// {
+namespace global
+{
 
-// const auto x = std::vector<ccs::real>{0, 1, 2, 3, 4};
-// const auto y = std::vector<ccs::real>{-2, -1};
-// const auto z = std::vector<ccs::real>{6, 7, 8, 9};
-// const auto rx = std::vector<ccs::real3>{{0.5, -2, 6}, {1.5, -1, 9}};
-// const auto ry = std::vector<ccs::real3>{{1, -1.75, 7}, {4, -1.25, 7}, {3, -1.1, 9}};
-// const auto rz = std::vector<ccs::real3>{{0, -2, 6.1}};
-// const auto loc = ccs::mesh::Location{x, y, z, rx, ry, rz};
+const auto x = std::vector<ccs::real>{0, 1, 2, 3, 4};
+const auto y = std::vector<ccs::real>{-2, -1};
+const auto z = std::vector<ccs::real>{6, 7, 8, 9};
+const auto rx = std::vector<ccs::real3>{{0.5, -2, 6}, {1.5, -1, 9}};
+const auto ry = std::vector<ccs::real3>{{1, -1.75, 7}, {4, -1.25, 7}, {3, -1.1, 9}};
+const auto rz = std::vector<ccs::real3>{{0, -2, 6.1}};
+const auto loc = ccs::field::tuple::Location{x, y, z, rx, ry, rz};
 
-// } // namespace global
+} // namespace global
 
 TEST_CASE("construction")
 {
@@ -70,7 +70,6 @@ TEST_CASE("conversion")
     // REQUIRE(rs::equal(s | selector::Ry, std::vector{4, 6}));
     // REQUIRE(rs::equal(s | selector::Rz, std::vector{8, 10, 12}));
 }
-#if 0
 
 TEST_CASE("selection")
 {
@@ -81,11 +80,7 @@ TEST_CASE("selection")
     auto rx = std::vector{3, 4};
     auto ry = std::vector{5, 6};
     auto rz = std::vector{7, 8};
-    // auto s = field::Scalar<std::vector<int>&>{tag{}, Tuple{v}, Tuple{rx, ry, rz}};
-    auto s = field::Scalar(&global::loc, Tuple{v}, Tuple{rx, ry, rz});
-
-    static_assert(std::same_as<decltype(s.get<0>()), Tuple<std::vector<int>&>&>);
-    static_assert(std::same_as<decltype(view<0>(s.get<0>())), decltype(vs::all(v))>);
+    auto s = Scalar<std::vector<int>&>(Tuple{v}, Tuple{rx, ry, rz});
 
     // Add tests to verify the type of the containers and views.
     // THey may point to scalar needing to be a tuple of nested tuples
@@ -93,15 +88,6 @@ TEST_CASE("selection")
     REQUIRE(rs::equal(rx, s | selector::Rx));
     REQUIRE(rs::equal(ry, s | selector::Ry));
     REQUIRE(rs::equal(rz, s | selector::Rz));
-
-    // static_assert(field::tuple::All<std::remove_cvref_t<decltype(s |
-    // selector::D)>>);
-    using T = decltype(s | selector::D);
-    static_assert(All<ranges::ref_view<std::vector<int>>>);
-    static_assert(rs::range<T>);
-    static_assert(rs::semiregular<T>);
-    static_assert(rs::enable_view<T>);
-    static_assert(field::tuple::All<T>);
 
     REQUIRE(rs::equal(s | selector::D | vs::transform([](auto&& x) { return x * x * x; }),
                       std::vector{1, 8}));
@@ -113,11 +99,11 @@ TEST_CASE("selection")
     s | selector::Rz = -1;
     REQUIRE(rs::equal(rz, vs::repeat_n(-1, 2)));
 
-    s | selector::Rxyz = 2;
+    s | selector::R = 2;
     REQUIRE(rs::equal(v, vs::repeat_n(0, 2)));
     REQUIRE(rs::equal(rx, vs::repeat_n(2, 2)));
 }
-#endif
+
 TEST_CASE("math")
 {
     using namespace ccs;
@@ -190,7 +176,6 @@ TEST_CASE("lifting multiple args")
     REQUIRE(rs::equal(get<1, 1>(z), vs::iota(6, 12)));
     REQUIRE(rs::equal(get<2, 1>(z), std::vector{10, 8, 10, 7}));
 }
-#if 0
 
 TEST_CASE("mesh location vector")
 {
@@ -198,36 +183,39 @@ TEST_CASE("mesh location vector")
     using namespace ccs::field;
     using namespace global;
 
-    auto s = SimpleScalar<std::vector<real>>{&loc,
-                                             Tuple{x.size() * y.size() * z.size()},
-                                             Tuple{rx.size(), ry.size(), rz.size()}};
+    auto s = Scalar<std::vector<real>>{Tuple{x.size() * y.size() * z.size()},
+                                       Tuple{rx.size(), ry.size(), rz.size()}};
 
     constexpr auto t = vs::transform([](auto&& loc) {
         auto&& [x, y, z] = loc;
         return x * y * z;
     });
 
-    constexpr auto sol = mesh::location | t;
+    auto sol = loc.view() | t;
 
-    s | selector::D = sol;
-    REQUIRE(rs::equal(s | selector::D, vs::cartesian_product(x, y, z) | t));
-    REQUIRE(rs::equal(s | selector::Rx, vs::repeat_n(0.0, rx.size())));
+    REQUIRE(rs::equal(s | selector::D | sol, vs::cartesian_product(x, y, z) | t));
+    REQUIRE(rs::equal(s | selector::Rx | sol, rx | t));
+    REQUIRE(rs::equal(s | selector::Ry | sol, ry | t));
+    REQUIRE(rs::equal(s | selector::Rz | sol, rz | t));
+    REQUIRE(rs::equal(get<0>(s | selector::R | sol), rx | t));
+    REQUIRE(rs::equal(get<1>(s | selector::R | sol), ry | t));
+    REQUIRE(rs::equal(get<2>(s | selector::R | sol), rz | t));
 
     s | selector::Rx = sol;
-    REQUIRE(rs::equal(s | selector::Rx, rx | t));
+    REQUIRE(rs::equal(get<0, 1>(s), rx | t));
 
     s | selector::Ry = sol;
-    REQUIRE(rs::equal(s | selector::Ry, ry | t));
+    REQUIRE(rs::equal(get<1, 1>(s), ry | t));
 
     s | selector::Rz = sol;
-    REQUIRE(rs::equal(s | selector::Rz, rz | t));
+    REQUIRE(rs::equal(get<2, 1>(s), rz | t));
 
     constexpr auto u = vs::transform([](auto&& loc) {
         auto&& [x, y, z] = loc;
         return x * y * y * z;
     });
 
-    s | selector::Rxyz = mesh::location | u;
+    s | selector::R = loc.view() | u;
     REQUIRE(rs::equal(s | selector::Rx, rx | u));
     REQUIRE(rs::equal(s | selector::Ry, ry | u));
     REQUIRE(rs::equal(s | selector::Rz, rz | u));
@@ -253,17 +241,17 @@ TEST_CASE("mesh location span")
     auto v = std::vector<real>(ry.size());
     auto w = std::vector<real>(rz.size());
 
-    auto s = SimpleScalar<std::span<real>>{
-        &loc,
-        Tuple{std::span<real>(t)},
-        Tuple{std::span<real>(u), std::span<real>(v), std::span<real>(w)}};
+    // auto s = Scalar<std::span<real>>{
+    //     Tuple{std::span<real>(t)},
+    //     Tuple{std::span<real>(u), std::span<real>(v), std::span<real>(w)}};
+    auto s = Scalar<std::span<real>>{Tuple{t}, Tuple{u, v, w}};
 
     constexpr auto tr = vs::transform([](auto&& loc) {
         auto&& [x, y, z] = loc;
         return x * y * z;
     });
 
-    constexpr auto sol = mesh::location | tr;
+    constexpr auto sol = loc.view() | tr;
 
     s | selector::D = sol;
     REQUIRE(rs::equal(s | selector::D, vs::cartesian_product(x, y, z) | tr));
@@ -283,17 +271,16 @@ TEST_CASE("mesh location span")
         return x * y * y * z;
     });
 
-    s | selector::Rxyz = mesh::location | ur;
+    s | selector::R = loc.view() | ur;
     REQUIRE(rs::equal(s | selector::Rx, rx | ur));
     REQUIRE(rs::equal(s | selector::Ry, ry | ur));
     REQUIRE(rs::equal(s | selector::Rz, rz | ur));
 
-    s | selector::Rxyz = mesh::location | Tuple{vs::transform(loc_fn<0>{}),
-                                                vs::transform(loc_fn<1>{}),
-                                                vs::transform(loc_fn<2>{})};
+    s | selector::R = loc.view() | Tuple{vs::transform(loc_fn<0>{}),
+                                         vs::transform(loc_fn<1>{}),
+                                         vs::transform(loc_fn<2>{})};
 
     REQUIRE(rs::equal(u, rx | vs::transform(loc_fn<0>{})));
     REQUIRE(rs::equal(v, ry | vs::transform(loc_fn<1>{})));
     REQUIRE(rs::equal(w, rz | vs::transform(loc_fn<2>{})));
 }
-#endif

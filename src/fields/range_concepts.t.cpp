@@ -135,3 +135,25 @@ TEST_CASE("tuple shape")
         !SimilarTuples<std::tuple<std::tuple<int, int, int>, std::tuple<void*>>,
                        std::tuple<std::tuple<void*>, std::tuple<void*, char, double>>>);
 }
+
+TEST_CASE("levels")
+{
+    using namespace ccs::field::tuple::traits;
+    REQUIRE(tuple_levels_v<std::tuple<int>> == 1);
+    REQUIRE(tuple_levels_v<std::tuple<int, double, float, char, void*>> == 1);
+    REQUIRE(tuple_levels_v<std::tuple<std::tuple<int>>> == 2);
+    REQUIRE(tuple_levels_v<std::tuple<std::tuple<int>,
+                                      std::tuple<float, double, char>,
+                                      std::tuple<void*>>> == 2);
+}
+
+TEST_CASE("view closures")
+{
+    using namespace ccs;
+    using namespace ccs::field::tuple::traits;
+
+    using I = decltype(vs::transform([](auto&& i) { return i; }));
+    REQUIRE(ViewClosure<I>);
+    REQUIRE(ViewClosures<I>);
+    REQUIRE(ViewClosures<std::tuple<I, I>>);
+}

@@ -3,29 +3,51 @@
 #include "Tuple_fwd.hpp"
 #include "types.hpp"
 
-namespace ccs::selector
+namespace ccs::field::tuple
 {
-template <typename L, field::tuple::traits::TupleType R>
+template <traits::TupleType R, auto...>
 struct Selection;
 
 namespace traits
 {
+namespace detail
+{
 template <typename>
-struct is_Selection : std::false_type {
+struct is_selection_impl : std::false_type {
 };
 
-template <typename L, field::tuple::traits::TupleType R>
-struct is_Selection<Selection<L, R>> : std::true_type {
+template <traits::TupleType R, auto... I>
+struct is_selection_impl<Selection<R, I...>> : std::true_type {
 };
+} // namespace detail
 
 template <typename S>
-concept SelectionType = is_Selection<std::remove_cvref_t<S>>::value;
-} // namespace traits
-} // namespace ccs::selector
+using is_Selection = detail::is_selection_impl<std::remove_cvref_t<S>>::type;
 
-namespace std
-{
-template <typename L, typename R>
-struct tuple_size<ccs::selector::Selection<L, R>> : tuple_size<R> {
-};
-} // namespace std
+template <typename S>
+concept SelectionType = is_Selection<S>::value;
+
+// traits for extracting the selection indicies
+template <SelectionType S>
+using selection_indices = std::remove_cvref_t<S>::Idx;
+
+template <SelectionType S>
+using selection_index_length = mp_size<selection_indices<S>>;
+
+template <SelectionType S>
+constexpr auto selection_index_length_v = selection_index_length<S>::value;
+
+template <SelectionType S>
+using last_selection_index = mp_back<selection_indices<S>>;
+
+template <SelectionType S>
+constexpr auto last_selection_index_v = last_selection_index<S>::value;
+
+template <SelectionType S, std::size_t I>
+using selection_index = mp_at_c<selection_indices<S>, I>;
+
+template <SelectionType S, std::size_t I>
+constexpr auto selection_index_v = selection_index<S, I>::value;
+
+} // namespace traits
+} // namespace ccs::field::tuple

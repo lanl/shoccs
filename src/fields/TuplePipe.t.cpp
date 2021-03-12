@@ -2,8 +2,6 @@
 
 #include "types.hpp"
 
-#include "views.hpp"
-
 #include <catch2/catch_test_macros.hpp>
 
 #include <range/v3/algorithm/equal.hpp>
@@ -148,10 +146,10 @@ TEST_CASE("ThreeTuples with ThreeTuplePipes")
     REQUIRE(rs::equal(b, std::vector{16, 20}));
     REQUIRE(rs::equal(c, std::vector{262144, 19683, 512, 1}));
 
-    // vs::transform([](auto&& i) { return i; }) |
-    //     Tuple{vs::transform([](auto&& i) { return i * i; }),
-    //           vs::transform([](auto&& i) { return i + i; }),
-    //           vs::transform([](auto&& i) { return i * i * i; })};
+    vs::transform([](auto&& i) { return i; }) |
+        Tuple{vs::transform([](auto&& i) { return i * i; }),
+              vs::transform([](auto&& i) { return i + i; }),
+              vs::transform([](auto&& i) { return i * i * i; })};
     // vs::transform([](auto&& i) { return i; }) |
     //     Tuple{vs::transform([](auto&& i) { return 2 * i; })};
 }

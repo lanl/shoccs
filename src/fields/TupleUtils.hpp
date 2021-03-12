@@ -246,7 +246,7 @@ void resize_and_copy(T&& t, R&& r)
 template <typename R, typename Arg>
 requires std::constructible_from<R, Arg> constexpr R to(Arg&& arg)
 {
-    return R{FWD(arg)};
+    return R(FWD(arg));
 }
 
 template <typename R, typename Arg>
