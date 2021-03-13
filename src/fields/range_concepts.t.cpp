@@ -157,3 +157,30 @@ TEST_CASE("view closures")
     REQUIRE(ViewClosures<I>);
     REQUIRE(ViewClosures<std::tuple<I, I>>);
 }
+
+TEST_CASE("list index")
+{
+    using namespace ccs::field::tuple::traits;
+
+    using L = list_index<4, 5, 6>;
+    REQUIRE(ListIndex<L>);
+    static_assert(index_v<L, 0> == 4);
+    static_assert(index_v<L, 1> == 5);
+    static_assert(index_v<L, 2> == 6);
+
+    using ListOfL = mp_list<list_index<0, 1, 2>, list_index<1>>;
+    REQUIRE(ListIndices<ListOfL>);
+
+}
+
+TEST_CASE("forward_like")
+{
+    using namespace ccs::field::tuple::traits;
+
+    using X = int;
+    static_assert(std::same_as<const_like<X, float>, float>);
+    static_assert(std::same_as<const_like<const X, float>, const float>);
+    //static_assert(std::same_as<const_like<const X, float&>, const float&>);
+    static_assert(std::same_as<const_like<const X&, float>, const float>);
+    static_assert(std::same_as<const_like<const X&, float&>, const float&>);
+}

@@ -60,7 +60,19 @@ TEST_CASE("concepts")
     REQUIRE(All<W&>);
     REQUIRE(All<Tuple<W>>);
     REQUIRE(All<Tuple<W&>>);
+
+    // using Q = const Tuple<ranges::iota_view<int, int> >;
+    // static_assert(std::is_const_v<Q>);
+    // static_assert(!std::is_const_v<Q&>);
+    // static_assert(!std::is_const_v<Q&&>);
+    // static_assert(!std::is_lvalue_reference_v<Q>);
+    // static_assert(std::is_lvalue_reference_v<const int&>);
+    // static_assert(std::is_rvalue_reference_v<const int&&>);
 }
+
+// error: invalid ‘static_cast’ from type ‘const
+// ccs::field::tuple::Tuple<ranges::iota_view<int, int> >’ to type ‘B&’ {aka
+// ‘ccs::field::tuple::ViewTuple<ranges::iota_view<int, int> >&’}
 
 TEST_CASE("construction")
 {
@@ -383,35 +395,40 @@ TEST_CASE("Conversion Nested ThreeTuples")
         Tuple{T{1, 2, 3}, T{1}, T{5, 4, 3, 2}},
     };
 
+    using D = tuple::traits::list_index<0>;
+    using Rx = tuple::traits::list_index<1, 0>;
+    using Ry = tuple::traits::list_index<1, 1>;
+    using Rz = tuple::traits::list_index<1, 2>;
+
     Tuple<Tuple<U>, Tuple<U, U, U>> y = x;
     REQUIRE(rs::equal(get<0>(x), get<0>(y)));
-    REQUIRE(rs::equal(get<0, 1>(x), get<0, 1>(y)));
+    REQUIRE(rs::equal(get<1, 0>(x), get<1, 0>(y)));
     REQUIRE(rs::equal(get<1, 1>(x), get<1, 1>(y)));
-    REQUIRE(rs::equal(get<2, 1>(x), get<2, 1>(y)));
+    REQUIRE(rs::equal(get<1, 2>(x), get<1, 2>(y)));
 
     Tuple<Tuple<V>, Tuple<V, V, V>> z = x;
-    REQUIRE(rs::equal(get<0>(x), get<0>(z)));
-    REQUIRE(rs::equal(get<0, 1>(x), get<0, 1>(z)));
-    REQUIRE(rs::equal(get<1, 1>(x), get<1, 1>(z)));
-    REQUIRE(rs::equal(get<2, 1>(x), get<2, 1>(z)));
+    REQUIRE(rs::equal(get<D>(x), get<D>(z)));
+    REQUIRE(rs::equal(get<Rx>(x), get<Rx>(z)));
+    REQUIRE(rs::equal(get<Ry>(x), get<Ry>(z)));
+    REQUIRE(rs::equal(get<Rz>(x), get<Rz>(z)));
 
     Tuple<Tuple<V>, Tuple<V, V, V>> zz = y;
     REQUIRE(rs::equal(get<0>(x), get<0>(zz)));
-    REQUIRE(rs::equal(get<0, 1>(x), get<0, 1>(zz)));
+    REQUIRE(rs::equal(get<1, 0>(x), get<1, 0>(zz)));
     REQUIRE(rs::equal(get<1, 1>(x), get<1, 1>(zz)));
-    REQUIRE(rs::equal(get<2, 1>(x), get<2, 1>(zz)));
+    REQUIRE(rs::equal(get<1, 2>(x), get<1, 2>(zz)));
 
     Tuple<Tuple<T>, Tuple<T, T, T>> a = x;
     REQUIRE(rs::equal(get<0>(x), get<0>(a)));
-    REQUIRE(rs::equal(get<0, 1>(x), get<0, 1>(a)));
+    REQUIRE(rs::equal(get<1, 0>(x), get<1, 0>(a)));
     REQUIRE(rs::equal(get<1, 1>(x), get<1, 1>(a)));
-    REQUIRE(rs::equal(get<2, 1>(x), get<2, 1>(a)));
+    REQUIRE(rs::equal(get<1, 2>(x), get<1, 2>(a)));
 
     Tuple<Tuple<T>, Tuple<T, T, T>> b = zz;
     REQUIRE(rs::equal(get<0>(x), get<0>(b)));
-    REQUIRE(rs::equal(get<0, 1>(x), get<0, 1>(b)));
+    REQUIRE(rs::equal(get<1, 0>(x), get<1, 0>(b)));
     REQUIRE(rs::equal(get<1, 1>(x), get<1, 1>(b)));
-    REQUIRE(rs::equal(get<2, 1>(x), get<2, 1>(b)));
+    REQUIRE(rs::equal(get<1, 2>(x), get<1, 2>(b)));
 }
 
 TEST_CASE("numeric assignment with owning tuple")

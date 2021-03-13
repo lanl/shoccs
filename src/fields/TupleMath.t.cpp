@@ -150,25 +150,25 @@ TEST_CASE("conversions with math")
 
         V y{r};
         REQUIRE(rs::equal(get<0, 0>(y), plus(vs::iota(1, 11), i)));
-        REQUIRE(rs::equal(get<0, 1>(y), plus(vs::iota(6, 8), j)));
+        REQUIRE(rs::equal(get<1, 0>(y), plus(vs::iota(6, 8), j)));
         REQUIRE(rs::equal(get<1, 1>(y), plus(vs::iota(51, 101), k)));
 
         V z = r;
         REQUIRE(rs::equal(get<0, 0>(z), get<0, 0>(r)));
-        REQUIRE(rs::equal(get<0, 1>(z), get<0, 1>(r)));
+        REQUIRE(rs::equal(get<1, 0>(z), get<1, 0>(r)));
         REQUIRE(rs::equal(get<1, 1>(z), get<1, 1>(r)));
 
         V a{};
         a = r;
         REQUIRE(rs::equal(get<0, 0>(a), get<0, 0>(r)));
-        REQUIRE(rs::equal(get<0, 1>(a), get<0, 1>(r)));
+        REQUIRE(rs::equal(get<1, 0>(a), get<1, 0>(r)));
         REQUIRE(rs::equal(get<1, 1>(a), get<1, 1>(r)));
 
         V b{x};
         Tuple<Tuple<U>, Tuple<U, U>> c = b;
         c = r;
         REQUIRE(rs::equal(get<0, 0>(c), get<0, 0>(r)));
-        REQUIRE(rs::equal(get<0, 1>(c), get<0, 1>(r)));
+        REQUIRE(rs::equal(get<1, 0>(c), get<1, 0>(r)));
         REQUIRE(rs::equal(get<1, 1>(c), get<1, 1>(r)));
     }
 }

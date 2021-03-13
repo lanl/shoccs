@@ -122,14 +122,44 @@ constexpr decltype(auto) get(C&& c)
 {
     if constexpr (traits::OwningTuple<C>)
         return get<I>(FWD(c).as_Container());
-    else
+    else {
+        // using B = typename std::remove_cvref_t<C>::View;
+        // if constexpr (std::is_rvalue_reference_v<C>)
+        //     return get<I>(static_cast<B&&>(FWD(c)));
+        // else if constexpr (std::is_const_v<std::remove_reference_t<C>> && std::is_lvalue_reference_v<C>)
+        //     return get<I>(static_cast<const B&>(FWD(c)));
+        // else if constexpr (std::is_const_v<C>)
+        //     return get<I>(static_cast<const B>(FWD(c)));
+        // else if constexpr (std::is_lvalue_reference_v<C>) {
+        //     static_assert(!std::is_const_v<C>);
+        //     return get<I>(static_cast<B&>(c));
+        // }
+        // else
+        //     return get<I>(static_cast<B>(FWD(c)));
         return get<I>(FWD(c).as_ViewTuple());
+    }
 }
 
-template <std::size_t I, std::size_t J, traits::TupleType C>
+template <std::size_t I, std::size_t J, std::size_t... Rest, traits::TupleType C>
 constexpr decltype(auto) get(C&& c)
 {
-    return get<I>(get<J>(FWD(c)));
+    return get<J, Rest...>(get<I>(FWD(c)));
+}
+
+template <traits::ListIndex L, traits::TupleType C>
+constexpr decltype(auto) get(C&& c)
+{
+    // this really should only require one lambda but I can't do it without triggering a
+    // parse error
+    return []<auto... Ls>(std::index_sequence<Ls...>, auto&& c)
+    {
+        return []<auto... Is>(auto&& c, traits::mp_size_t<Is>...)
+        {
+            return get<Is...>(FWD(c));
+        }
+        (FWD(c), traits::mp_at_c<L, Ls>{}...);
+    }
+    (std::make_index_sequence<traits::mp_size<L>::value>(), FWD(c));
 }
 
 } // namespace ccs::field::tuple

@@ -390,23 +390,13 @@ concept TupleToTuple = TupleFromTuple<T, Arg>;
 
 // traits for functions on Tuples
 
-namespace detail
-{
-
-template <typename>
-struct tup_index_sequence;
-
-template <template <typename...> typename T, typename... Args>
-struct tup_index_sequence<T<Args...>> {
-    using type = std::make_index_sequence<sizeof...(Args)>;
-};
-} // namespace detail
-
 } // namespace traits
 
-template <traits::TupleLike T>
-using IndexSeq =
-    typename traits::detail::tup_index_sequence<std::remove_cvref_t<T>>::type;
+template <typename T>
+using IndexSeq = std::make_index_sequence<traits::mp_size<std::remove_cvref_t<T>>::value>;
+
+template <typename T>
+constexpr auto sequence = IndexSeq<T>{};
 
 namespace traits
 {
@@ -585,8 +575,67 @@ concept ViewClosure = is_view_closure<T>::value;
 template <typename T>
 concept ViewClosures = mp_apply<mp_all, is_nested_view_closure<T>>::value;
 
-} // namespace traits
+//
+// type functions for construct list of types for get based access.  Facilitates Selection
+// logic
+//
+template <auto... Is>
+using list_index = mp_list<mp_size_t<Is>...>;
 
+namespace detail
+{
+template <typename>
+struct is_list_index_impl : std::false_type {
+};
+
+template <auto... Is>
+struct is_list_index_impl<list_index<Is...>> : std::true_type {
+};
+} // namespace detail
+
+template <typename T>
+using is_list_index = detail::is_list_index_impl<T>::type;
+
+template <typename T>
+concept ListIndex = is_list_index<T>::value;
+
+namespace detail
+{
+template <typename>
+struct is_list_indices : std::false_type {
+};
+
+template <typename... T>
+struct is_list_indices<mp_list<T...>> {
+    using type = mp_apply<mp_all, mp_transform<is_list_index, mp_list<T...>>>;
+};
+
+} // namespace detail
+template <typename T>
+using is_list_indices = detail::is_list_indices<T>::type;
+
+template <typename T>
+concept ListIndices = is_list_indices<T>::value;
+
+template <ListIndex L, std::size_t I>
+constexpr auto index_v = mp_at_c<L, I>::value;
+
+namespace detail {
+    template <typename X, typename Y>
+    struct foward_like {
+        using type = Y;
+    };
+
+    template<typename X, typename Y>
+    struct forward_like<const X&> {
+        using type = const Y&;
+    };
+}
+// if X is const, at const qualifier to Y
+template<typename X, typename Y>
+using const_like = std::conditional<std::is_const_v<std::remove_reference_t<X>>, std::add_const_t<Y>, Y>::type; 
+
+} // namespace traits
 } // namespace ccs::field::tuple
 
 namespace ccs::field
