@@ -60,19 +60,7 @@ TEST_CASE("concepts")
     REQUIRE(All<W&>);
     REQUIRE(All<Tuple<W>>);
     REQUIRE(All<Tuple<W&>>);
-
-    // using Q = const Tuple<ranges::iota_view<int, int> >;
-    // static_assert(std::is_const_v<Q>);
-    // static_assert(!std::is_const_v<Q&>);
-    // static_assert(!std::is_const_v<Q&&>);
-    // static_assert(!std::is_lvalue_reference_v<Q>);
-    // static_assert(std::is_lvalue_reference_v<const int&>);
-    // static_assert(std::is_rvalue_reference_v<const int&&>);
 }
-
-// error: invalid ‘static_cast’ from type ‘const
-// ccs::field::tuple::Tuple<ranges::iota_view<int, int> >’ to type ‘B&’ {aka
-// ‘ccs::field::tuple::ViewTuple<ranges::iota_view<int, int> >&’}
 
 TEST_CASE("construction")
 {

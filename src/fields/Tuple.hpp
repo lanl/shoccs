@@ -123,10 +123,12 @@ constexpr decltype(auto) get(C&& c)
     if constexpr (traits::OwningTuple<C>)
         return get<I>(FWD(c).as_Container());
     else {
-        // using B = typename std::remove_cvref_t<C>::View;
+        using B = typename std::remove_cvref_t<C>::View;
+        return get<I>(static_cast<boost::copy_cv_ref_t<B, C&&>>(c));
         // if constexpr (std::is_rvalue_reference_v<C>)
         //     return get<I>(static_cast<B&&>(FWD(c)));
-        // else if constexpr (std::is_const_v<std::remove_reference_t<C>> && std::is_lvalue_reference_v<C>)
+        // else if constexpr (std::is_const_v<std::remove_reference_t<C>> &&
+        // std::is_lvalue_reference_v<C>)
         //     return get<I>(static_cast<const B&>(FWD(c)));
         // else if constexpr (std::is_const_v<C>)
         //     return get<I>(static_cast<const B>(FWD(c)));
@@ -136,7 +138,7 @@ constexpr decltype(auto) get(C&& c)
         // }
         // else
         //     return get<I>(static_cast<B>(FWD(c)));
-        return get<I>(FWD(c).as_ViewTuple());
+        // return get<I>(FWD(c).as_ViewTuple());
     }
 }
 

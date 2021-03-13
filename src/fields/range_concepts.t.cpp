@@ -170,17 +170,4 @@ TEST_CASE("list index")
 
     using ListOfL = mp_list<list_index<0, 1, 2>, list_index<1>>;
     REQUIRE(ListIndices<ListOfL>);
-
-}
-
-TEST_CASE("forward_like")
-{
-    using namespace ccs::field::tuple::traits;
-
-    using X = int;
-    static_assert(std::same_as<const_like<X, float>, float>);
-    static_assert(std::same_as<const_like<const X, float>, const float>);
-    //static_assert(std::same_as<const_like<const X, float&>, const float&>);
-    static_assert(std::same_as<const_like<const X&, float>, const float>);
-    static_assert(std::same_as<const_like<const X&, float&>, const float&>);
 }

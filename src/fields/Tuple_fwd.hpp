@@ -7,6 +7,7 @@
 #include <range/v3/view/view.hpp>
 
 #include <boost/mp11.hpp>
+#include <boost/type_traits/copy_cv_ref.hpp>
 
 // Can we leverage something like MP11 to rewrite
 // most of these traits?
@@ -619,21 +620,6 @@ concept ListIndices = is_list_indices<T>::value;
 
 template <ListIndex L, std::size_t I>
 constexpr auto index_v = mp_at_c<L, I>::value;
-
-namespace detail {
-    template <typename X, typename Y>
-    struct foward_like {
-        using type = Y;
-    };
-
-    template<typename X, typename Y>
-    struct forward_like<const X&> {
-        using type = const Y&;
-    };
-}
-// if X is const, at const qualifier to Y
-template<typename X, typename Y>
-using const_like = std::conditional<std::is_const_v<std::remove_reference_t<X>>, std::add_const_t<Y>, Y>::type; 
 
 } // namespace traits
 } // namespace ccs::field::tuple

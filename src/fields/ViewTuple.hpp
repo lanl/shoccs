@@ -214,7 +214,6 @@ struct ViewTuple : ViewBaseTuple<Args...>,
                    field::tuple::lazy::ViewMath<ViewTuple<Args...>>,
                    field::tuple::lazy::ViewPipe<ViewTuple<Args...>> {
 private:
-    using Base_Tup = ViewBaseTuple<Args...>;
     using As_View = AsView<Args...>;
     using Type = ViewTuple<Args...>;
     static constexpr bool Output = (traits::AnyOutputRange<Args> && ...);
@@ -223,6 +222,8 @@ private:
     friend class ViewPipeAccess;
 
 public:
+    using Base_Tup = ViewBaseTuple<Args...>;
+
     explicit ViewTuple() = default;
     explicit ViewTuple(Args&&... args) requires(sizeof...(Args) > 0)
         : Base_Tup{FWD(args)...}, As_View{*this}
@@ -256,7 +257,9 @@ ViewTuple(Args&&...) -> ViewTuple<Args...>;
 template <std::size_t I, traits::ViewTupleType V>
 constexpr decltype(auto) get(V&& v) noexcept
 {
-    return get<I>(FWD(v).as_ViewBaseTuple());
+    using B = typename std::remove_cvref_t<V>::Base_Tup;
+    return get<I>(static_cast<boost::copy_cv_ref_t<B, V&&>>(v));
+    // return get<I>(FWD(v).as_ViewBaseTuple());
 }
 
 } // namespace ccs::field::tuple
