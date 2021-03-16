@@ -577,8 +577,52 @@ template <typename T>
 concept ViewClosures = mp_apply<mp_all, is_nested_view_closure<T>>::value;
 
 //
-// type functions for construct list of types for get based access.  Facilitates Selection
-// logic
+// Traits for ref_views - needed to implement intuitive assignment for ViewTuples
+//
+namespace detail
+{
+template <typename>
+struct is_ref_view_impl : std::false_type {
+};
+
+template <typename Rng>
+struct is_ref_view_impl<rs::ref_view<Rng>> : std::true_type {
+};
+} // namespace detail
+
+template <typename R>
+using is_ref_view = detail::is_ref_view_impl<std::remove_cvref_t<R>>::type;
+
+template <typename R>
+concept RefView = is_ref_view<R>::value;
+
+//
+// traits for being able to assign the components of a tuple
+//
+template <typename T, typename U>
+concept AssignableRefView =
+    TupleLike<T>&&
+        mp_apply<mp_all, mp_transform<is_ref_view, tuple_get_types<T>>>::value &&
+    (!TupleLike<U>)&&mp_apply<
+        mp_all,
+        mp_transform_q<mp_bind_back<std::is_assignable, U>,
+                       mp_rename<std::remove_reference_t<T>, mp_list>>>::value;
+
+template <typename T, typename U>
+concept AssignableDirect =
+    TupleLike<T> &&
+    (!TupleLike<U>)&&mp_apply<
+        mp_all,
+        mp_transform_q<mp_bind_back<std::is_assignable, U>, tuple_get_types<T>>>::value;
+
+template <typename T, typename U>
+concept AssignableDirectTuple = TupleLike<T>&& TupleLike<U>&& mp_apply<
+    mp_all,
+    mp_transform<std::is_assignable, tuple_get_types<T>, tuple_get_types<U>>>::value;
+
+//
+// type functions for construct list of types for get based access.  Facilitates
+// Selection logic
 //
 template <auto... Is>
 using list_index = mp_list<mp_size_t<Is>...>;
@@ -621,6 +665,22 @@ concept ListIndices = is_list_indices<T>::value;
 template <ListIndex L, std::size_t I>
 constexpr auto index_v = mp_at_c<L, I>::value;
 
+namespace detail
+{
+template <typename T>
+struct viewable_range_by_value_impl {
+    using type = T;
+};
+
+template <All T>
+struct viewable_range_by_value_impl<T&> {
+    using type = T;
+};
+} // namespace detail
+
+template <typename T>
+using viewable_range_by_value = detail::viewable_range_by_value_impl<T>::type;
+
 } // namespace traits
 } // namespace ccs::field::tuple
 
@@ -639,4 +699,8 @@ inline constexpr bool enable_view<ccs::field::Tuple<Args...>> = false;
 
 template <ccs::field::tuple::All T>
 inline constexpr bool enable_view<ccs::field::Tuple<T>> = true;
+
+template <ccs::field::tuple::All T>
+inline constexpr bool enable_view<ccs::field::tuple::ViewTuple<T>> = true;
+
 } // namespace ranges

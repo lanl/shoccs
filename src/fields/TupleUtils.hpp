@@ -220,6 +220,14 @@ void resize_and_copy(C&& container, R&& r)
     }
 }
 
+// Given a container and and input range, attempt to resize the container.
+// Either way, copy the input range into the container - may not be safe.
+template <traits::Range R, traits::OutputRange<R> C>
+requires traits::RefView<C> void resize_and_copy(C&& container, R&& r)
+{
+    resize_and_copy(FWD(container).base(), FWD(r));
+}
+
 template <Numeric N, traits::OutputRange<N> T>
 void resize_and_copy(T&& t, N n)
 {
@@ -229,7 +237,7 @@ void resize_and_copy(T&& t, N n)
 template <typename R, traits::OutputTuple<R> T>
 requires(!traits::TupleLike<R>) void resize_and_copy(T&& t, R&& r)
 {
-    for_each([r = FWD(r)](auto&& e) { resize_and_copy(FWD(e), r); }, FWD(t));
+    for_each([&r](auto&& e) { resize_and_copy(FWD(e), r); }, FWD(t));
 }
 
 template <traits::TupleLike R, traits::OutputTuple<R> T>

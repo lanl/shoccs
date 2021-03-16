@@ -84,12 +84,12 @@ TEST_CASE("Assignment with ViewTuple<Vector&>")
     REQUIRE(rs::equal(get<0>(x), v));
 
     x = vs::iota(1, 10);
-    REQUIRE(x.size() == 3u);
-    REQUIRE(rs::equal(v, T{1, 2, 3}));
+    REQUIRE(x.size() == 9u);
+    REQUIRE(rs::equal(v, vs::iota(1, 10)));
 
     x = T{-1, -2};
-    REQUIRE(x.size() == 3u);
-    REQUIRE(rs::equal(v, T{-1, -2, 3}));
+    REQUIRE(x.size() == 2u);
+    REQUIRE(rs::equal(v, T{-1, -2}));
 }
 
 TEST_CASE("Assignment from Container")
@@ -152,8 +152,8 @@ TEST_CASE("Assignment with ViewTuple<Vector&, Vector&>")
         x = ViewTuple<T&, T&>{q, r};
     }
 
-    REQUIRE(rs::equal(u, T{6, 7, 8}));
-    REQUIRE(rs::equal(v, T{10, 11, 12, 13}));
+    REQUIRE(rs::equal(u, T{6, 7, 8, 9}));
+    REQUIRE(rs::equal(v, T{10, 11, 12, 13, 14}));
 }
 
 TEST_CASE("Assignment with ViewTuple<span>")
@@ -421,4 +421,98 @@ TEST_CASE("MultiPipe Syntax")
 
     REQUIRE(rs::equal(a, vs::zip_with(std::plus{}, i, i)));
     REQUIRE(rs::equal(b, vs::zip_with(std::multiplies{}, j, j)));
+}
+
+// type for mocking Selection
+template <typename R>
+struct X : R {
+
+    X() = default;
+    constexpr X(R r) : R{MOVE(r)} {}
+
+    template <ccs::field::tuple::traits::ViewClosures F>
+    X& operator=(F f)
+    {
+        auto rng = *this | f;
+        R::operator=(rng);
+        return *this;
+    }
+};
+
+namespace ranges
+{
+template <ccs::field::tuple::All T>
+inline constexpr bool enable_view<X<T>> = true;
+}
+
+TEST_CASE("pass through assignment - vector")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+    using namespace traits;
+    using T = std::vector<int>;
+    using V = ViewTuple<T&>;
+
+    constexpr auto closure =
+        rs::make_view_closure([](auto&&) { return vs::iota(0, 10); });
+
+    auto t = T{};
+    auto a = V{t};
+    static_assert(is_ref_view<decltype(get<0>(a))>::value);
+    a = rs::empty_view<int>{} | closure | vs::transform([](auto&& i) { return i + 1; });
+    REQUIRE(rs::equal(t, vs::iota(1, 11)));
+
+    {
+        t.clear();
+        auto x = X{V{t}};
+        x = closure | vs::transform([](auto&& i) { return i - 1; });
+        REQUIRE(rs::equal(t, vs::iota(-1, 9)));
+    }
+
+    {
+        t.clear();
+        static_assert(All<X<V>>);
+        auto x = ViewTuple{X{V{t}}};
+        static_assert(AssignableDirect<ViewBaseTuple<X<V>>, decltype(closure)>);
+        static_assert(AssignableDirect<ViewBaseTuple<X<V>>&, decltype(closure)>);
+        x = closure | vs::transform([](auto&& i) { return i + 1; });
+        REQUIRE(rs::equal(t, vs::iota(1, 11)));
+    }
+}
+
+TEST_CASE("pass through assignment - span")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+    using namespace traits;
+    using T = std::span<int>;
+    using V = ViewTuple<T>;
+
+    static_assert(All<T>);
+    static_assert(All<T&>);
+    static_assert(All<V>);
+    static_assert(All<ViewTuple<std::span<int>&>>);
+
+    constexpr auto closure =
+        rs::make_view_closure([](auto&&) { return vs::iota(0, 10); });
+
+    auto t = std::vector<int>(10);
+    auto a = V{t};
+    a = rs::empty_view<int>{} | closure | vs::transform([](auto&& i) { return i + 1; });
+    REQUIRE(rs::equal(t, vs::iota(1, 11)));
+
+    {
+        auto x = X{V{t}};
+        x = closure | vs::transform([](auto&& i) { return i - 1; });
+        REQUIRE(rs::equal(t, vs::iota(-1, 9)));
+    }
+
+    {
+        static_assert(All<X<V>>);
+        auto x = ViewTuple{X{V{t}}};
+        static_assert(AssignableDirect<ViewBaseTuple<X<V>>, decltype(closure)>);
+        static_assert(AssignableDirect<ViewBaseTuple<X<V>>&, decltype(closure)>);
+        x = closure | vs::transform([](auto&& i) { return i + 1; });
+        REQUIRE(rs::equal(t, vs::iota(1, 11)));
+    }
 }

@@ -106,7 +106,8 @@ struct Tuple<Args...> : ViewTuple<Args...> {
 };
 
 template <typename... Args>
-Tuple(Args&&...) -> Tuple<Args...>;
+Tuple(Args&&...) -> Tuple<traits::viewable_range_by_value<Args>...>;
+// Tuple(Args&&...) -> Tuple<Args...>;
 
 // need to caputre view closures by value to meet range-v3 concepts
 template <typename... ViewFn>
@@ -115,7 +116,7 @@ template <typename... ViewFn>
 Tuple(const vs::view_closure<ViewFn>&...) -> Tuple<vs::view_closure<ViewFn>...>;
 
 template <typename... Args>
-Tuple(tag, Args&&...) -> Tuple<Args...>;
+Tuple(tag, Args&&...) -> Tuple<traits::viewable_range_by_value<Args>...>;
 
 template <std::size_t I, traits::TupleType C>
 constexpr decltype(auto) get(C&& c)
@@ -124,20 +125,8 @@ constexpr decltype(auto) get(C&& c)
         return get<I>(FWD(c).as_Container());
     else {
         using B = typename std::remove_cvref_t<C>::View;
-        return get<I>(static_cast<boost::copy_cv_ref_t<B, C&&>>(c));
-        // if constexpr (std::is_rvalue_reference_v<C>)
-        //     return get<I>(static_cast<B&&>(FWD(c)));
-        // else if constexpr (std::is_const_v<std::remove_reference_t<C>> &&
-        // std::is_lvalue_reference_v<C>)
-        //     return get<I>(static_cast<const B&>(FWD(c)));
-        // else if constexpr (std::is_const_v<C>)
-        //     return get<I>(static_cast<const B>(FWD(c)));
-        // else if constexpr (std::is_lvalue_reference_v<C>) {
-        //     static_assert(!std::is_const_v<C>);
-        //     return get<I>(static_cast<B&>(c));
-        // }
-        // else
-        //     return get<I>(static_cast<B>(FWD(c)));
+        return get<I>(static_cast<boost::copy_cv_ref_t<B, C&&>>(FWD(c)));
+
         // return get<I>(FWD(c).as_ViewTuple());
     }
 }
@@ -153,9 +142,9 @@ constexpr decltype(auto) get(C&& c)
 {
     // this really should only require one lambda but I can't do it without triggering a
     // parse error
-    return []<auto... Ls>(std::index_sequence<Ls...>, auto&& c)
+    return []<auto... Ls>(std::index_sequence<Ls...>, auto&& c)->decltype(auto)
     {
-        return []<auto... Is>(auto&& c, traits::mp_size_t<Is>...)
+        return []<auto... Is>(auto&& c, traits::mp_size_t<Is>...)->decltype(auto)
         {
             return get<Is...>(FWD(c));
         }

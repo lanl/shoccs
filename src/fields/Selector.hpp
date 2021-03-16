@@ -2,14 +2,36 @@
 
 #include "Tuple.hpp"
 
-#if 0
 #include "Scalar_fwd.hpp"
 #include "Vector_fwd.hpp"
-#endif
+
 #include "Selector_fwd.hpp"
 
 namespace ccs::field::tuple
 {
+
+// traits for mapping scalar and vector types to appropriate selection mp_list
+namespace traits
+{
+namespace detail
+{
+template <typename>
+struct selector_func_index_impl;
+
+template <ScalarType T>
+struct selector_func_index_impl<T> {
+    using type = mp_size_t<0>;
+};
+
+template <VectorType T>
+struct selector_func_index_impl<T> {
+    using type = mp_size_t<1>;
+};
+} // namespace detail
+
+template <typename T>
+using selector_func_index = detail::selector_func_index_impl<T>::type;
+} // namespace traits
 
 namespace detail
 {
@@ -52,16 +74,6 @@ struct Selection : R {
         R::operator=(rng);
         return *this;
     }
-
-    // constexpr auto to_Tuple() const
-    // {
-    //     return []<auto... Rs>(std::index_sequence<Rs...>, auto&& t)
-    //     {
-    //         return Tuple{detail::makeSelection<traits::mp_at_c<List, Rs>>(
-    //             Tuple{get<traits::mp_at_c<List, Rs>>(FWD(t))})...};
-    //     }
-    //     (TupleIndex<R>, this->as_Tuple());
-    // }
 };
 
 namespace detail
@@ -81,30 +93,21 @@ struct SelectorFunc {
     {
 
         // for now just grab the first element of the list
-        using List = traits::mp_front<Indices>;
+        using List = traits::mp_at<Indices, traits::selector_func_index<U>>;
+        static_assert(!traits::mp_empty<List>::value,
+                      "Selection operation not permitted");
 
         // Build a selection using the tuples indexed in the list
         return []<auto... Is>(std::index_sequence<Is...>, auto&& u)
         {
-            return Tuple{detail::makeSelection<traits::mp_at_c<List, Is>>(
-                Tuple{get<traits::mp_at_c<List, Is>>(FWD(u))})...};
+            if constexpr (sizeof...(Is) == 1)
+                return detail::makeSelection<traits::mp_at_c<List, 0>>(
+                    Tuple{get<traits::mp_at_c<List, 0>>(FWD(u))});
+            else
+                return Tuple{detail::makeSelection<traits::mp_at_c<List, Is>>(
+                    Tuple{get<traits::mp_at_c<List, Is>>(FWD(u))})...};
         }
         (sequence<List>, FWD(u));
-
-        // using G = decltype(get<I...>(FWD(u)));
-
-        // if constexpr (!traits::TupleLike<G>) {
-        //     return Selection{Tuple{get<I...>(FWD(u))}, traits::mp_size_t<I>()...};
-        // } else {
-        //     // to get the right reference semantics we need to extract all the
-        //     components
-        //     // at this level and stuff it into the return tuple
-        //     return []<auto... Gs>(std::index_sequence<Gs...>, auto&& v)
-        //     {
-        //         return Selection{Tuple{get<Gs>(FWD(v))...}, traits::mp_size_t<I>()...};
-        //     }
-        //     (TupleIndex<G>, get<I...>(FWD(u)));
-        // }
     }
 
     template <traits::TupleLike U>
@@ -124,11 +127,12 @@ using traits::mp_list;
 // inline constexpr auto Dx = Selector<0, 0>;
 // inline constexpr auto Dy = Selector<1, 0>;
 // inline constexpr auto Dz = Selector<2, 0>;
-inline constexpr auto Rx = Selector<mp_list<scalar::Rx>>;
-inline constexpr auto Ry = Selector<mp_list<scalar::Ry>>;
-inline constexpr auto Rz = Selector<mp_list<scalar::Rz>>;
-inline constexpr auto D = Selector<mp_list<scalar::D>>;
-inline constexpr auto R = Selector<mp_list<scalar::Rx, scalar::Ry, scalar::Rz>>;
+inline constexpr auto Rx = Selector<mp_list<scalar::Rx>, mp_list<>>;
+inline constexpr auto Ry = Selector<mp_list<scalar::Ry>, mp_list<>>;
+inline constexpr auto Rz = Selector<mp_list<scalar::Rz>, mp_list<>>;
+inline constexpr auto D = Selector<mp_list<scalar::D>, mp_list<>>;
+inline constexpr auto R =
+    Selector<mp_list<scalar::Rx, scalar::Ry, scalar::Rz>, mp_list<>>;
 
 } // namespace ccs::field::tuple
 

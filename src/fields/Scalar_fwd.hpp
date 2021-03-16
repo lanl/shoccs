@@ -5,11 +5,6 @@
 
 #include "Tuple_fwd.hpp"
 
-namespace ccs::mesh
-{
-struct Location;
-}
-
 namespace ccs::field::tuple
 {
 
@@ -34,22 +29,6 @@ template <typename T>
 concept ScalarType = is_scalar<std::remove_cvref_t<T>>::value;
 
 } // namespace traits
-
-// // Specialize from_view for ScalarType
-// template <traits::ScalarType U>
-// struct from_view<U> {
-//     static constexpr auto create = [](auto&& u, auto&&... args) {
-//         return Scalar{u.location(), FWD(args)...};
-//     };
-// };
-
-// // Combination views
-// template <traits::ScalarType U, traits::ScalarType V>
-// struct from_view<U, V> {
-//     static constexpr auto create = [](auto&& u, auto&&, auto&&... args) {
-//         return Scalar{u.location(), FWD(args)...};
-//     };
-// };
 
 } // namespace ccs::field::tuple
 

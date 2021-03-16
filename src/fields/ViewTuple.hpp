@@ -41,10 +41,6 @@ public:
         v = tuple_map([](auto&& a) { return std::addressof(FWD(a)); }, x.c);
         return *this;
     }
-
-    Type& as_ViewBaseTuple() & { return *this; }
-    const Type& as_ViewBaseTuple() const& { return *this; }
-    Type&& as_ViewBaseTuple() && { return MOVE(*this); }
 };
 
 template <All... Args>
@@ -93,7 +89,7 @@ public:
     // When assigning from a ContainerTuple, make sure we don't copy anything and instead
     // just take news views
     template <traits::OwningTuple C>
-    ViewBaseTuple& operator=(C&& c)
+    requires(!traits::ViewClosures<C>) ViewBaseTuple& operator=(C&& c)
     {
         v = tuple_map(vs::all, FWD(c));
         return *this;
@@ -111,13 +107,28 @@ public:
         return *this;
     }
 
-    Type& as_ViewBaseTuple() & { return *this; }
-    const Type& as_ViewBaseTuple() const& { return *this; }
-    Type&& as_ViewBaseTuple() && { return MOVE(*this); }
+    // Check for direct assignment betweeen components.  Needed for Tuples of Selections
+    template <typename T>
+        requires(!traits::OwningTuple<T>) &&
+        (!traits::OutputTuple<ViewBaseTuple, T>)&&traits::
+            AssignableDirect<ViewBaseTuple, T> ViewBaseTuple&
+            operator=(T&& t)
+    {
+        for_each([t = FWD(t)](auto&& x) { x = t; }, *this);
+        return *this;
+    }
+
+    template <typename T>
+        requires(!traits::OutputTuple<ViewBaseTuple, T>) &&
+        traits::AssignableDirectTuple<ViewBaseTuple, T> ViewBaseTuple& operator=(T&& t)
+    {
+        for_each([](auto&& x, auto&& y) { x = FWD(y); }, *this, FWD(t));
+        return *this;
+    }
 };
 
 template <typename... Args>
-ViewBaseTuple(Args&&...) -> ViewBaseTuple<Args...>;
+ViewBaseTuple(Args&&...) -> ViewBaseTuple<traits::viewable_range_by_value<Args>...>;
 
 template <std::size_t I, traits::ViewBaseTupleType V>
 constexpr decltype(auto) get(V&& v) noexcept
@@ -245,21 +256,16 @@ public:
         As_View::operator=(*this);
         return *this;
     }
-
-    ViewTuple& as_ViewTuple() & { return *this; }
-    const ViewTuple& as_ViewTuple() const& { return *this; }
-    ViewTuple&& as_ViewTuple() && { return MOVE(*this); }
 };
 
 template <typename... Args>
-ViewTuple(Args&&...) -> ViewTuple<Args...>;
+ViewTuple(Args&&...) -> ViewTuple<traits::viewable_range_by_value<Args>...>;
 
 template <std::size_t I, traits::ViewTupleType V>
 constexpr decltype(auto) get(V&& v) noexcept
 {
     using B = typename std::remove_cvref_t<V>::Base_Tup;
-    return get<I>(static_cast<boost::copy_cv_ref_t<B, V&&>>(v));
-    // return get<I>(FWD(v).as_ViewBaseTuple());
+    return get<I>(static_cast<boost::copy_cv_ref_t<B, V&&>>(FWD(v)));
 }
 
 } // namespace ccs::field::tuple

@@ -171,3 +171,18 @@ TEST_CASE("list index")
     using ListOfL = mp_list<list_index<0, 1, 2>, list_index<1>>;
     REQUIRE(ListIndices<ListOfL>);
 }
+
+TEST_CASE("viewable ranges")
+{
+    using namespace ccs::field::tuple::traits;
+    static_assert(std::same_as<viewable_range_by_value<std::span<int>>, std::span<int>>);
+    static_assert(std::same_as<viewable_range_by_value<std::span<int>&>, std::span<int>>);
+    static_assert(std::same_as<viewable_range_by_value<std::span<const int>>,
+                               std::span<const int>>);
+    static_assert(std::same_as<viewable_range_by_value<std::span<const int>&>,
+                               std::span<const int>>);
+    static_assert(
+        std::same_as<viewable_range_by_value<std::vector<int>&>, std::vector<int>&>);
+    static_assert(std::same_as<viewable_range_by_value<const std::vector<int>&>,
+                               const std::vector<int>&>);
+}

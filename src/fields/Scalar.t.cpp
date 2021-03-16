@@ -42,6 +42,10 @@ TEST_CASE("construction")
     REQUIRE(rs::equal(get<0>(Rxyz), vs::iota(0, 3)));
     REQUIRE(rs::equal(get<1>(Rxyz), vs::iota(3, 6)));
     REQUIRE(rs::equal(get<2>(Rxyz), vs::iota(-1, 2)));
+
+    static_assert(std::same_as<decltype(get<0, 0>(s)), decltype(get<0>(get<0>(s)))>);
+    static_assert(
+        std::same_as<decltype(get<selector::scalar::D>(s)), decltype(get<0>(get<0>(s)))>);
 }
 
 TEST_CASE("conversion")
@@ -180,7 +184,6 @@ TEST_CASE("lifting multiple args")
     REQUIRE(rs::equal(get<Rz>(z), std::vector{10, 8, 10, 7}));
 }
 
-#if 0
 TEST_CASE("mesh location vector")
 {
     using namespace ccs;
@@ -206,19 +209,20 @@ TEST_CASE("mesh location vector")
     REQUIRE(rs::equal(get<2>(s | selector::R | sol), rz | t));
 
     s | selector::Rx = sol;
-    REQUIRE(rs::equal(get<0, 1>(s), rx | t));
+    REQUIRE(rs::equal(get<Rx>(s), rx | t));
 
     s | selector::Ry = sol;
-    REQUIRE(rs::equal(get<1, 1>(s), ry | t));
+    REQUIRE(rs::equal(get<Ry>(s), ry | t));
 
     s | selector::Rz = sol;
-    REQUIRE(rs::equal(get<2, 1>(s), rz | t));
+    REQUIRE(rs::equal(get<Rz>(s), rz | t));
 
     constexpr auto u = vs::transform([](auto&& loc) {
         auto&& [x, y, z] = loc;
         return x * y * y * z;
     });
-
+    // the problem with this statement has to with the assignability
+    // of the view_tuples components
     s | selector::R = loc.view() | u;
     REQUIRE(rs::equal(s | selector::Rx, rx | u));
     REQUIRE(rs::equal(s | selector::Ry, ry | u));
@@ -280,6 +284,10 @@ TEST_CASE("mesh location span")
     REQUIRE(rs::equal(s | selector::Ry, ry | ur));
     REQUIRE(rs::equal(s | selector::Rz, rz | ur));
 
+    static_assert(tuple::traits::ViewClosures<decltype(
+                      loc.view() | Tuple{vs::transform(loc_fn<0>{}),
+                                         vs::transform(loc_fn<1>{}),
+                                         vs::transform(loc_fn<2>{})})>);
     s | selector::R = loc.view() | Tuple{vs::transform(loc_fn<0>{}),
                                          vs::transform(loc_fn<1>{}),
                                          vs::transform(loc_fn<2>{})};
@@ -288,4 +296,3 @@ TEST_CASE("mesh location span")
     REQUIRE(rs::equal(v, ry | vs::transform(loc_fn<1>{})));
     REQUIRE(rs::equal(w, rz | vs::transform(loc_fn<2>{})));
 }
-#endif

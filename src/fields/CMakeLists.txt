@@ -16,7 +16,7 @@ add_unit_test(ViewTuple "fields" fields)
 add_unit_test(Tuple "field" fields)
 add_unit_test(TupleMath "field" fields)
 add_unit_test(Scalar "field" fields)
-#add_unit_test(Vector "field" fields)
+add_unit_test(Vector "field" fields)
 
 add_executable(ViewTuple_Seg ViewTuple_Seg.cpp)
 target_link_libraries(ViewTuple_Seg fields)

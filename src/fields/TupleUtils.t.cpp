@@ -385,14 +385,23 @@ TEST_CASE("resize_and_copy vector")
     REQUIRE(rs::size(t) == rs::size(vs::iota(0, 2)));
     REQUIRE(rs::equal(t, vs::iota(0, 2)));
 
-    resize_and_copy(vs::all(t), vs::iota(5, 1024));
-    REQUIRE(rs::size(t) == 2u);
-    REQUIRE(rs::equal(t, T{5, 6}));
+    resize_and_copy(vs::all(t), vs::iota(5, 10));
+    REQUIRE(rs::size(t) == 5u);
+    REQUIRE(rs::equal(t, vs::iota(5, 10)));
 
     resize_and_copy(t, 0);
-    REQUIRE(rs::size(t) == 2u);
-    REQUIRE(rs::equal(t, T{0, 0}));
+    REQUIRE(rs::size(t) == 5u);
+    REQUIRE(rs::equal(t, T{0, 0, 0, 0, 0}));
 }
+
+template <auto I>
+struct loc_fn {
+    constexpr auto operator()(auto&& loc)
+    {
+        auto&& [x, y, z] = loc;
+        return x * y * z * std::get<I>(loc);
+    }
+};
 
 TEST_CASE("resize_and_copy span")
 {
@@ -411,6 +420,10 @@ TEST_CASE("resize_and_copy span")
     resize_and_copy(t, -1);
     REQUIRE(rs::size(t) == 5u);
     REQUIRE(rs::equal(t, vs::repeat_n(-1, rs::size(t))));
+
+    resize_and_copy(t, vs::iota(0, 10) | vs::transform([](auto&& i) { return i + 1; }));
+    REQUIRE(rs::size(t) == 5u);
+    REQUIRE(rs::equal(t, vs::iota(1, 6)));
 }
 
 TEST_CASE("resize_and_copy tuples")
@@ -507,16 +520,16 @@ TEST_CASE("resize_and_copy tuples to tuples")
     }
 
     {
-        auto u = T(3);
-        auto v = T(4);
+        auto u = T{};
+        auto v = T{};
         auto x = std::tuple{vs::all(u), vs::all(v)};
 
         resize_and_copy(x, std::tuple{vs::iota(0, 10), vs::iota(3, 6)});
         auto&& [a, b] = x;
-        REQUIRE(rs::size(a) == 3u);
-        REQUIRE(rs::size(b) == 4u);
-        REQUIRE(rs::equal(a, T{0, 1, 2}));
-        REQUIRE(rs::equal(b, T{3, 4, 5, 0}));
+        REQUIRE(rs::size(a) == 10u);
+        REQUIRE(rs::size(b) == 3u);
+        REQUIRE(rs::equal(a, vs::iota(0, 10)));
+        REQUIRE(rs::equal(b, vs::iota(3, 6)));
     }
 }
 
