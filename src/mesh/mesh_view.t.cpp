@@ -3,7 +3,6 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include "fields/result_field.hpp"
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/zip.hpp>
 
