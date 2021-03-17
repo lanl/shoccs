@@ -72,7 +72,7 @@ ScalarWave::ScalarWave( // cart_mesh&& cart_,
         mesh::location | field::Tuple{vs::transform(neg_G<0>{center, radius}),
                                       vs::transform(neg_G<1>{center, radius}),
                                       vs::transform(neg_G<2>{center, radius})};
-    grad_G | selector::Rxyz = 0;
+    grad_G | selector::R = 0;
 }
 
 real ScalarWave::timestep_size(const SystemField&, const StepController&) const
@@ -104,7 +104,7 @@ void ScalarWave::operator()(SystemField& field, const StepController& controller
 
     auto sol = mesh::location | vs::transform(solution{center, radius, time});
     u | selector::D = sol;
-    u | selector::Rxyz = sol;
+    u | selector::R = sol;
 }
 
 SystemStats
@@ -140,7 +140,7 @@ void ScalarWave::update_boundary(SystemView_Mutable field, real time)
     auto sol = mesh::location | vs::transform(solution{center, radius, time});
     auto&& [u] = field.scalars(scalars::u);
 
-    u | selector::Rxyz = sol;
+    u | selector::R = sol;
 
     // update domain boundaries
 }

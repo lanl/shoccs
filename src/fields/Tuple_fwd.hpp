@@ -140,6 +140,26 @@ concept TupleLike = requires(T t)
     get<0>(t);
 };
 
+namespace detail
+{
+template <typename>
+struct is_stdarray_impl : std::false_type {
+};
+template <typename T, auto N>
+struct is_stdarray_impl<std::array<T, N>> : std::true_type {
+};
+} // namespace detail
+template <typename T>
+using is_stdarray = detail::is_stdarray_impl<std::remove_cvref_t<T>>::type;
+
+template <typename T>
+concept NumericTupleLike =
+    is_stdarray<T>::value ||
+    (TupleLike<T> &&
+     mp_apply<mp_all,
+              mp_transform_q<mp_compose<std::remove_cvref_t, std::is_arithmetic>,
+                             mp_rename<std::remove_reference_t<T>, mp_list>>>::value);
+
 //
 // Define constrained template metafunctions to easily work with mp11
 //

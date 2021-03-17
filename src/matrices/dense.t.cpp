@@ -1,12 +1,12 @@
-#include "dense.hpp"
+#include "Dense.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
+#include <range/v3/algorithm/equal.hpp>
 #include <range/v3/view/all.hpp>
 #include <range/v3/view/iota.hpp>
-#include <range/v3/algorithm/equal.hpp>
 
 TEST_CASE("Identity")
 {
@@ -17,7 +17,7 @@ TEST_CASE("Identity")
 
     std::vector rng{-2.0, -1.0, 0.0, 1.0, 2.0};
 
-    auto mat = matrix::dense{5, 5, imat};
+    auto mat = matrix::Dense{5, 5, imat};
 
     auto res = mat * rng;
 
@@ -41,7 +41,7 @@ TEST_CASE("Non Square1")
         27.62738451878431,  -30.951742698251962, 88.544956462669,    99.34593385752356,
         2.3159193728828313, -75.82935876599558,  10.567250113100783};
 
-    auto mat = matrix::dense{5, 7, coeffs};
+    auto mat = matrix::Dense{5, 7, coeffs};
 
     auto rhs = std::vector{91.37999616851539,
                            50.64693725996551,
@@ -78,7 +78,7 @@ TEST_CASE("Non Square2")
         -56.75967760541846, -30.570447576312347, -63.39035198957018,  -24.724532373486397,
         43.50746274626897,  24.831628943793476,  -67.23007810345939};
 
-    auto mat = matrix::dense{9, 3, coeffs};
+    auto mat = matrix::Dense{9, 3, coeffs};
 
     auto rhs = std::vector{-71.9024502289571, 70.422079255705, -3.7031798936135942};
 

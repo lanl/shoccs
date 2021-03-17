@@ -1,4 +1,4 @@
-#include "inner_block.hpp"
+#include "InnerBlock.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -17,10 +17,10 @@ TEST_CASE("Identity")
     std::vector<real> int_c{1.0};
     std::vector<real> right_c{1, 0, 0, 1};
 
-    auto mat = matrix::inner_block{0,
-                                   matrix::dense{4, 4, left_c},
-                                   matrix::circulant{4, 10, int_c},
-                                   matrix::dense{2, 2, right_c}};
+    auto mat = matrix::InnerBlock{0,
+                                  matrix::Dense{4, 4, left_c},
+                                  matrix::Circulant{4, 10, int_c},
+                                  matrix::Dense{2, 2, right_c}};
 
     REQUIRE(mat.rows() == 16);
 
@@ -58,10 +58,10 @@ TEST_CASE("Random Boundary")
                               1.3345939131355147,
                               -1.4713774812532359};
 
-    auto mat = matrix::inner_block{2,
-                                   matrix::dense{4, 5, left_c},
-                                   matrix::circulant{3, 10, int_c},
-                                   matrix::dense{2, 3, right_c}};
+    auto mat = matrix::InnerBlock{2,
+                                  matrix::Dense{4, 5, left_c},
+                                  matrix::Circulant{3, 10, int_c},
+                                  matrix::Dense{2, 3, right_c}};
 
     std::vector<real> rhs{0.0,
                           0.0,

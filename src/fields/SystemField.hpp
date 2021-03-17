@@ -3,7 +3,6 @@
 #include "Scalar.hpp"
 #include "Vector.hpp"
 #include "lazy_field_math.hpp"
-#include "r_tuple.hpp"
 #include <utility>
 
 namespace ccs
@@ -17,8 +16,8 @@ class SystemField : lazy::ViewMath<SystemField<T>>, lazy::ContainerMath<SystemFi
     friend class lazy::ViewAccess;
     friend class lazy::ContainerAccess;
 
-    std::vector<SimpleScalar<T>> scalars_;
-    std::vector<SimpleVector<T>> vectors_;
+    std::vector<Scalar<T>> scalars_;
+    std::vector<Vector<T>> vectors_;
 
 public:
     using type = SystemField<T>;

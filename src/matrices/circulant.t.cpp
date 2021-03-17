@@ -1,4 +1,4 @@
-#include "circulant.hpp"
+#include "Circulant.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -15,7 +15,7 @@ TEST_CASE("Identity")
 
     std::vector<real> coeffs{1.0};
 
-    auto mat = matrix::circulant{0, 10, coeffs};
+    auto mat = matrix::Circulant{0, 10, coeffs};
 
     std::random_device rd;  // Will be used to obtain a seed for the random number engine
     std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
@@ -49,7 +49,7 @@ TEST_CASE("Random")
                           -5.8732966768985975,
                           3.6343912595600116};
 
-    auto mat = matrix::circulant{2, 5, coeffs};
+    auto mat = matrix::Circulant{2, 5, coeffs};
 
     auto rng = mat * rhs;
 

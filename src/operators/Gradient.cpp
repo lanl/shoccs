@@ -7,9 +7,9 @@ Gradient::operator()(field::ScalarView_Const u)
 {
     return std::function<void(field::VectorView_Mutable)>{
         [this, u](field::VectorView_Mutable du) {
-            dx(u, du.x());
-            dy(u, du.y());
-            dz(u, du.z());
+            dx(u, get<0>(du));
+            dy(u, get<1>(du));
+            dz(u, get<2>(du));
         }};
 }
 } // namespace ccs::operators

@@ -146,125 +146,109 @@ TEST_CASE("to scalar")
         REQUIRE(rs::equal(sx | selector::D, get<Dx>(vvc)));
     }
 }
-#if 0
 
 TEST_CASE("selection")
 {
     using namespace ccs;
-    using namespace field::tuple;
+    using namespace field;
 
-    // get non-const versions
-    auto x = global::x;
-    auto y = global::y;
-    auto z = global::z;
-    auto rx = global::rx | vs::transform([](auto&& i) { return i[0]; }) |
-              rs::to<std::vector<real>>();
-    auto ry = global::ry | vs::transform([](auto&& i) { return i[1]; }) |
-              rs::to<std::vector<real>>();
-    auto rz = global::rz | vs::transform([](auto&& i) { return i[2]; }) |
-              rs::to<std::vector<real>>();
+    using T = std::vector<real>;
 
-    auto s = field::Vector(&global::loc, Tuple{x, y, z}, Tuple{rx, ry, rz});
+    Vector<T> v_{Tuple{Tuple{vs::iota(0, 10)},
+                       Tuple{vs::iota(0, 3), vs::iota(1, 3), vs::iota(-1, 1)}},
+                 Tuple{Tuple{vs::iota(10, 20)},
+                       Tuple{vs::iota(1, 4), vs::iota(2, 5), vs::iota(2, 10)}},
+                 Tuple{Tuple{vs::iota(20, 30)},
+                       Tuple{vs::iota(1, 5), vs::iota(5, 10), vs::iota(8, 10)}}};
+    VectorView_Mutable v = v_;
 
-    // Add tests to verify the type of the containers and views.
-    // THey may point to scalar needing to be a tuple of nested tuples
-    REQUIRE(rs::equal(x, s | selector::Dx));
-    REQUIRE(rs::equal(y, s | selector::Dy));
-    REQUIRE(rs::equal(z, s | selector::Dz));
-    REQUIRE(rs::equal(rx, s | selector::Rx));
-    REQUIRE(rs::equal(ry, s | selector::Ry));
-    REQUIRE(rs::equal(rz, s | selector::Rz));
+    REQUIRE(rs::equal(vs::iota(0, 10), v | selector::Dx));
+    REQUIRE(rs::equal(vs::iota(10, 20), v | selector::Dy));
+    REQUIRE(rs::equal(vs::iota(20, 30), v | selector::Dz));
+    REQUIRE(rs::equal(vs::iota(0, 3), get<X>(v | selector::Rx)));
+    REQUIRE(rs::equal(vs::iota(2, 5), get<Y>(v | selector::Ry)));
+    REQUIRE(rs::equal(vs::iota(8, 10), get<Z>(v | selector::Rz)));
 
     // modify selection
-    s | selector::D = 0;
-    REQUIRE(rs::equal(x, vs::repeat_n(0, global::x.size())));
-    REQUIRE(rs::equal(y, vs::repeat_n(0, global::y.size())));
-    REQUIRE(rs::equal(z, vs::repeat_n(0, global::z.size())));
+    v | selector::D = 0;
+    REQUIRE(rs::equal(get<Dx>(v_), vs::repeat_n(0, 10)));
+    REQUIRE(rs::equal(get<Dy>(v_), vs::repeat_n(0, 10)));
+    REQUIRE(rs::equal(get<Dz>(v_), vs::repeat_n(0, 10)));
 
-    s | selector::Rz = -1;
-    REQUIRE(rs::equal(rz, vs::repeat_n(-1, global::rz.size())));
+    v | selector::Rz = -1;
+    REQUIRE(rs::equal(get<xRz>(v_), vs::repeat_n(-1, 2)));
+    REQUIRE(rs::equal(get<yRz>(v_), vs::repeat_n(-1, 8)));
+    REQUIRE(rs::equal(get<zRz>(v_), vs::repeat_n(-1, 2)));
 
-    s | selector::Rxyz = 2;
-    REQUIRE(rs::equal(rx, vs::repeat_n(2, global::rx.size())));
-    REQUIRE(rs::equal(ry, vs::repeat_n(2, global::ry.size())));
-    REQUIRE(rs::equal(rz, vs::repeat_n(2, global::rz.size())));
+    v | selector::R = 2;
+    REQUIRE(rs::equal(get<xRx>(v_), vs::repeat_n(2, 3)));
+    REQUIRE(rs::equal(get<xRz>(v_), vs::repeat_n(2, 2)));
+    REQUIRE(rs::equal(get<yRx>(v_), vs::repeat_n(2, 3)));
 }
 
 TEST_CASE("math")
 {
     using namespace ccs;
     using namespace ccs::field;
-    auto s = SimpleVector<std::vector<int>>{
-        &global::loc,
-        Tuple{vs::iota(1, 5), vs::iota(2, 7), vs::iota(1, 3)},
-        Tuple{vs::iota(6, 10), vs::iota(6, 12), vs::iota(10, 15)}};
+    using T = std::vector<int>;
 
-    auto q = s + 1;
-    REQUIRE(rs::equal(vs::iota(2, 6), q | selector::Dx));
-    REQUIRE(rs::equal(vs::iota(3, 8), q | selector::Dy));
-    REQUIRE(rs::equal(vs::iota(2, 4), q | selector::Dz));
-    REQUIRE(rs::equal(vs::iota(7, 11), q | selector::Rx));
-    REQUIRE(rs::equal(vs::iota(7, 13), q | selector::Ry));
-    REQUIRE(rs::equal(vs::iota(11, 16), q | selector::Rz));
+    Vector<T> v{Tuple{Tuple{vs::iota(0, 10)},
+                      Tuple{vs::iota(0, 3), vs::iota(1, 3), vs::iota(-1, 1)}},
+                Tuple{Tuple{vs::iota(10, 20)},
+                      Tuple{vs::iota(1, 4), vs::iota(2, 5), vs::iota(2, 10)}},
+                Tuple{Tuple{vs::iota(20, 30)},
+                      Tuple{vs::iota(1, 5), vs::iota(5, 10), vs::iota(8, 10)}}};
 
-    auto r = q + s;
+    auto q = v + 1;
+    REQUIRE(rs::equal(vs::iota(1, 11), q | selector::Dx));
+    REQUIRE(rs::equal(vs::iota(11, 21), q | selector::Dy));
+    REQUIRE(rs::equal(vs::iota(21, 31), q | selector::Dz));
+    REQUIRE(rs::equal(vs::iota(1, 4), get<xRx>(q)));
+    REQUIRE(rs::equal(vs::iota(3, 6), get<yRy>(q)));
+    REQUIRE(rs::equal(vs::iota(9, 11), get<zRz>(q)));
+
+    auto r = q + v;
     constexpr auto plus = [](auto&& a, auto&& b) {
         return vs::zip_with(std::plus{}, FWD(a), FWD(b));
     };
-    REQUIRE(rs::equal(plus(vs::iota(2, 6), vs::iota(1, 5)), r | selector::Dx));
-    REQUIRE(rs::equal(plus(vs::iota(11, 16), vs::iota(10, 15)), r | selector::Rz));
+    REQUIRE(rs::equal(plus(vs::iota(1, 11), vs::iota(0, 10)), r | selector::Dx));
+    REQUIRE(rs::equal(plus(vs::iota(2, 6), vs::iota(1, 5)), get<zRx>(r)));
 
-    SimpleVector<std::vector<int>> t{r};
+    Vector<std::vector<int>> t = r;
     REQUIRE(rs::equal(t | selector::Dz, r | selector::Dz));
-    REQUIRE(rs::equal(t | selector::Ry, r | selector::Ry));
+    REQUIRE(rs::equal(t | selector::yRy, r | selector::yRy));
+
+    Vector<std::vector<int>> a{v};
+    Vector<std::span<int>> b = a;
+    b = r;
+    REQUIRE(rs::equal(b | selector::Dy, r | selector::Dy));
+    REQUIRE(rs::equal(b | selector::zRx, r | selector::zRx));
 }
 
 TEST_CASE("lifting single arg")
 {
     using namespace ccs;
     using namespace ccs::field;
-    auto s = SimpleVector<std::vector<int>>{
-        &global::loc,
-        Tuple{vs::iota(1, 5), vs::iota(2, 7), vs::iota(1, 3)},
-        Tuple{vs::iota(6, 10), vs::iota(6, 12), vs::iota(10, 15)}};
+    using T = std::vector<int>;
 
-    constexpr auto f = lift([](auto&& x) { return std::abs(x) + 1; });
+    Vector<T> v{Tuple{Tuple{vs::iota(0, 10)},
+                      Tuple{vs::iota(0, 3), vs::iota(1, 3), vs::iota(-1, 1)}},
+                Tuple{Tuple{vs::iota(10, 20)},
+                      Tuple{vs::iota(1, 4), vs::iota(2, 5), vs::iota(2, 10)}},
+                Tuple{Tuple{vs::iota(20, 30)},
+                      Tuple{vs::iota(1, 5), vs::iota(5, 10), vs::iota(8, 10)}}};
 
-    auto j = f(s);
-    auto k = s + 1;
+    constexpr auto f = tuple::lift([](auto&& x) { return std::abs(x) + 1; });
+
+    auto j = f(v);
+    auto k = v + 1;
 
     REQUIRE(rs::equal(j | selector::Dx, k | selector::Dx));
     REQUIRE(rs::equal(j | selector::Dy, k | selector::Dy));
     REQUIRE(rs::equal(j | selector::Dz, k | selector::Dz));
-    REQUIRE(rs::equal(j | selector::Rx, k | selector::Rx));
-    REQUIRE(rs::equal(j | selector::Ry, k | selector::Ry));
-    REQUIRE(rs::equal(j | selector::Rz, k | selector::Rz));
-}
-
-TEST_CASE("lifting multiple args")
-{
-    using namespace ccs;
-    using namespace ccs::field;
-    auto x = SimpleVector<std::vector<int>>{
-        &global::loc,
-        Tuple{vs::iota(1, 5), vs::iota(2, 7), vs::iota(1, 3)},
-        Tuple{vs::iota(6, 10), vs::iota(6, 12), std::vector{-4, 5, -10, 6}}};
-    auto y = SimpleVector<std::vector<int>>{
-        &global::loc,
-        Tuple{vs::iota(2, 6), vs::iota(1, 6), vs::iota(2, 4)},
-        Tuple{vs::iota(5, 9), vs::iota(-6, 0), std::vector{10, -8, 2, -7}}};
-
-    constexpr auto f =
-        lift([](auto&& x, auto&& y) { return std::max(std::abs(x), std::abs(y)); });
-
-    auto z = f(x, y);
-
-    REQUIRE(rs::equal(z | selector::Dx, vs::iota(2, 6)));
-    REQUIRE(rs::equal(z | selector::Dy, vs::iota(2, 7)));
-    REQUIRE(rs::equal(z | selector::Dz, vs::iota(2, 4)));
-    REQUIRE(rs::equal(z | selector::Rx, vs::iota(6, 10)));
-    REQUIRE(rs::equal(z | selector::Ry, vs::iota(6, 12)));
-    REQUIRE(rs::equal(z | selector::Rz, std::vector{10, 8, 10, 7}));
+    REQUIRE(rs::equal(j | selector::xRx, k | selector::xRx));
+    REQUIRE(rs::equal(j | selector::yRy, k | selector::yRy));
+    REQUIRE(rs::equal(j | selector::zRz, k | selector::zRz));
 }
 
 TEST_CASE("mesh location")
@@ -273,39 +257,112 @@ TEST_CASE("mesh location")
     using namespace ccs::field;
     using namespace global;
 
-    const auto sz = x.size() * y.size() * z.size();
+    using T = std::vector<real>;
 
-    auto s = SimpleVector<std::vector<real>>{
-        &loc, Tuple{sz, sz, sz}, Tuple{rx.size(), ry.size(), rz.size()}};
+    const auto sz = vs::repeat_n(0, x.size() * y.size() * z.size());
+    const auto x_sz = vs::repeat_n(0, rx.size());
+    const auto y_sz = vs::repeat_n(0, ry.size());
+    const auto z_sz = vs::repeat_n(0, rz.size());
+
+    Vector<T> v{Tuple{Tuple{sz}, Tuple{x_sz, y_sz, z_sz}},
+                Tuple{Tuple{sz}, Tuple{x_sz, y_sz, z_sz}},
+                Tuple{Tuple{sz}, Tuple{x_sz, y_sz, z_sz}}};
 
     constexpr auto t = vs::transform([](auto&& loc) {
         auto&& [x, y, z] = loc;
         return x * y * z;
     });
 
-    constexpr auto sol = mesh::location | t;
+    constexpr auto sol = loc.view() | t;
 
-    s | selector::D = sol;
-    REQUIRE(rs::equal(s | selector::Dx, vs::cartesian_product(x, y, z) | t));
-    REQUIRE(rs::equal(s | selector::Rx, vs::repeat_n(0.0, rx.size())));
+    v | selector::D = sol;
+    REQUIRE(rs::equal(v | selector::Dx, vs::cartesian_product(x, y, z) | t));
 
-    s | selector::Rx = sol;
-    REQUIRE(rs::equal(s | selector::Rx, rx | t));
+    v | selector::Rx = sol;
+    REQUIRE(rs::equal(v | selector::xRx, rx | t));
+    REQUIRE(rs::equal(v | selector::yRx, rx | t));
 
-    s | selector::Ry = sol;
-    REQUIRE(rs::equal(s | selector::Ry, ry | t));
+    v | selector::Ry = sol;
+    REQUIRE(rs::equal(v | selector::xRy, ry | t));
+    REQUIRE(rs::equal(v | selector::zRy, ry | t));
 
-    s | selector::Rz = sol;
-    REQUIRE(rs::equal(s | selector::Rz, rz | t));
+    v | selector::Rz = sol;
+    REQUIRE(rs::equal(v | selector::zRz, rz | t));
 
     constexpr auto u = vs::transform([](auto&& loc) {
         auto&& [x, y, z] = loc;
         return x * y * y * z;
     });
 
-    s | selector::Rxyz = mesh::location | u;
-    REQUIRE(rs::equal(s | selector::Rx, rx | u));
-    REQUIRE(rs::equal(s | selector::Ry, ry | u));
-    REQUIRE(rs::equal(s | selector::Rz, rz | u));
+    v | selector::R = loc.view() | u;
+    REQUIRE(rs::equal(v | selector::xRx, rx | u));
+    REQUIRE(rs::equal(v | selector::yRy, ry | u));
+    REQUIRE(rs::equal(v | selector::zRz, rz | u));
 }
-#endif
+
+template <auto I>
+struct loc_fn {
+    constexpr auto operator()(auto&& loc)
+    {
+        auto&& [x, y, z] = loc;
+        return x * y * z * std::get<I>(loc);
+    }
+};
+
+TEST_CASE("mesh location span")
+{
+    using namespace ccs;
+    using namespace ccs::field;
+    using namespace global;
+
+    using T = std::vector<real>;
+
+    const auto sz = vs::repeat_n(0, x.size() * y.size() * z.size());
+    const auto x_sz = vs::repeat_n(0, rx.size());
+    const auto y_sz = vs::repeat_n(0, ry.size());
+    const auto z_sz = vs::repeat_n(0, rz.size());
+
+    Vector<T> v_{Tuple{Tuple{sz}, Tuple{x_sz, y_sz, z_sz}},
+                 Tuple{Tuple{sz}, Tuple{x_sz, y_sz, z_sz}},
+                 Tuple{Tuple{sz}, Tuple{x_sz, y_sz, z_sz}}};
+    VectorView_Mutable v = v_;
+
+    constexpr auto t = vs::transform([](auto&& loc) {
+        auto&& [x, y, z] = loc;
+        return x * y * z;
+    });
+
+    constexpr auto sol = loc.view() | t;
+
+    v | selector::D = sol;
+    REQUIRE(rs::equal(v | selector::Dx, vs::cartesian_product(x, y, z) | t));
+
+    v | selector::Rx = sol;
+    REQUIRE(rs::equal(v | selector::xRx, rx | t));
+    REQUIRE(rs::equal(v | selector::yRx, rx | t));
+
+    v | selector::Ry = sol;
+    REQUIRE(rs::equal(v | selector::xRy, ry | t));
+    REQUIRE(rs::equal(v | selector::zRy, ry | t));
+
+    v | selector::Rz = sol;
+    REQUIRE(rs::equal(v | selector::zRz, rz | t));
+
+    constexpr auto u = vs::transform([](auto&& loc) {
+        auto&& [x, y, z] = loc;
+        return x * y * y * z;
+    });
+
+    v | selector::R = loc.view() | u;
+    REQUIRE(rs::equal(v | selector::xRx, rx | u));
+    REQUIRE(rs::equal(v | selector::yRy, ry | u));
+    REQUIRE(rs::equal(v | selector::zRz, rz | u));
+
+    v | selector::Rx = loc.view() | Tuple{vs::transform(loc_fn<0>{}),
+                                          vs::transform(loc_fn<1>{}),
+                                          vs::transform(loc_fn<2>{})};
+
+    REQUIRE(rs::equal(v | selector::xRx, rx | vs::transform(loc_fn<0>{})));
+    REQUIRE(rs::equal(v | selector::yRx, rx | vs::transform(loc_fn<1>{})));
+    REQUIRE(rs::equal(v | selector::zRx, rx | vs::transform(loc_fn<2>{})));
+}

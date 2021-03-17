@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fields/r_tuple.hpp"
+#include "fields/Tuple.hpp"
 #include "types.hpp"
 
 #include <cassert>
@@ -16,16 +16,16 @@
 namespace ccs::matrix
 {
 
-class circulant
+class Circulant
 {
     int offset_; // don't support negative for periodic domains yet
     int rows_;
     std::span<const real> v;
 
 public:
-    circulant() = default;
+    Circulant() = default;
 
-    circulant(int offset, int rows, std::span<const real> coeffs)
+    Circulant(int offset, int rows, std::span<const real> coeffs)
         : offset_{offset}, rows_{rows}, v{coeffs}
     {
         assert(offset_ > -1);
@@ -38,12 +38,12 @@ public:
 
 private:
     template <ranges::random_access_range R>
-    friend constexpr auto operator*(const circulant& mat, R&& rng)
+    friend constexpr auto operator*(const Circulant& mat, R&& rng)
     {
         assert(rng.size() >= static_cast<unsigned>(mat.rows()));
         assert(mat.size() > 0);
 
-        return r_tuple{ranges::views::zip_with(
+        return field::Tuple{ranges::views::zip_with(
             [](auto&& a, auto&& b) { return ranges::inner_product(a, b, 0.0); },
             ranges::views::repeat_n(mat.v, mat.rows()),
             rng | ranges::views::drop(mat.offset()) |

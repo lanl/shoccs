@@ -1,12 +1,12 @@
 add_library(matrices INTERFACE)
 
 target_include_directories(matrices INTERFACE ..)
-target_link_libraries(matrices INTERFACE range-v3::range-v3)
+target_link_libraries(matrices INTERFACE fields)
 
-add_unit_test(dense "matrices" matrices)
-add_unit_test(circulant "matrices" matrices)
-add_unit_test(inner_block "matrices" matrices)
-add_unit_test(block "matrices" matrices)
-add_unit_test(csr "matrices" matrices)
-add_unit_test(zeros "matrices" matrices)
+add_unit_test(Dense "matrices" matrices)
+add_unit_test(Circulant "matrices" matrices)
+add_unit_test(InnerBlock "matrices" matrices)
+add_unit_test(Block "matrices" matrices)
+add_unit_test(CSR "matrices" matrices)
+add_unit_test(Zeros "matrices" matrices)
 

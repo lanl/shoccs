@@ -1,7 +1,7 @@
 #pragma once
 
-#include "circulant.hpp"
-#include "dense.hpp"
+#include "Circulant.hpp"
+#include "Dense.hpp"
 #include "types.hpp"
 
 #include <range/v3/view/concat.hpp>
@@ -10,17 +10,17 @@ namespace ccs::matrix
 {
 // Block matrix arising from method-of-lines discretization along a line.  A full domain
 // discretization requires many of these to be embedded at various starting rows.
-class inner_block
+class InnerBlock
 {
     int row_start;
-    dense left_boundary;
-    circulant interior;
-    dense right_boundary;
+    Dense left_boundary;
+    Circulant interior;
+    Dense right_boundary;
 
 public:
-    inner_block() = default;
+    InnerBlock() = default;
 
-    inner_block(int row_start, dense&& left, circulant&& i, dense&& right)
+    InnerBlock(int row_start, Dense&& left, Circulant&& i, Dense&& right)
         : row_start{row_start},
           left_boundary{std::move(left)},
           interior{std::move(i)},
@@ -37,14 +37,14 @@ public:
 
 private:
     template <rs::random_access_range R>
-    friend constexpr auto operator*(const inner_block& mat, R&& rng)
+    friend constexpr auto operator*(const InnerBlock& mat, R&& rng)
     {
         auto x = rng | vs::drop(mat.row_start);
         int right_offset = mat.rows() - mat.right_boundary.columns();
-        return r_tuple{vs::concat(
-            mat.left_boundary * x,
-            mat.interior * x,
-            mat.right_boundary * (x | vs::drop(right_offset)))};
+        return field::Tuple{
+            vs::concat(mat.left_boundary * x,
+                       mat.interior * x,
+                       mat.right_boundary * (x | vs::drop(right_offset)))};
     }
 };
 } // namespace ccs::matrix

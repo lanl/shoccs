@@ -1,7 +1,7 @@
 add_library(shoccs-mesh Cartesian.cpp CutGeometry.cpp Rect.cpp Sphere.cpp)
 
 target_include_directories(shoccs-mesh PUBLIC ..)
-target_link_libraries(shoccs-mesh PUBLIC range-v3::range-v3)
+target_link_libraries(shoccs-mesh PUBLIC fields)
 
 add_library(mesh_view INTERFACE)
 target_link_libraries(mesh_view INTERFACE shoccs-mesh cppcoro)

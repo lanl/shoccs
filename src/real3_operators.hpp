@@ -4,14 +4,17 @@
 
 namespace ccs
 {
+using field::tuple::traits::NumericTupleLike;
+
 namespace detail
 {
-template <TupleLike T>
+
+template <NumericTupleLike T>
 constexpr auto tuple_sz = std::tuple_size_v<std::remove_cvref_t<T>>;
-}
+} // namespace detail
 
 #define SHOCCS_GEN_OPERATORS(op, acc)                                                    \
-    template <TupleLike U, TupleLike V>                                                  \
+    template <NumericTupleLike U, NumericTupleLike V>                                    \
     requires(detail::tuple_sz<U> ==                                                      \
              detail::tuple_sz<V>) constexpr std::array<real, detail::tuple_sz<U>>        \
     op(U&& u, V&& v)                                                                     \
@@ -23,7 +26,7 @@ constexpr auto tuple_sz = std::tuple_size_v<std::remove_cvref_t<T>>;
         }                                                                                \
         (std::make_index_sequence<detail::tuple_sz<U>>{}, FWD(u), FWD(v));               \
     }                                                                                    \
-    template <TupleLike U>                                                               \
+    template <NumericTupleLike U>                                                        \
     constexpr std::array<real, detail::tuple_sz<U>> op(U&& u, Numeric auto v)            \
     {                                                                                    \
         return [b = v]<auto... Is>(std::index_sequence<Is...>, auto&& a)                 \
@@ -32,7 +35,7 @@ constexpr auto tuple_sz = std::tuple_size_v<std::remove_cvref_t<T>>;
         }                                                                                \
         (std::make_index_sequence<detail::tuple_sz<U>>{}, FWD(u));                       \
     }                                                                                    \
-    template <TupleLike U>                                                               \
+    template <NumericTupleLike U>                                                        \
     constexpr std::array<real, detail::tuple_sz<U>> op(Numeric auto v, U&& u)            \
     {                                                                                    \
         return [b = v]<auto... Is>(std::index_sequence<Is...>, auto&& a)                 \
@@ -49,7 +52,7 @@ SHOCCS_GEN_OPERATORS(operator-, -)
 
 #undef SHOCCS_GEN_OPERATORS
 
-template <TupleLike U, TupleLike V>
+template <NumericTupleLike U, NumericTupleLike V>
 requires(detail::tuple_sz<U> == detail::tuple_sz<V>) constexpr real dot(U&& u, V&& v)
 {
     return []<auto... Is>(std::index_sequence<Is...>, auto&& a, auto&& b)
@@ -59,7 +62,7 @@ requires(detail::tuple_sz<U> == detail::tuple_sz<V>) constexpr real dot(U&& u, V
     (std::make_index_sequence<detail::tuple_sz<U>>{}, FWD(u), FWD(v));
 }
 
-template <TupleLike U>
+template <NumericTupleLike U>
 real length(U&& u)
 {
     return std::sqrt(dot(u, u));

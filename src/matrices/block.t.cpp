@@ -1,4 +1,4 @@
-#include "block.hpp"
+#include "Block.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -20,21 +20,21 @@ TEST_CASE("Identity")
     std::vector<real> int_c{1.0};
     std::vector<real> right_c{1, 0, 0, 1};
 
-    auto bld = matrix::block::builder();
-    bld.add_inner_block(1,
-                        matrix::dense{4, 4, left_c},
-                        matrix::circulant{4, 10, int_c},
-                        matrix::dense{2, 2, right_c});
-    bld.add_inner_block(17,
-                        matrix::dense{4, 4, left_c},
-                        matrix::circulant{4, 10, int_c},
-                        matrix::dense{2, 2, right_c});
-    bld.add_inner_block(34,
-                        matrix::dense{4, 4, left_c},
-                        matrix::circulant{4, 10, int_c},
-                        matrix::dense{2, 2, right_c});
+    auto bld = matrix::Block::Builder();
+    bld.add_InnerBlock(1,
+                       matrix::Dense{4, 4, left_c},
+                       matrix::Circulant{4, 10, int_c},
+                       matrix::Dense{2, 2, right_c});
+    bld.add_InnerBlock(17,
+                       matrix::Dense{4, 4, left_c},
+                       matrix::Circulant{4, 10, int_c},
+                       matrix::Dense{2, 2, right_c});
+    bld.add_InnerBlock(34,
+                       matrix::Dense{4, 4, left_c},
+                       matrix::Circulant{4, 10, int_c},
+                       matrix::Dense{2, 2, right_c});
 
-    auto mat = std::move(bld).to_block(52);
+    auto mat = std::move(bld).to_Block(52);
 
     REQUIRE(mat.rows() == 52);
 
@@ -76,19 +76,19 @@ TEST_CASE("Random Boundary")
                               1.288208276267654,
                               1.3345939131355147,
                               -1.4713774812532359};
-    auto bld = matrix::block::builder(3);
+    auto bld = matrix::Block::Builder(3);
     auto msz = 16;
 
-    bld.add_inner_block(1,
-                        matrix::dense{4, 5, left_c},
-                        matrix::circulant{3, 10, int_c},
-                        matrix::dense{2, 3, right_c});
-    bld.add_inner_block(msz + 5,
-                        matrix::dense{4, 5, left_c},
-                        matrix::circulant{3, 10, int_c},
-                        matrix::dense{2, 3, right_c});
+    bld.add_InnerBlock(1,
+                       matrix::Dense{4, 5, left_c},
+                       matrix::Circulant{3, 10, int_c},
+                       matrix::Dense{2, 3, right_c});
+    bld.add_InnerBlock(msz + 5,
+                       matrix::Dense{4, 5, left_c},
+                       matrix::Circulant{3, 10, int_c},
+                       matrix::Dense{2, 3, right_c});
 
-    auto mat = std::move(bld).to_block(2 * msz + 8);
+    auto mat = std::move(bld).to_Block(2 * msz + 8);
 
     std::vector<real> rhs_{1.1489955608128035,
                            -9.641815125514444,
@@ -107,28 +107,28 @@ TEST_CASE("Random Boundary")
                            -8.054425087325441,
                            -3.809075460321715};
 
-    auto rhs = concat(single(0.0), rhs_, repeat_n(0.0, 4), rhs_, repeat_n(0.0, 3)) | take_exactly(2 * msz + 8);
+    auto rhs = concat(single(0.0), rhs_, repeat_n(0.0, 4), rhs_, repeat_n(0.0, 3)) |
+               take_exactly(2 * msz + 8);
 
     auto result = mat * rhs;
 
     std::vector<real> exact_{109.78978122898833,
-                            32.2780625869145,
-                            -32.38838457188155,
-                            33.25158538253831,
-                            -12.072197714155793,
-                            -6.87521436567669,
-                            26.39304084900066,
-                            -2.6761855166330424,
-                            1.8718030426410628,
-                            11.712151684565809,
-                            -23.362167910509047,
-                            -13.601765954771285,
-                            21.606370954127627,
-                            12.97052379948305,
-                            -12.477808805315766,
-                            -4.962089239867884};
+                             32.2780625869145,
+                             -32.38838457188155,
+                             33.25158538253831,
+                             -12.072197714155793,
+                             -6.87521436567669,
+                             26.39304084900066,
+                             -2.6761855166330424,
+                             1.8718030426410628,
+                             11.712151684565809,
+                             -23.362167910509047,
+                             -13.601765954771285,
+                             21.606370954127627,
+                             12.97052379948305,
+                             -12.477808805315766,
+                             -4.962089239867884};
     auto exact = concat(single(0.0), exact_, repeat_n(0.0, 4), exact_, repeat_n(0.0, 3));
 
-    for (auto&& [comp, ex] : zip(result, exact))
-        REQUIRE(comp == Catch::Approx(ex));
+    for (auto&& [comp, ex] : zip(result, exact)) REQUIRE(comp == Catch::Approx(ex));
 }

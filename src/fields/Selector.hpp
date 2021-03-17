@@ -124,26 +124,56 @@ constexpr auto Selector = detail::SelectorFunc<L...>{};
 using namespace ccs::selector;
 using traits::mp_list;
 
-// inline constexpr auto Dx = Selector<0, 0>;
-// inline constexpr auto Dy = Selector<1, 0>;
-// inline constexpr auto Dz = Selector<2, 0>;
-inline constexpr auto Rx = Selector<mp_list<scalar::Rx>, mp_list<>>;
-inline constexpr auto Ry = Selector<mp_list<scalar::Ry>, mp_list<>>;
-inline constexpr auto Rz = Selector<mp_list<scalar::Rz>, mp_list<>>;
-inline constexpr auto D = Selector<mp_list<scalar::D>, mp_list<>>;
-inline constexpr auto R =
-    Selector<mp_list<scalar::Rx, scalar::Ry, scalar::Rz>, mp_list<>>;
+inline constexpr auto Dx = Selector<mp_list<>, mp_list<vector::Dx>>;
+inline constexpr auto Dy = Selector<mp_list<>, mp_list<vector::Dy>>;
+inline constexpr auto Dz = Selector<mp_list<>, mp_list<vector::Dz>>;
+inline constexpr auto Rx =
+    Selector<mp_list<scalar::Rx>, mp_list<vector::xRx, vector::yRx, vector::zRx>>;
+inline constexpr auto Ry =
+    Selector<mp_list<scalar::Ry>, mp_list<vector::xRy, vector::yRy, vector::zRy>>;
+inline constexpr auto Rz =
+    Selector<mp_list<scalar::Rz>, mp_list<vector::xRz, vector::yRz, vector::zRz>>;
+inline constexpr auto D =
+    Selector<mp_list<scalar::D>, mp_list<vector::Dx, vector::Dy, vector::Dz>>;
+inline constexpr auto R = Selector<mp_list<scalar::Rx, scalar::Ry, scalar::Rz>,
+                                   mp_list<vector::xRx,
+                                           vector::yRx,
+                                           vector::zRx,
+                                           vector::xRy,
+                                           vector::yRy,
+                                           vector::zRy,
+                                           vector::xRz,
+                                           vector::yRz,
+                                           vector::zRz>>;
+inline constexpr auto xRx = Selector<mp_list<>, mp_list<vector::xRx>>;
+inline constexpr auto xRy = Selector<mp_list<>, mp_list<vector::xRy>>;
+inline constexpr auto xRz = Selector<mp_list<>, mp_list<vector::xRz>>;
+inline constexpr auto yRx = Selector<mp_list<>, mp_list<vector::yRx>>;
+inline constexpr auto yRy = Selector<mp_list<>, mp_list<vector::yRy>>;
+inline constexpr auto yRz = Selector<mp_list<>, mp_list<vector::yRz>>;
+inline constexpr auto zRx = Selector<mp_list<>, mp_list<vector::zRx>>;
+inline constexpr auto zRy = Selector<mp_list<>, mp_list<vector::zRy>>;
+inline constexpr auto zRz = Selector<mp_list<>, mp_list<vector::zRz>>;
 
 } // namespace ccs::field::tuple
 
 namespace ccs::selector
 {
 using field::tuple::D;
-// using field::tuple::Dx;
-// using field::tuple::Dy;
-// using field::tuple::Dz;
+using field::tuple::Dx;
+using field::tuple::Dy;
+using field::tuple::Dz;
 using field::tuple::R;
 using field::tuple::Rx;
 using field::tuple::Ry;
 using field::tuple::Rz;
+using field::tuple::xRx;
+using field::tuple::xRy;
+using field::tuple::xRz;
+using field::tuple::yRx;
+using field::tuple::yRy;
+using field::tuple::yRz;
+using field::tuple::zRx;
+using field::tuple::zRy;
+using field::tuple::zRz;
 } // namespace ccs::selector

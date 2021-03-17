@@ -1,14 +1,14 @@
-#include "zeros.hpp"
+#include "Zeros.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <range/v3/view/all.hpp>
 
-TEST_CASE("zeros")
+TEST_CASE("Zeros")
 {
     using namespace ccs;
 
-    auto A = matrix::zeros(10);
+    auto A = matrix::Zeros(10);
     std::vector<real> x(12, 7.0);
 
     auto b = A * x;

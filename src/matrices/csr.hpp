@@ -4,7 +4,7 @@
 #include <compare>
 #include <vector>
 
-#include "fields/r_tuple.hpp"
+#include "fields/Tuple.hpp"
 
 #include <range/v3/algorithm/sort.hpp>
 #include <range/v3/range/concepts.hpp>
@@ -14,7 +14,7 @@
 
 namespace ccs::matrix
 {
-class csr
+class CSR
 {
     // standard csr format
     // may add information in the future to accelerate computations with lots (mostly)
@@ -24,10 +24,10 @@ class csr
     std::vector<int> u;  // starting column index for rows
 
 public:
-    csr() = default;
+    CSR() = default;
 
     template <ranges::input_range W, ranges::input_range V, ranges::input_range U>
-    csr(W&& w, V&& v, U&& u)
+    CSR(W&& w, V&& v, U&& u)
         : w(ranges::begin(w), ranges::end(w)),
           v(ranges::begin(v), ranges::end(v)),
           u(ranges::begin(u), ranges::end(u))
@@ -57,7 +57,7 @@ public:
             p.emplace_back(row, col, v);
         }
 
-        csr to_csr(int nrows)
+        CSR to_CSR(int nrows)
         {
             std::vector<int> u(nrows + 1);
 
@@ -74,32 +74,32 @@ public:
                 }
             }
 
-            return csr{p | ranges::view::transform([](auto&& p_) { return p_.v; }),
+            return CSR{p | ranges::view::transform([](auto&& p_) { return p_.v; }),
                        p | ranges::view::transform([](auto&& p_) { return p_.col; }),
                        u};
         }
     };
 
-    static builder_ builder(int n = 0) { return n ? builder_{n} : builder_{}; }
+    static builder_ Builder(int n = 0) { return n ? builder_{n} : builder_{}; }
 
 private:
     template <ranges::random_access_range R>
-    friend constexpr auto operator*(const csr& mat, R&& rng)
+    friend constexpr auto operator*(const CSR& mat, R&& rng)
     {
         // assert(rng.size() >= static_cast<unsigned>(mat.columns()));
 
-        return r_tuple{mat.u | ranges::views::sliding(2) |
-                       ranges::views::transform([&mat, &rng](auto&& cols) {
-                           real acc{};
+        return field::Tuple{mat.u | ranges::views::sliding(2) |
+                            ranges::views::transform([&mat, &rng](auto&& cols) {
+                                real acc{};
 
-                           for (int i = cols[0]; i < cols[1]; i++)
-                               acc += mat.w[i] * rng[mat.v[i]];
+                                for (int i = cols[0]; i < cols[1]; i++)
+                                    acc += mat.w[i] * rng[mat.v[i]];
 
-                           return acc;
-                       })};
+                                return acc;
+                            })};
     }
 };
 
-using csr_builder = csr::builder_;
+// using CSR_Builder = csr::builder_;
 
 } // namespace ccs::matrix

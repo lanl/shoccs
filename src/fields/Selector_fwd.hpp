@@ -63,13 +63,30 @@ template <SelectionType S>
 using selection_index = std::remove_cvref_t<S>::Index;
 
 template <SelectionType S>
-using is_domain_selection = std::is_same<selection_index<S>, selector::scalar::D>::type;
+using is_domain_selection = mp_set_contains<mp_list<selector::scalar::D,
+                                                    selector::vector::Dx,
+                                                    selector::vector::Dy,
+                                                    selector::vector::Dz>,
+                                            selection_index<S>>;
 template <SelectionType S>
-using is_Rx_selection = std::is_same<selection_index<S>, selector::scalar::Rx>::type;
+using is_Rx_selection = mp_set_contains<mp_list<selector::scalar::Rx,
+                                                selector::vector::xRx,
+                                                selector::vector::yRx,
+                                                selector::vector::zRx>,
+                                        selection_index<S>>;
 template <SelectionType S>
-using is_Ry_selection = std::is_same<selection_index<S>, selector::scalar::Ry>::type;
+using is_Ry_selection = mp_set_contains<mp_list<selector::scalar::Ry,
+                                                selector::vector::xRy,
+                                                selector::vector::yRy,
+                                                selector::vector::zRy>,
+                                        selection_index<S>>;
+
 template <SelectionType S>
-using is_Rz_selection = std::is_same<selection_index<S>, selector::scalar::Rz>::type;
+using is_Rz_selection = mp_set_contains<mp_list<selector::scalar::Rz,
+                                                selector::vector::xRz,
+                                                selector::vector::yRz,
+                                                selector::vector::zRz>,
+                                        selection_index<S>>;
 
 template <typename T>
 constexpr auto is_domain_selection_v = is_domain_selection<T>::value;

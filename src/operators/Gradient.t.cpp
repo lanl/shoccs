@@ -6,7 +6,6 @@
 #include "mesh/Mesh.hpp"
 
 #include "fields/Selector.hpp"
-#include "fields/views.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -39,15 +38,15 @@ TEST_CASE("domain")
 
     randomize();
 
-    auto u = field::SimpleScalar<std::vector<real>>{m};
+#if 0
+    auto u = field::Scalar<std::vector<real>>{m};
     u | selector::D = mesh::location | vs::transform([](auto&&...) { return pick(); });
     u | selector::Rxyz = 0;
 
-    auto du = field::SimpleVector<std::vector<real>>{m};
+    auto du = field::Vector<std::vector<real>>{m};
 
     du = gradient(u);
 
-#if 0
 
     auto dd = domain_boundaries{boundary::dirichlet, boundary::dirichlet};
     auto nn = domain_boundaries{boundary::neumann, boundary::neumann};

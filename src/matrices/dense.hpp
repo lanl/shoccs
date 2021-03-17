@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fields/r_tuple.hpp"
+#include "fields/Tuple.hpp"
 #include "types.hpp"
 #include <vector>
 
@@ -15,17 +15,17 @@ namespace ccs::matrix
 {
 
 // Simple contiguous storage for dense matrix with lazy operators
-class dense
+class Dense
 {
     int rows_;
     int columns_;
     std::vector<real> v;
 
 public:
-    dense() = default;
+    Dense() = default;
 
     template <ranges::input_range R>
-    dense(int rows, int columns, R&& rng)
+    Dense(int rows, int columns, R&& rng)
         : rows_{rows}, columns_{columns}, v(rows * columns)
     {
         ranges::copy(rng | ranges::view::take(v.size()), v.begin());
@@ -38,11 +38,11 @@ public:
 
 private:
     template <ranges::random_access_range R>
-    friend constexpr auto operator*(const dense& mat, R&& rng)
+    friend constexpr auto operator*(const Dense& mat, R&& rng)
     {
         assert(rng.size() >= static_cast<unsigned>(mat.columns()));
 
-        return r_tuple{ranges::views::zip_with(
+        return field::Tuple{ranges::views::zip_with(
             [](auto&& a, auto&& b) { return ranges::inner_product(a, b, 0.0); },
             ranges::views::chunk(mat.v, mat.columns()),
             ranges::views::repeat_n(rng, mat.rows()))};

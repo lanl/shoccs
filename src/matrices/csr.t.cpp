@@ -1,4 +1,4 @@
-#include "csr.hpp"
+#include "CSR.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -19,7 +19,7 @@ TEST_CASE("Identity")
     std::vector<int> v{0, 1, 2, 3, 4};
     std::vector<int> u{0, 1, 2, 3, 4, 5};
 
-    matrix::csr mat{w, v, u};
+    matrix::CSR mat{w, v, u};
 
     std::random_device rd;  // Will be used to obtain a seed for the random number engine
     std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
@@ -52,7 +52,7 @@ TEST_CASE("Random")
     std::vector<int> v{1, 6, 0, 4, 6, 7, 8, 9, 0};
     std::vector<int> u{0, 2, 3, 4, 4, 4, 4, 8, 8, 8, 9};
 
-    matrix::csr mat{w, v, u};
+    matrix::CSR mat{w, v, u};
 
     std::vector<real> rhs{-3.612622416000683,
                           -1.1427601879942273,
@@ -89,7 +89,7 @@ TEST_CASE("Identity Builder")
     using namespace ccs;
 
     int vsize = 100;
-    using T = matrix::csr::builder_::pts;
+    using T = matrix::CSR::builder_::pts;
     auto pts = std::vector<T>(vsize);
     for (int i = 0; auto&& p : pts) {
         p = T{i, i, 1.0};
@@ -103,12 +103,12 @@ TEST_CASE("Identity Builder")
                ranges::to<std::vector<real>>();
 
     for (int j = 0; j < 10; j++) {
-        auto b = matrix::csr::builder();
+        auto b = matrix::CSR::Builder();
 
         ranges::shuffle(pts);
         for (auto&& [r, c, v] : pts) b.add_point(r, c, v);
 
-        auto mat = b.to_csr(vsize);
+        auto mat = b.to_CSR(vsize);
 
         auto res = mat * rhs;
 
@@ -121,7 +121,7 @@ TEST_CASE("Random Builder")
 {
     using namespace ccs;
 
-    using T = matrix::csr::builder_::pts;
+    using T = matrix::CSR::builder_::pts;
     auto pts = std::vector<T>{{0, 1, 6.132558989050928},
                               {0, 6, -0.4611523807581932},
                               {1, 0, -2.874686661596037},
@@ -154,12 +154,12 @@ TEST_CASE("Random Builder")
                             0.,
                             19.15476174098357};
     for (int j = 0; j < 10; j++) {
-        auto b = matrix::csr::builder();
+        auto b = matrix::CSR::Builder();
 
         ranges::shuffle(pts);
         for (auto&& [r, c, v] : pts) b.add_point(r, c, v);
 
-        auto mat = b.to_csr(10);
+        auto mat = b.to_CSR(10);
 
         auto res = mat * rhs;
 

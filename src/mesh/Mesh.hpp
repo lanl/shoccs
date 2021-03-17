@@ -20,7 +20,7 @@ class Mesh
 {
     Cartesian cartesian;
     CutGeometry geometry;
-    Location location;
+    field::tuple::Location location;
 
 public:
     Mesh() = default;
@@ -31,6 +31,6 @@ public:
 
     constexpr long size() const { return cartesian.size(); }
 
-    operator const Location*() const { return &location; }
+    operator field::tuple::Location() const { return location; }
 };
 } // namespace ccs::mesh

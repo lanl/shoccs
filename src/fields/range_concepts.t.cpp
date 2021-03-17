@@ -186,3 +186,14 @@ TEST_CASE("viewable ranges")
     static_assert(std::same_as<viewable_range_by_value<const std::vector<int>&>,
                                const std::vector<int>&>);
 }
+
+TEST_CASE("NumericTupleLike")
+{
+    using namespace ccs;
+    using namespace field::tuple::traits;
+
+    REQUIRE(NumericTupleLike<real3>);
+    REQUIRE(NumericTupleLike<std::tuple<real, int>>);
+    REQUIRE(NumericTupleLike<std::tuple<real&, const int&>>);
+    REQUIRE(!NumericTupleLike<std::tuple<std::vector<int>>>);
+}

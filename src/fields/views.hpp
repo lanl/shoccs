@@ -19,7 +19,7 @@ struct location_fn : rs::empty_view<real3> {
 };
 
 inline constexpr auto location = rs::make_view_closure(
-    [](selector::traits::SelectionType auto&& selection) { return selection.location; });
+    [](field::tuple::traits::SelectionType auto&&) { return rs::empty_view<real3>{}; });
 
 } // namespace mesh
 
