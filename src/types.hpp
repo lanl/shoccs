@@ -17,6 +17,7 @@ namespace ranges::views
 namespace ccs
 {
 using real = double;
+using integer = long; // prefer higher precision than regular int
 using real3 = std::array<real, 3>;
 using real2 = std::array<real, 2>;
 using int3 = std::array<int, 3>;

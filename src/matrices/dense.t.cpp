@@ -5,30 +5,33 @@
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
 #include <range/v3/algorithm/equal.hpp>
+#include <range/v3/range/conversion.hpp>
 #include <range/v3/view/all.hpp>
+#include <range/v3/view/drop.hpp>
 #include <range/v3/view/iota.hpp>
+#include <range/v3/view/stride.hpp>
 
 TEST_CASE("Identity")
 {
     using namespace ccs;
+    using Catch::Matchers::Approx;
 
     std::vector<real> imat{1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1,
                            0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1};
+    const auto mat = matrix::Dense{5, 5, imat};
 
-    std::vector rng{-2.0, -1.0, 0.0, 1.0, 2.0};
+    const std::vector rng{-2.0, -1.0, 0.0, 1.0, 2.0};
+    std::vector<real> rhs(rng.size());
 
-    auto mat = matrix::Dense{5, 5, imat};
+    mat(rng, rhs);
 
-    auto res = mat * rng;
-
-    REQUIRE(res.size() == 5u);
-
-    REQUIRE(rs::equal(rng, res));
+    REQUIRE_THAT(rng, Approx(rhs));
 }
 
 TEST_CASE("Non Square1")
 {
     using namespace ccs;
+    using Catch::Matchers::Approx;
 
     auto coeffs = std::vector{
         83.95087197745517,  54.60811141907641,   -31.02615838268912, -23.749193978143865,
@@ -41,33 +44,31 @@ TEST_CASE("Non Square1")
         27.62738451878431,  -30.951742698251962, 88.544956462669,    99.34593385752356,
         2.3159193728828313, -75.82935876599558,  10.567250113100783};
 
-    auto mat = matrix::Dense{5, 7, coeffs};
+    const auto A = matrix::Dense{5, 7, coeffs};
 
-    auto rhs = std::vector{91.37999616851539,
-                           50.64693725996551,
-                           -64.60583179621301,
-                           -21.187021053699596,
-                           61.80093732179881,
-                           -51.51860192935814,
-                           97.12696476389027};
+    const auto x = std::vector{91.37999616851539,
+                               50.64693725996551,
+                               -64.60583179621301,
+                               -21.187021053699596,
+                               61.80093732179881,
+                               -51.51860192935814,
+                               97.12696476389027};
+    auto b = std::vector<real>(A.rows());
 
-    auto res = mat * rhs;
+    A(x, b);
 
-    auto exact = std::vector{-1738.7987608832982,
-                             -4864.707653579187,
-                             8690.006071322056,
-                             -1676.9985963825454,
-                             -1792.272168705312};
-
-    for (int i = 0; auto&& c : res) {
-        REQUIRE(c == Catch::Approx(exact[i]));
-        i++;
-    }
+    REQUIRE_THAT(b,
+                 Approx(std::vector{-1738.7987608832982,
+                                    -4864.707653579187,
+                                    8690.006071322056,
+                                    -1676.9985963825454,
+                                    -1792.272168705312}));
 }
 
 TEST_CASE("Non Square2")
 {
     using namespace ccs;
+    using Catch::Matchers::Approx;
 
     auto coeffs = std::vector{
         -62.96028312265989, -34.222115425099105, -2.9862605513470157, 23.06985790293345,
@@ -78,24 +79,47 @@ TEST_CASE("Non Square2")
         -56.75967760541846, -30.570447576312347, -63.39035198957018,  -24.724532373486397,
         43.50746274626897,  24.831628943793476,  -67.23007810345939};
 
-    auto mat = matrix::Dense{9, 3, coeffs};
+    const auto A = matrix::Dense{9, 3, coeffs};
 
-    auto rhs = std::vector{-71.9024502289571, 70.422079255705, -3.7031798936135942};
+    const auto x = std::vector{-71.9024502289571, 70.422079255705, -3.7031798936135942};
+    auto b = std::vector<real>(A.rows());
 
-    auto res = mat * rhs;
+    A(x, b);
 
-    auto exact = std::vector{2128.0647588947263,
-                             -7066.357808643435,
-                             -1093.7287232110582,
-                             -9928.67369062508,
-                             1177.1969541409073,
-                             -11466.553949160041,
-                             8407.725947723382,
-                             -2174.430915359314,
-                             -1130.6331596949249};
+    REQUIRE_THAT(b,
+                 Approx(std::vector{2128.0647588947263,
+                                    -7066.357808643435,
+                                    -1093.7287232110582,
+                                    -9928.67369062508,
+                                    1177.1969541409073,
+                                    -11466.553949160041,
+                                    8407.725947723382,
+                                    -2174.430915359314,
+                                    -1130.6331596949249}));
+}
 
-    for (int i = 0; auto&& c : res) {
-        REQUIRE(c == Catch::Approx(exact[i]));
-        i++;
+TEST_CASE("strided")
+{
+    using namespace ccs;
+    using Catch::Matchers::Approx;
+
+    const auto coeffs = vs::iota(0, 25);
+
+    for (integer offset = 0; offset < 3; offset++) {
+        // setup strided problem
+        const auto A = matrix::Dense(5, 5, offset, offset, 3, coeffs);
+        const auto x = vs::iota(0, 15) | rs::to<std::vector<real>>();
+        auto b = std::vector<real>(x.size());
+        A(x, b);
+
+        // non-strided problem
+        const auto AA = matrix::Dense(5, 5, coeffs);
+        const auto xx = vs::iota(0, 15) | vs::drop(offset) | vs::stride(3) |
+                        rs::to<std::vector<real>>();
+        auto bb = std::vector<real>(xx.size());
+        AA(xx, bb);
+
+        auto bp = b | vs::drop(offset) | vs::stride(3) | rs::to<std::vector<real>>();
+        REQUIRE_THAT(bp, Approx(bb));
     }
 }

@@ -1,51 +1,44 @@
 #pragma once
 
-#include "fields/Tuple.hpp"
-#include "types.hpp"
+#include "common.hpp"
 #include <vector>
 
-// range includes
 #include <range/v3/algorithm/copy.hpp>
-#include <range/v3/numeric/inner_product.hpp>
 #include <range/v3/range/concepts.hpp>
-#include <range/v3/view/chunk.hpp>
-#include <range/v3/view/repeat_n.hpp>
+#include <range/v3/view/take.hpp>
 
 namespace ccs::matrix
 {
 
 // Simple contiguous storage for dense matrix with lazy operators
-class Dense
+class Dense : public Common
 {
-    int rows_;
-    int columns_;
     std::vector<real> v;
 
 public:
     Dense() = default;
 
-    template <ranges::input_range R>
-    Dense(int rows, int columns, R&& rng)
-        : rows_{rows}, columns_{columns}, v(rows * columns)
+    template <rs::input_range R>
+    Dense(integer rows, integer columns, R&& rng)
+        : Common{rows, columns}, v(rows * columns)
     {
-        ranges::copy(rng | ranges::view::take(v.size()), v.begin());
+        rs::copy(rng | vs::take(v.size()), v.begin());
     }
 
-    size_t size() const noexcept { return v.size(); }
-
-    constexpr int rows() const { return rows_; }
-    constexpr int columns() const { return columns_; }
-
-private:
-    template <ranges::random_access_range R>
-    friend constexpr auto operator*(const Dense& mat, R&& rng)
+    template <rs::input_range R>
+    Dense(integer rows,
+          integer columns,
+          integer row_offset,
+          integer col_offset,
+          integer stride,
+          R&& rng)
+        : Common{rows, columns, row_offset, col_offset, stride}, v(rows * columns)
     {
-        assert(rng.size() >= static_cast<unsigned>(mat.columns()));
-
-        return field::Tuple{ranges::views::zip_with(
-            [](auto&& a, auto&& b) { return ranges::inner_product(a, b, 0.0); },
-            ranges::views::chunk(mat.v, mat.columns()),
-            ranges::views::repeat_n(rng, mat.rows()))};
+        rs::copy(rng | vs::take(v.size()), v.begin());
     }
+
+    auto size() const noexcept { return v.size(); }
+
+    void operator()(std::span<const real> x, std::span<real> b) const;
 };
 } // namespace ccs::matrix

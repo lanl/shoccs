@@ -1,54 +1,27 @@
 #pragma once
 
-#include "fields/Tuple.hpp"
-#include "types.hpp"
-
-#include <cassert>
-#include <span>
-
-#include <range/v3/numeric/inner_product.hpp>
-#include <range/v3/range/concepts.hpp>
-#include <range/v3/view/drop.hpp>
-#include <range/v3/view/repeat_n.hpp>
-#include <range/v3/view/sliding.hpp>
-#include <range/v3/view/zip_with.hpp>
+#include "common.hpp"
 
 namespace ccs::matrix
 {
 
-class Circulant
+class Circulant : public Common
 {
-    int offset_; // don't support negative for periodic domains yet
-    int rows_;
     std::span<const real> v;
 
 public:
     Circulant() = default;
 
-    Circulant(int offset, int rows, std::span<const real> coeffs)
-        : offset_{offset}, rows_{rows}, v{coeffs}
-    {
-        assert(offset_ > -1);
-    }
+    Circulant(integer rows, std::span<const real> coeffs);
 
-    size_t size() const noexcept { return v.size(); }
+    Circulant(integer rows,
+              integer row_offset,
+              integer stride,
+              std::span<const real> coeffs);
 
-    constexpr int rows() const { return rows_; }
-    constexpr int offset() const { return offset_; }
+    integer size() const noexcept { return v.size(); }
 
-private:
-    template <ranges::random_access_range R>
-    friend constexpr auto operator*(const Circulant& mat, R&& rng)
-    {
-        assert(rng.size() >= static_cast<unsigned>(mat.rows()));
-        assert(mat.size() > 0);
-
-        return field::Tuple{ranges::views::zip_with(
-            [](auto&& a, auto&& b) { return ranges::inner_product(a, b, 0.0); },
-            ranges::views::repeat_n(mat.v, mat.rows()),
-            rng | ranges::views::drop(mat.offset()) |
-                ranges::views::sliding(mat.size()))};
-    }
+    void operator()(std::span<const real> x, std::span<real> b) const;
 };
 
 } // namespace ccs::matrix

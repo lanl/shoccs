@@ -1,3 +1,3 @@
-add_library(random random.cpp)
+add_library(shoccs-random random.cpp)
 
-target_include_directories(random PUBLIC ..)
+target_include_directories(shoccs-random PUBLIC ..)
