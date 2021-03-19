@@ -9,4 +9,4 @@ target_include_directories(shoccs-operators PUBLIC ..)
 #add_unit_test(gradient "operators" operators random)
 #add_unit_test(divergence "operators" operators random)
 
-add_unit_test(Gradient "operators" shoccs-operators random)
+add_unit_test(Gradient "operators" shoccs-operators shoccs-random)

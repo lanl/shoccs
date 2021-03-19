@@ -2,7 +2,7 @@
 
 #include "boundaries.hpp"
 #include "mesh/Mesh.hpp"
-#include "stencils/stencils.hpp"
+#include "stencils/Stencils.hpp"
 #include "types.hpp"
 
 namespace ccs::operators
