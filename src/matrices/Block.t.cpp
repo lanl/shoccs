@@ -28,7 +28,7 @@ TEST_CASE("Identity")
     T int_c{1.0};
     T right_c{1, 0, 0, 1};
 
-    auto bld = matrix::Block::builder();
+    auto bld = matrix::Block::Builder();
     bld.add_InnerBlock(16,
                        1,
                        1,
@@ -85,7 +85,7 @@ TEST_CASE("Random Boundary")
                     1.3345939131355147,
                     -1.4713774812532359};
 
-    auto bld = matrix::Block::builder(3);
+    auto bld = matrix::Block::Builder(3);
     const integer cols = 16;
 
     bld.add_InnerBlock(cols,

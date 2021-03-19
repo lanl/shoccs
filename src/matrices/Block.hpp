@@ -26,29 +26,29 @@ public:
         // doesn't properly handle case when last point in domain is inside an object
         return b.row_offset() + b.rows() * b.stride();
     }
-
-    struct Builder {
-        std::vector<InnerBlock> b;
-
-        Builder() = default;
-
-        Builder(integer n) { b.reserve(n); }
-
-        template <typename... Args>
-        requires std::constructible_from<InnerBlock, Args...> void
-        add_InnerBlock(Args&&... args)
-        {
-            b.emplace_back(std::forward<Args>(args)...);
-        }
-
-        Block to_Block() && { return Block{MOVE(b)}; }
-    };
-
-    static Builder builder(int n = 0) { return n ? Builder{n} : Builder{}; }
-
+   
     void operator()(std::span<const real> x, std::span<real> b) const
     {
         for (auto&& block : blocks) { block(x, b); }
     }
+   
+    struct Builder;
+};
+
+struct Block::Builder {
+    std::vector<InnerBlock> b;
+
+    Builder() = default;
+
+    Builder(integer n) { b.reserve(n); }
+
+    template <typename... Args>
+    requires std::constructible_from<InnerBlock, Args...> void
+    add_InnerBlock(Args&&... args)
+    {
+        b.emplace_back(std::forward<Args>(args)...);
+    }
+
+    Block to_Block() && { return Block{MOVE(b)}; }
 };
 } // namespace ccs::matrix

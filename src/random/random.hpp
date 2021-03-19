@@ -14,4 +14,6 @@ int pick(int from, int thru);
 
 real pick(real from = 0, real upto = 1);
 
+real pick_r(real from = 0, real upto = 1);
+
 } // namespace ccs

@@ -2,8 +2,9 @@
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_vector.hpp>
 
-#include <random>
+#include "random/random.hpp"
 #include <vector>
 
 #include <range/v3/algorithm/equal.hpp>
@@ -11,118 +12,108 @@
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/generate_n.hpp>
 
+using namespace ccs;
+using Catch::Matchers::Approx;
+using T = std::vector<real>;
+
+constexpr auto random_vec = [](integer n) {
+    return vs::generate_n([]() { return pick(); }, n) | rs::to<T>();
+};
+
 TEST_CASE("Identity")
 {
-    using namespace ccs;
+    T w{1, 1, 1, 1, 1};
+    std::vector<integer> v{0, 1, 2, 3, 4};
+    std::vector<integer> u{0, 1, 2, 3, 4, 5};
 
-    std::vector<real> w{1, 1, 1, 1, 1};
-    std::vector<int> v{0, 1, 2, 3, 4};
-    std::vector<int> u{0, 1, 2, 3, 4, 5};
+    const matrix::CSR A{w, v, u};
 
-    matrix::CSR mat{w, v, u};
+    const T x = random_vec(A.rows());
 
-    std::random_device rd;  // Will be used to obtain a seed for the random number engine
-    std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
-    std::uniform_real_distribution<> dis{};
-    std::vector<real> rhs =
-        ranges::views::generate_n([&gen, &dis]() { return dis(gen); }, mat.rows()) |
-        ranges::to<std::vector<real>>();
+    T b(x.size());
+    A(x, b); // auto res = mat * rhs;
 
-    auto res = mat * rhs;
-
-    REQUIRE(res.size() == rhs.size());
-
-    for (int i = 0; i < static_cast<int>(res.size()); i++) REQUIRE(res[i] == rhs[i]);
+    REQUIRE_THAT(x, Approx(b));
 }
 
 TEST_CASE("Random")
 {
-    using namespace ccs;
 
-    std::vector<real> w{6.132558989050928,
-                        -0.4611523807581932,
-                        -2.874686661596037,
-                        9.42084557206411,
-                        0.2298026797436883,
-                        6.066446959605997,
-                        -7.70721485928825,
-                        -0.9885546582519957,
-                        -5.302176517574914};
+    T w{6.132558989050928,
+        -0.4611523807581932,
+        -2.874686661596037,
+        9.42084557206411,
+        0.2298026797436883,
+        6.066446959605997,
+        -7.70721485928825,
+        -0.9885546582519957,
+        -5.302176517574914};
 
     std::vector<int> v{1, 6, 0, 4, 6, 7, 8, 9, 0};
     std::vector<int> u{0, 2, 3, 4, 4, 4, 4, 8, 8, 8, 9};
 
-    matrix::CSR mat{w, v, u};
+    const matrix::CSR A{w, v, u};
 
-    std::vector<real> rhs{-3.612622416000683,
-                          -1.1427601879942273,
-                          0.8552565615441736,
-                          -4.755547850496647,
-                          -9.711932690401355,
-                          -7.232904766266888,
-                          -5.437050079342718,
-                          -2.4092054560513105,
-                          3.557741982344453,
-                          5.127028269794991};
+    const T x{-3.612622416000683,
+              -1.1427601879942273,
+              0.8552565615441736,
+              -4.755547850496647,
+              -9.711932690401355,
+              -7.232904766266888,
+              -5.437050079342718,
+              -2.4092054560513105,
+              3.557741982344453,
+              5.127028269794991};
+    T b(x.size());
+    A(x, b);
 
-    std::vector<real> exact{-4.500735674823108,
-                            10.385157472660014,
-                            -91.49461808255228,
-                            0.,
-                            0.,
-                            0.,
-                            -48.353395342996556,
-                            0.,
-                            0.,
-                            19.15476174098357};
-
-    auto res = mat * rhs;
-
-    REQUIRE(res.size() == exact.size());
-
-    for (int i = 0; i < static_cast<int>(exact.size()); i++)
-        REQUIRE(res[i] == Catch::Approx(exact[i]));
+    REQUIRE_THAT(b,
+                 Approx(T{-4.500735674823108,
+                          10.385157472660014,
+                          -91.49461808255228,
+                          0.,
+                          0.,
+                          0.,
+                          -48.353395342996556,
+                          0.,
+                          0.,
+                          19.15476174098357}));
 }
 
 TEST_CASE("Identity Builder")
 {
-    using namespace ccs;
 
-    int vsize = 100;
-    using T = matrix::CSR::builder_::pts;
-    auto pts = std::vector<T>(vsize);
-    for (int i = 0; auto&& p : pts) {
-        p = T{i, i, 1.0};
+    constexpr integer vsize = 100;
+
+    using P = matrix::CSR::Builder::pts;
+    auto pts = std::vector<P>(vsize);
+    for (integer i = 0; auto&& p : pts) {
+        p = P{i, i, 1.0};
         ++i;
     }
 
-    std::random_device rd;  // Will be used to obtain a seed for the random number engine
-    std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
-    std::uniform_real_distribution<> dis{};
-    auto rhs = ranges::views::generate_n([&gen, &dis]() { return dis(gen); }, vsize) |
-               ranges::to<std::vector<real>>();
+    const T x = random_vec(vsize);
 
     for (int j = 0; j < 10; j++) {
-        auto b = matrix::CSR::Builder();
+        auto bld = matrix::CSR::Builder();
 
         ranges::shuffle(pts);
-        for (auto&& [r, c, v] : pts) b.add_point(r, c, v);
+        for (auto&& [r, c, v] : pts) bld.add_point(r, c, v);
 
-        auto mat = b.to_CSR(vsize);
+        const auto A = bld.to_CSR(vsize);
 
-        auto res = mat * rhs;
+        T b(x.size());
 
-        REQUIRE(res.size() == rhs.size());
-        REQUIRE(ranges::equal(res, rhs));
+        A(x, b);
+
+        REQUIRE_THAT(x, Approx(b));
     }
 }
 
 TEST_CASE("Random Builder")
 {
-    using namespace ccs;
-
-    using T = matrix::CSR::builder_::pts;
-    auto pts = std::vector<T>{{0, 1, 6.132558989050928},
+    using P = matrix::CSR::Builder::pts;
+    auto pts = std::vector<P>{{0, 1, 6.132558989050928},
                               {0, 6, -0.4611523807581932},
                               {1, 0, -2.874686661596037},
                               {2, 4, 9.42084557206411},
@@ -132,39 +123,39 @@ TEST_CASE("Random Builder")
                               {6, 9, -0.9885546582519957},
                               {9, 0, -5.302176517574914}};
 
-    std::vector<real> rhs{-3.612622416000683,
-                          -1.1427601879942273,
-                          0.8552565615441736,
-                          -4.755547850496647,
-                          -9.711932690401355,
-                          -7.232904766266888,
-                          -5.437050079342718,
-                          -2.4092054560513105,
-                          3.557741982344453,
-                          5.127028269794991};
+    const T x{-3.612622416000683,
+              -1.1427601879942273,
+              0.8552565615441736,
+              -4.755547850496647,
+              -9.711932690401355,
+              -7.232904766266888,
+              -5.437050079342718,
+              -2.4092054560513105,
+              3.557741982344453,
+              5.127028269794991};
 
-    std::vector<real> exact{-4.500735674823108,
-                            10.385157472660014,
-                            -91.49461808255228,
-                            0.,
-                            0.,
-                            0.,
-                            -48.353395342996556,
-                            0.,
-                            0.,
-                            19.15476174098357};
+    const T exact{-4.500735674823108,
+                  10.385157472660014,
+                  -91.49461808255228,
+                  0.,
+                  0.,
+                  0.,
+                  -48.353395342996556,
+                  0.,
+                  0.,
+                  19.15476174098357};
+
     for (int j = 0; j < 10; j++) {
-        auto b = matrix::CSR::Builder();
+        auto builder = matrix::CSR::Builder();
 
         ranges::shuffle(pts);
-        for (auto&& [r, c, v] : pts) b.add_point(r, c, v);
+        for (auto&& [r, c, v] : pts) builder.add_point(r, c, v);
 
-        auto mat = b.to_CSR(10);
+        const auto A = builder.to_CSR(10);
+        T b(x.size());
 
-        auto res = mat * rhs;
+        A(x, b);
 
-        REQUIRE(res.size() == exact.size());
-        for (int i = 0; i < static_cast<int>(exact.size()); i++)
-            REQUIRE(res[i] == Catch::Approx(exact[i]));
+        REQUIRE_THAT(b, Approx(exact));
     }
 }

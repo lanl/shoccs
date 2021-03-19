@@ -29,4 +29,8 @@ real pick(real from, real upto)
     return d(global_urng(), param_t{from, upto});
 }
 
+real pick_r(real from, real upto) {
+    return pick(from, upto);
+}
+
 } // namespace ccs
