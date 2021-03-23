@@ -48,6 +48,14 @@ constexpr index_pairs dirs(int i)
     }
 }
 
+template <auto I>
+constexpr auto stride(int3 n)
+{
+    integer s = 1;
+    for (integer i = I + 1; i < 3; i++) { s *= n[i]; }
+    return s;
+}
+
 // given a coordinate in "A" dir format, return the coordinate in "B" dir format
 namespace detail
 {
@@ -87,13 +95,13 @@ public:
     const int3& extents() const { return x; }
     int3& extents() { return x; }
 
-    constexpr int index(const int3& ijk) const {
+    constexpr int index(const int3& ijk) const
+    {
         constexpr int D = I;
         constexpr int S = dir<D>::slow;
         constexpr int F = dir<D>::fast;
         return ijk[S] * x[D] * x[F] + ijk[F] * x[D] + ijk[D];
     }
-
 };
 
 } // namespace ccs::index

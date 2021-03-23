@@ -4,6 +4,11 @@
 #include <cmath>
 #include <iostream>
 
+//
+// Somewhere in here is where we should form the vector of pairs of wall info
+// that will be used to characterize the domain and build discretization stencils
+//
+
 namespace ccs::mesh
 {
 
@@ -168,9 +173,7 @@ static void init_solid(const std::array<umesh_line, 3>& lines,
     }
 }
 
-CutGeometry::CutGeometry(std::span<const shape> shapes,
-                         const Cartesian& m,
-                         bool check_domain)
+CutGeometry::CutGeometry(std::span<const shape> shapes, const Cartesian& m)
 {
     std::array<umesh_line, 3> lines{m.line(0), m.line(1), m.line(2)};
     init_line<0>(shapes, lines, rx_, rx_m_);
@@ -180,23 +183,6 @@ CutGeometry::CutGeometry(std::span<const shape> shapes,
     init_solid<0>(lines, rx_, sx_);
     init_solid<1>(lines, ry_, sy_);
     init_solid<2>(lines, rz_, sz_);
-
-    // solid points are used as storage for data associated with
-    // boundary points.  For now we just crash if there isn't enough.
-    // A different strategy would be to "pad" the geometry with extra
-    // solid points and require all allocations over the domain to
-    // contain this extra padding.
-    if (check_domain) {
-        if (sx_.size() < rx_.size())
-            throw std::runtime_error(
-                "Not enough solid points in x to accomidate boundaries");
-        if (sy_.size() < ry_.size())
-            throw std::runtime_error(
-                "Not enough solid points in x to accomidate boundaries");
-        if (sz_.size() < rz_.size())
-            throw std::runtime_error(
-                "Not enough solid points in x to accomidate boundaries");
-    }
 }
 
 std::span<const mesh_object_info> CutGeometry::Rx() const { return rx_; }

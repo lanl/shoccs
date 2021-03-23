@@ -3,6 +3,8 @@
 #include "indexing.hpp"
 #include "types.hpp"
 
+#include <vector>
+
 #include <cassert>
 
 namespace ccs::mesh
@@ -23,6 +25,9 @@ class Cartesian
     real3 h_;
     int3 n_;
     int dims_;
+    std::vector<real> x_;
+    std::vector<real> y_;
+    std::vector<real> z_;
 
 public:
     Cartesian() = default;
@@ -33,10 +38,10 @@ public:
 
     constexpr long size() const { return (long)n_[0] * (long)n_[1] * (long)n_[2]; }
 
-    constexpr int plane_size(int i) const
+    constexpr integer plane_size(int i) const
     {
         auto [f, s] = index::dirs(i);
-        return n_[f] * n_[s];
+        return n_[f] * (integer)n_[s];
     }
 
     constexpr umesh_line line(int i) const

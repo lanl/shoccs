@@ -14,7 +14,7 @@ TEST_CASE("sphere intersections")
     int3 n{21, 22, 23};
     real3 min{-1, -1, 0};
     real3 max{1, 2, 2.2};
-    CutGeometry g{shapes, Cartesian{min, max, n}, false};
+    CutGeometry g{shapes, Cartesian{min, max, n}};
 
     // intersections in x from Mathematica
     SECTION("X")

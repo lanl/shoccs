@@ -37,7 +37,7 @@ public:
     CutGeometry() = default;
 
     // constructor for uniform meshes.
-    CutGeometry(std::span<const shape>, const Cartesian& m, bool check_domain = true);
+    CutGeometry(std::span<const shape>, const Cartesian& m);
 
     // Intersection of rays in x and object `shape_id`
     std::span<const mesh_object_info> Rx(int shape_id) const;
