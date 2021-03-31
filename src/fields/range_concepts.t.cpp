@@ -3,13 +3,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <range/v3/algorithm/equal.hpp>
-#include <range/v3/range/concepts.hpp>
-#include <range/v3/view/all.hpp>
-#include <range/v3/view/iota.hpp>
-#include <range/v3/view/transform.hpp>
+#include <range/v3/all.hpp>
 
 #include <vector>
+
+#include <iostream>
 
 namespace ccs
 {
@@ -83,9 +81,15 @@ TEST_CASE("Modify Containers from Views")
 
 TEST_CASE("TupleLike")
 {
-    using namespace ccs::field::tuple;
+    using namespace ccs;
+    using namespace field::tuple;
     REQUIRE(traits::TupleLike<std::tuple<int, int>>);
     REQUIRE(traits::TupleLike<ContainerTuple<std::vector<int>>>);
+
+    // take_exactly results in a custom range tuple.  Ensure we do not treat it as one of
+    // ours.
+    auto x = std::vector<int>(50);
+    REQUIRE(!traits::TupleLike<decltype(x | vs::take_exactly(5))>);
 }
 
 TEST_CASE("NotTupleRanges")
@@ -196,4 +200,165 @@ TEST_CASE("NumericTupleLike")
     REQUIRE(NumericTupleLike<std::tuple<real, int>>);
     REQUIRE(NumericTupleLike<std::tuple<real&, const int&>>);
     REQUIRE(!NumericTupleLike<std::tuple<std::vector<int>>>);
+}
+
+namespace ccs
+{
+// template <int I>
+// just do a y-plane view for now
+class PlaneView : public rs::view_facade<PlaneView>
+{
+    friend rs::range_access;
+    int nx, ny, nz;
+    int j;
+    std::span<int> grid;
+
+    struct cursor {
+    private:
+        std::span<int>::iterator iter;
+        int nx, ny, nz;
+        int i, j, k;
+
+    public:
+        cursor() = default;
+        cursor(std::span<int>::iterator iter, int nx, int ny, int nz, int i, int j, int k)
+            : iter{iter}, nx{nx}, ny{ny}, nz{nz}, i{i}, j{j}, k{k}
+        {
+        }
+        int& read() const { return *iter; }
+        bool equal(const cursor& that) const { return iter == that.iter; }
+        void next()
+        {
+            ++k;
+            ++iter;
+            if (k == nz) {
+                k = 0;
+                ++i;
+                iter += (ny - 1) * nz;
+            }
+        }
+
+        void prev()
+        {
+            --k;
+            --iter;
+            if (k < 0) {
+                k = nz - 1;
+                --i;
+                iter -= (ny - 1) * nz;
+            }
+        }
+
+        std::ptrdiff_t distance_to(const cursor& that) const
+        {
+            return (that.i - i) * nz + (that.k - k);
+        }
+    };
+
+    cursor begin_cursor() { return {grid.begin() + j * nz, nx, ny, nz, 0, j, 0}; }
+    cursor end_cursor()
+    {
+        return {grid.begin() + (j + 1) * nz, nx, ny, nz, nx - 1, j, nz};
+    }
+
+public:
+    PlaneView() = default;
+    explicit PlaneView(int3 extents, int j, std::span<int> rng)
+        : nx{extents[0]}, ny{extents[1]}, nz{extents[2]}, j{j}, grid{rng}
+    {
+    }
+};
+
+struct MyRange : ranges::view_facade<MyRange> {
+private:
+    friend ranges::range_access;
+    std::vector<int> ints_;
+    struct cursor {
+    private:
+        std::vector<int>::iterator iter;
+
+    public:
+        using contiguous = std::true_type;
+        cursor() = default;
+        cursor(std::vector<int>::iterator it) : iter(it) {}
+        int& read() const { return *iter; }
+        bool equal(cursor const& that) const { return iter == that.iter; }
+        void next() { ++iter; }
+        void prev() { --iter; }
+        std::ptrdiff_t distance_to(cursor const& that) const { return that.iter - iter; }
+        void advance(std::ptrdiff_t n) { iter += n; }
+    };
+    cursor begin_cursor() { return {ints_.begin()}; }
+    cursor end_cursor() { return {ints_.end()}; }
+
+public:
+    MyRange() : ints_{1, 2, 3, 4, 5, 6, 7} {}
+};
+
+} // namespace ccs
+
+TEST_CASE("yplanes")
+{
+    using namespace ccs;
+    using namespace field::tuple;
+    using T = std::vector<int>;
+
+    int nx = 3, ny = 5, nz = 4;
+    int3 extents{nx, ny, nz};
+
+    auto grid = vs::iota(0, nx * ny * nz);
+
+    {
+        auto ymin_plane = grid | vs::chunk(ny * nz) | vs::for_each(vs::take_exactly(nz));
+        REQUIRE(rs::equal(ymin_plane | vs::take(nz), vs::iota(0, nz)));
+        REQUIRE(rs::equal(ymin_plane | vs::drop(nz) | vs::take(nz),
+                          vs::iota(ny * nz, ny * nz + nz)));
+    }
+
+    // try another formulation
+    {
+        auto ymin_plane = grid | vs::chunk(nz) | vs::stride(ny) | vs::join;
+        REQUIRE(rs::equal(ymin_plane | vs::take(nz), vs::iota(0, nz)));
+        REQUIRE(rs::equal(ymin_plane | vs::drop(nz) | vs::take(nz),
+                          vs::iota(ny * nz, ny * nz + nz)));
+    }
+
+    {
+
+        static_assert(std::same_as<int, rs::range_value_t<MyRange>>);
+        static_assert(rs::output_range<MyRange, rs::range_value_t<MyRange>>);
+        static_assert(traits::AnyOutputRange<MyRange>);
+
+        auto rng = MyRange{};
+        std::cout << "myRange: " << rng << '\n';
+
+        int sz = rs::size(rng);
+        rs::copy(vs::iota(10, 10 + sz), rs::begin(rng));
+        std::cout << "myRange: " << rng << '\n';
+
+        static_assert(std::same_as<int, rs::range_value_t<PlaneView>>);
+        static_assert(traits::AnyOutputRange<PlaneView>);
+
+        static_assert(rs::range<PlaneView>);
+        static_assert(rs::sized_range<PlaneView>);
+
+        auto v = grid | rs::to<T>();
+        auto ymin_plane = PlaneView{extents, 0, v};
+
+        REQUIRE((int)rs::size(ymin_plane) == nx * nz);
+
+        REQUIRE(rs::equal(ymin_plane | vs::take(nz), vs::iota(0, nz)));
+        auto beg = rs::begin(ymin_plane);
+        REQUIRE(*beg == 0);
+        REQUIRE(*++beg == 1);
+        REQUIRE(*++beg == 2);
+        REQUIRE(*++beg == 3);
+        REQUIRE(*++beg == ny * nz);
+        REQUIRE(rs::equal(ymin_plane | vs::drop(nz) | vs::take(nz),
+                          vs::iota(ny * nz, ny * nz + nz)));
+
+        rs::copy(vs::iota(0, nx * nz), rs::begin(ymin_plane));
+        REQUIRE(rs::equal(v | vs::chunk(nz) | vs::stride(ny) | vs::join,
+                          vs::iota(0, nx * nz)));
+    }
 }

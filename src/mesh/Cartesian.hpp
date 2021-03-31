@@ -36,7 +36,10 @@ public:
 
     constexpr int dims() const { return dims_; }
 
-    constexpr long size() const { return (long)n_[0] * (long)n_[1] * (long)n_[2]; }
+    constexpr integer size() const
+    {
+        return (integer)n_[0] * (integer)n_[1] * (integer)n_[2];
+    }
 
     constexpr integer plane_size(int i) const
     {
@@ -51,12 +54,18 @@ public:
     }
 
     constexpr real3 h() const { return h_; }
+    constexpr real h(int i) const { return h_[i]; }
 
     constexpr int3 extents() const { return n_; }
 
     constexpr int3 n_ijk() const { return n_; }
 
     constexpr int n(int i) const { return n_[i]; }
+
+    constexpr bool on_boundary(int dim, bool right_wall, const int3& coordinate) const
+    {
+        return right_wall ? coordinate[dim] == n_[dim] - 1 : coordinate[dim] == 0;
+    }
 
     // return n in order slow/fast/dir
     constexpr int3 n_dir(int dir) const

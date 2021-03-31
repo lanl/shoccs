@@ -26,12 +26,12 @@ public:
         // doesn't properly handle case when last point in domain is inside an object
         return b.row_offset() + b.rows() * b.stride();
     }
-   
+
     void operator()(std::span<const real> x, std::span<real> b) const
     {
         for (auto&& block : blocks) { block(x, b); }
     }
-   
+
     struct Builder;
 };
 

@@ -22,8 +22,7 @@ public:
     Derivative() = default;
 
     Derivative(int dir,
-               real h,
-               std::span<const mesh::Line> lines,
+               const mesh::Mesh& m,
                const stencils::Stencil& stencil,
                const bcs::Grid& grid_bcs,
                const bcs::Object& object_bcs);

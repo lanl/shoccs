@@ -24,7 +24,7 @@ TEST_CASE("domain")
     using namespace ccs::stencils;
     // using Catch::Matchers::Approx;
 
-    Stencil stencil = Identity{};
+    Stencil stencil = Identity;
     REQUIRE(stencil);
     // const int3 extents{31, 33, 32};
     // auto m = mesh::Cartesian{real3{-1, -1, -1}, real3{1, 1, 1}, extents};
@@ -33,7 +33,7 @@ TEST_CASE("domain")
     auto m = mesh::Mesh{mesh::DomainBounds{real3{-1, -1, -1}, real3{1, 1, 1}},
                         mesh::IndexExtents{31, 33, 32}};
 
-    auto gradient = operators::DiscreteOperator(Identity{}, m)
+    auto gradient = operators::DiscreteOperator(Identity, m)
                         .to<operators::Gradient>(bcs::Grid{bcs::dd, bcs::ff, bcs::dd});
 
     randomize();

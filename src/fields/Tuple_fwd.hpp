@@ -131,14 +131,30 @@ concept OwningTuple = detail::has_ContainerTuple<std::remove_cvref_t<T>>::value;
 
 //
 // The concepts are supposed to work with all manner of the tuples in the code (i.e.
-// ViewTuples, ContainerTuples, Tuples, std::tuple, ...).  As a generic test for a tuple
-// we simply check that `get` works
+// ViewTuples, ContainerTuples, Tuples, std::tuple, ...).  Some of the range-v3 ranges
+// result in custom range tuples so we have to be strict about what we call tuple_like
 //
-template <typename T>
-concept TupleLike = requires(T t)
+namespace detail
 {
-    get<0>(t);
+template <typename T>
+struct is_tuple_like_impl : std::false_type {
 };
+
+template <typename... Args>
+struct is_tuple_like_impl<std::tuple<Args...>> : std::true_type {
+};
+
+template <template <typename...> typename T, typename... Args>
+struct is_tuple_like_impl<T<Args...>>
+    : mp_or<std::is_base_of<ContainerTuple<Args...>, T<Args...>>,
+            std::is_base_of<ViewBaseTuple<Args...>, T<Args...>>> {
+};
+} // namespace detail
+template <typename T>
+using is_tuple_like = detail::is_tuple_like_impl<std::remove_cvref_t<T>>::type;
+
+template <typename T>
+concept TupleLike = is_tuple_like<T>::value;
 
 namespace detail
 {
@@ -159,22 +175,6 @@ concept NumericTupleLike =
      mp_apply<mp_all,
               mp_transform_q<mp_compose<std::remove_cvref_t, std::is_arithmetic>,
                              mp_rename<std::remove_reference_t<T>, mp_list>>>::value);
-
-//
-// Define constrained template metafunctions to easily work with mp11
-//
-namespace detail
-{
-template <typename>
-struct is_tuple_like_impl : std::false_type {
-};
-
-template <TupleLike T>
-struct is_tuple_like_impl<T> : std::true_type {
-};
-} // namespace detail
-template <typename T>
-using is_tuple_like = detail::is_tuple_like_impl<T>::type;
 
 template <typename T>
 concept NonOwningTuple = TupleLike<T> && (!OwningTuple<T>);

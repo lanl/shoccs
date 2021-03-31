@@ -34,5 +34,7 @@ constexpr auto ff = Line{type::F, type::F};
 constexpr auto nn = Line{type::N, type::N};
 constexpr auto dn = Line{type::D, type::N};
 constexpr auto nd = Line{type::N, type::D};
+constexpr auto df = Line{type::D, type::F};
+constexpr auto fd = Line{type::F, type::D};
 
 } // namespace ccs::bcs

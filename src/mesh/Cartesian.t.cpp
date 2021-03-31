@@ -21,6 +21,21 @@ TEST_CASE("mesh api")
 
         REQUIRE(m.dims() == 3);
 
+        REQUIRE(m.on_boundary(0, false, {0, 0, 0}));
+        REQUIRE(m.on_boundary(0, false, {0, 10, 11}));
+        REQUIRE(!m.on_boundary(0, true, {0, 10, 11}));
+        REQUIRE(m.on_boundary(0, true, {10, 10, 11}));
+
+        REQUIRE(m.on_boundary(1, false, {0, 0, 0}));
+        REQUIRE(m.on_boundary(1, false, {9, 0, 11}));
+        REQUIRE(!m.on_boundary(1, true, {0, 10, 11}));
+        REQUIRE(m.on_boundary(1, true, {5, 30, 11}));
+
+        REQUIRE(m.on_boundary(2, false, {0, 0, 0}));
+        REQUIRE(m.on_boundary(2, false, {5, 10, 0}));
+        REQUIRE(!m.on_boundary(2, true, {5, 10, 0}));
+        REQUIRE(m.on_boundary(2, true, {0, 10, 50}));
+
         for (int i = 0; i < m.dims(); i++) {
             auto line = m.line(i);
             REQUIRE(line.min == min[i]);

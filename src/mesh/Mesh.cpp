@@ -106,4 +106,23 @@ Mesh::Mesh(const DomainBounds& bounds,
     init_line<2>(lines_[2], cartesian.extents(), geometry.R(2));
 }
 
+bool Mesh::dirichlet_line(const int3& start,
+                          int dir,
+                          const bcs::Grid& cartesian_bcs) const
+{
+    bool result = false;
+
+    auto f = [&](int i) {
+        return (cartesian_bcs[i].left == bcs::Dirichlet &&
+                cartesian.on_boundary(i, false, start)) ||
+               (cartesian_bcs[i].right == bcs::Dirichlet &&
+                cartesian.on_boundary(i, true, start));
+    };
+
+    for (int i = 0; i < dir; i++) { result = result || f(i); }
+    for (int i = dir + 1; i < 3; i++) { result = result || f(i); }
+
+    return result;
+}
+
 } // namespace ccs::mesh

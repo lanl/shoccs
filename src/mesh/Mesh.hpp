@@ -2,7 +2,11 @@
 
 #include "Cartesian.hpp"
 #include "CutGeometry.hpp"
+#include "boundaries.hpp"
 #include "fields/Location.hpp"
+#include "fields/Tuple.hpp"
+
+#include "Selections.hpp"
 
 namespace ccs::mesh
 {
@@ -49,10 +53,32 @@ public:
          const IndexExtents& extents,
          const std::vector<shape>& shapes);
 
-    constexpr long size() const { return cartesian.size(); }
+    bool dirichlet_line(const int3& start, int dir, const bcs::Grid& cartesian_bcs) const;
+
+    constexpr auto size() const { return cartesian.size(); }
+
+    constexpr int dims() const { return cartesian.dims(); }
 
     operator field::tuple::Location() const { return location; }
 
     const auto& lines(int i) const { return lines_[i]; }
+
+    constexpr real h(int i) const { return cartesian.h(i); }
+
+    constexpr real3 h() const { return cartesian.h(); }
+
+    constexpr int3 extents() const { return cartesian.extents(); }
+
+    constexpr auto xmin() const { return detail::xmin(extents()); }
+
+    constexpr auto xmax() const { return detail::xmax(extents()); }
+
+    constexpr auto ymin() const { return detail::ymin(extents()); }
+
+    constexpr auto ymax() const { return detail::ymax(extents()); }
+
+    constexpr auto zmin() const { return detail::zmin(extents()); }
+
+    constexpr auto zmax() const { return detail::zmax(extents()); }
 };
 } // namespace ccs::mesh

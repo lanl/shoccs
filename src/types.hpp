@@ -41,6 +41,9 @@ struct SystemStats {
 template <typename T = real>
 constexpr auto null_v = std::numeric_limits<T>::max();
 
+// enum for labeling directions
+enum class dim { X, Y, Z };
+
 } // namespace ccs
 
 #ifndef NDEBUG

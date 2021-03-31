@@ -5,10 +5,12 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <range/v3/algorithm/equal.hpp>
+#include <range/v3/range/conversion.hpp>
 #include <range/v3/view/all.hpp>
 #include <range/v3/view/concat.hpp>
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/take.hpp>
+#include <range/v3/view/take_exactly.hpp>
 #include <range/v3/view/transform.hpp>
 #include <range/v3/view/zip_with.hpp>
 
@@ -60,6 +62,25 @@ TEST_CASE("concepts")
     REQUIRE(All<W&>);
     REQUIRE(All<Tuple<W>>);
     REQUIRE(All<Tuple<W&>>);
+}
+
+TEST_CASE("construction from subrange")
+{
+    using namespace ccs;
+    using namespace ccs::field::tuple;
+    using namespace traits;
+    using T = std::vector<real>;
+
+    // this test highlighted an issue with too broad a definition for TupleLike
+
+    auto x = vs::iota(0, 10) | rs::to<T>();
+
+    auto r = Tuple{x | vs::take_exactly(5)};
+
+    REQUIRE(rs::equal(r, vs::iota(0, 5)));
+
+    r = 0;
+    REQUIRE(rs::equal(x, T{0, 0, 0, 0, 0, 5, 6, 7, 8, 9}));
 }
 
 TEST_CASE("construction")

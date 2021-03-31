@@ -6,6 +6,8 @@
 
 namespace ccs::stencils
 {
+namespace detail
+{
 struct Identity {
     StencilInfo query(bcs::type b) const
     {
@@ -65,4 +67,6 @@ struct Identity {
         }
     }
 };
+} // namespace detail
+constexpr auto Identity = detail::Identity{};
 } // namespace ccs::stencils
