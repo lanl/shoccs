@@ -263,11 +263,97 @@ class PlaneView : public rs::view_facade<PlaneView>
 
 public:
     PlaneView() = default;
-    explicit PlaneView(int3 extents, int j, std::span<int> rng)
+    explicit constexpr PlaneView(int3 extents, int j, std::span<int> rng)
         : nx{extents[0]}, ny{extents[1]}, nz{extents[2]}, j{j}, grid{rng}
     {
     }
 };
+
+template <typename Rng>
+class PlaneViewY : public rs::view_adaptor<PlaneViewY<Rng>, Rng>
+{
+    using diff_t = rs::range_difference_t<Rng>;
+
+    friend rs::range_access;
+    diff_t ny, nz, j;
+
+    class adaptor : public rs::adaptor_base
+    {
+        diff_t ny, nz, i, k;
+
+    public:
+        adaptor() = default;
+        adaptor(diff_t ny, diff_t nz, diff_t i, diff_t k) : ny{ny}, nz{nz}, i{i}, k{k} {}
+        // int& read() const { return *iter; }
+        // bool equal(const cursor& that) const { return iter == that.iter; }
+
+        template <typename I>
+        void next(I& it)
+        {
+            ++k;
+            ++it;
+            if (k == nz) {
+                k = 0;
+                ++i;
+                it += (ny - 1) * nz;
+            }
+        }
+
+        template <typename I>
+        void prev(I& it)
+        {
+            --k;
+            --it;
+            if (k < 0) {
+                k = nz - 1;
+                --i;
+                it -= (ny - 1) * nz;
+            }
+        }
+
+        template <typename I>
+        void advance(I& it, rs::difference_type_t<I> n)
+        {
+        }
+
+        template <typename I>
+        diff_t distance_to(const I&, const I&, const adaptor& that) const
+        {
+            return (that.i - i) * nz + (that.k - k);
+        }
+    };
+
+    adaptor begin_adaptor() { return {grid.begin() + j * nz, nx, ny, nz, 0, j, 0}; }
+    adaptor end_cursor()
+    {
+        return {grid.begin() + (j + 1) * nz, nx, ny, nz, nx - 1, j, nz};
+    }
+
+public:
+    PlaneView() = default;
+    explicit constexpr PlaneView(int3 extents, int j, std::span<int> rng)
+        : nx{extents[0]}, ny{extents[1]}, nz{extents[2]}, j{j}, grid{rng}
+    {
+    }
+};
+
+struct plane_base_fn {
+    constexpr auto operator()(std::span<int> rng, const int3& extents, int j) const
+    {
+        return PlaneView(extents, j, rng);
+    }
+};
+
+struct plane_fn : plane_base_fn {
+    using plane_base_fn::operator();
+
+    constexpr auto operator()(const int3& extents, int j) const
+    {
+        return rs::make_view_closure(rs::bind_back(plane_base_fn{}, extents, j));
+    }
+};
+
+constexpr auto plane_view = plane_fn{};
 
 struct MyRange : ranges::view_facade<MyRange> {
 private:
@@ -343,7 +429,10 @@ TEST_CASE("yplanes")
         static_assert(rs::sized_range<PlaneView>);
 
         auto v = grid | rs::to<T>();
-        auto ymin_plane = PlaneView{extents, 0, v};
+        // auto ymin_plane = PlaneView{extents, 0, v};
+        auto ymin_plane = v | plane_view(extents, 0);
+
+        // ideally would like to do something like v | PlaneView{extents, 0}
 
         REQUIRE((int)rs::size(ymin_plane) == nx * nz);
 

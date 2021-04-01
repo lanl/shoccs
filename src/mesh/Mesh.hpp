@@ -69,16 +69,16 @@ public:
 
     constexpr int3 extents() const { return cartesian.extents(); }
 
-    constexpr auto xmin() const { return detail::xmin(extents()); }
+    constexpr auto xmin() const { return views::xmin(extents()); }
 
-    constexpr auto xmax() const { return detail::xmax(extents()); }
+    constexpr auto xmax() const { return views::xmax(extents()); }
 
-    constexpr auto ymin() const { return detail::ymin(extents()); }
+    constexpr auto ymin() const { return views::ymin(extents()); }
 
-    constexpr auto ymax() const { return detail::ymax(extents()); }
+    constexpr auto ymax() const { return views::ymax(extents()); }
 
-    constexpr auto zmin() const { return detail::zmin(extents()); }
+    constexpr auto zmin() const { return views::zmin(extents()); }
 
-    constexpr auto zmax() const { return detail::zmax(extents()); }
+    constexpr auto zmax() const { return views::zmax(extents()); }
 };
 } // namespace ccs::mesh

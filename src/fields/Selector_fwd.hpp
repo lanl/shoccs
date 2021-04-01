@@ -97,23 +97,8 @@ constexpr auto is_Ry_selection_v = is_Ry_selection<T>::value;
 template <typename T>
 constexpr auto is_Rz_selection_v = is_Rz_selection<T>::value;
 
-// template <SelectionType S>
-// using selection_index_length = mp_size<selection_indices<S>>;
-
-// template <SelectionType S>
-// constexpr auto selection_index_length_v = selection_index_length<S>::value;
-
-// template <SelectionType S>
-// using last_selection_index = mp_back<selection_indices<S>>;
-
-// template <SelectionType S>
-// constexpr auto last_selection_index_v = last_selection_index<S>::value;
-
-// template <SelectionType S, std::size_t I>
-// using selection_index = mp_at_c<selection_indices<S>, I>;
-
-// template <SelectionType S, std::size_t I>
-// constexpr auto selection_index_v = selection_index<S, I>::value;
+template <typename T>
+concept DomainSelection = SelectionType<T>&& is_domain_selection_v<T>;
 
 } // namespace traits
 } // namespace ccs::field::tuple
