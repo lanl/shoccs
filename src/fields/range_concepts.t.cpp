@@ -5,6 +5,7 @@
 
 #include <range/v3/all.hpp>
 
+#include <cstdlib>
 #include <vector>
 
 #include <iostream>
@@ -275,17 +276,35 @@ class PlaneViewY : public rs::view_adaptor<PlaneViewY<Rng>, Rng>
     using diff_t = rs::range_difference_t<Rng>;
 
     friend rs::range_access;
-    diff_t ny, nz, j;
+    diff_t nx, ny, nz, j;
 
     class adaptor : public rs::adaptor_base
     {
-        diff_t ny, nz, i, k;
+        diff_t ny, nz, i, j, k;
+        // friend class sentinel_adaptor;
 
     public:
         adaptor() = default;
-        adaptor(diff_t ny, diff_t nz, diff_t i, diff_t k) : ny{ny}, nz{nz}, i{i}, k{k} {}
-        // int& read() const { return *iter; }
-        // bool equal(const cursor& that) const { return iter == that.iter; }
+        adaptor(diff_t ny, diff_t nz, diff_t i, diff_t j, diff_t k)
+            : ny{ny}, nz{nz}, i{i}, j{j}, k{k}
+        {
+        }
+
+        template <typename R>
+        constexpr auto begin(R& rng)
+        {
+            auto it = rs::begin(rng.base());
+            rs::advance(it, j * nz);
+            return it;
+        }
+
+        template <typename R>
+        constexpr auto end(R& rng)
+        {
+            auto it = rs::begin(rng.base());
+            rs::advance(it, j * nz);
+            return it;
+        }
 
         template <typename I>
         void next(I& it)
@@ -314,6 +333,32 @@ class PlaneViewY : public rs::view_adaptor<PlaneViewY<Rng>, Rng>
         template <typename I>
         void advance(I& it, rs::difference_type_t<I> n)
         {
+            if (n == 0) return;
+           
+            const auto line_offset = ny * nz;
+            // define a new i and k for the adaptor and adjust iterator accordingly.
+
+            if (n > 0) {
+                n += k;
+
+                auto qr = std::div(n, nz);
+                diff_t i1 = i + qr.quot;
+                diff_t k1 = qr.rem;
+
+                rs::advance(it, line_offset * (i1 - i) + (k1 - k));
+                i = i1;
+                k = k1;
+            } else {
+                n -= (nz - 1 - k);
+
+                auto qr = std::div(n, nz);
+                diff_t i1 = i + qr.quot;
+                diff_t k1 = nz - 1 + qr.rem;
+
+                rs::advance(it, line_offset * (i1 - i) + (k1 - k));
+                i = i1;
+                k = k1;
+            }
         }
 
         template <typename I>
@@ -323,19 +368,42 @@ class PlaneViewY : public rs::view_adaptor<PlaneViewY<Rng>, Rng>
         }
     };
 
-    adaptor begin_adaptor() { return {grid.begin() + j * nz, nx, ny, nz, 0, j, 0}; }
-    adaptor end_cursor()
-    {
-        return {grid.begin() + (j + 1) * nz, nx, ny, nz, nx - 1, j, nz};
-    }
+    adaptor begin_adaptor() { return {ny, nz, 0, j, 0}; }
+    adaptor end_adaptor() { return {ny, nz, nx - 1, j + 1, nz}; }
 
 public:
-    PlaneView() = default;
-    explicit constexpr PlaneView(int3 extents, int j, std::span<int> rng)
-        : nx{extents[0]}, ny{extents[1]}, nz{extents[2]}, j{j}, grid{rng}
+    PlaneViewY() = default;
+    explicit constexpr PlaneViewY(Rng&& rng, const int3& extents, int j)
+        : PlaneViewY::view_adaptor{FWD(rng)},
+          nx{extents[0]},
+          ny{extents[1]},
+          nz{extents[2]},
+          j{j}
     {
     }
 };
+
+template <typename Rng>
+PlaneViewY(Rng&&, const int3&, int) -> PlaneViewY<Rng>;
+
+struct y_plane_base_fn {
+    template <typename Rng>
+    constexpr auto operator()(Rng&& rng, const int3& extents, int j) const
+    {
+        return PlaneViewY(FWD(rng), extents, j);
+    }
+};
+
+struct y_plane_fn : y_plane_base_fn {
+    using y_plane_base_fn::operator();
+
+    constexpr auto operator()(const int3& extents, int j) const
+    {
+        return rs::make_view_closure(rs::bind_back(y_plane_base_fn{}, extents, j));
+    }
+};
+
+constexpr auto y_plane_view = y_plane_fn{};
 
 struct plane_base_fn {
     constexpr auto operator()(std::span<int> rng, const int3& extents, int j) const
@@ -430,19 +498,46 @@ TEST_CASE("yplanes")
 
         auto v = grid | rs::to<T>();
         // auto ymin_plane = PlaneView{extents, 0, v};
-        auto ymin_plane = v | plane_view(extents, 0);
-
+        // auto ymin_plane = v | plane_view(extents, 0);
+        auto ymin_plane = v | y_plane_view(extents, 0);
+        using P = decltype(ymin_plane);
+        static_assert(rs::range<P>);
+        static_assert(rs::sized_range<P>);
         // ideally would like to do something like v | PlaneView{extents, 0}
 
         REQUIRE((int)rs::size(ymin_plane) == nx * nz);
 
+        {
+            auto beg = rs::begin(ymin_plane);
+            REQUIRE(*beg == 0);
+            REQUIRE(*++beg == 1);
+            REQUIRE(*++beg == 2);
+            REQUIRE(*++beg == 3);
+            REQUIRE(*++beg == ny * nz);
+        }
+
+        {
+            auto beg = rs::begin(ymin_plane);
+            rs::advance(beg, 0);
+            REQUIRE(*beg == 0);
+            rs::advance(beg, 1);
+            REQUIRE(*beg == 1);
+            rs::advance(beg, 1);
+            REQUIRE(*beg == 2);
+            rs::advance(beg, 1);
+            REQUIRE(*beg == 3);
+            rs::advance(beg, 1);
+            REQUIRE(*beg == ny * nz);
+            rs::advance(beg, nz + 1);
+            REQUIRE(*beg == 2 * ny * nz + 1);
+            rs::advance(beg, -1);
+            REQUIRE(*beg == 2 * ny * nz);
+            ++beg;
+            rs::advance(beg, -(nz + 1));
+            REQUIRE(*beg == ny * nz);
+        }
+
         REQUIRE(rs::equal(ymin_plane | vs::take(nz), vs::iota(0, nz)));
-        auto beg = rs::begin(ymin_plane);
-        REQUIRE(*beg == 0);
-        REQUIRE(*++beg == 1);
-        REQUIRE(*++beg == 2);
-        REQUIRE(*++beg == 3);
-        REQUIRE(*++beg == ny * nz);
         REQUIRE(rs::equal(ymin_plane | vs::drop(nz) | vs::take(nz),
                           vs::iota(ny * nz, ny * nz + nz)));
 
