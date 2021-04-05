@@ -280,13 +280,13 @@ class PlaneViewY : public rs::view_adaptor<PlaneViewY<Rng>, Rng>
 
     class adaptor : public rs::adaptor_base
     {
-        diff_t ny, nz, i, j, k;
+        diff_t nx, ny, nz, i, j, k;
         // friend class sentinel_adaptor;
 
     public:
         adaptor() = default;
-        adaptor(diff_t ny, diff_t nz, diff_t i, diff_t j, diff_t k)
-            : ny{ny}, nz{nz}, i{i}, j{j}, k{k}
+        adaptor(diff_t nx, diff_t ny, diff_t nz, diff_t i, diff_t j, diff_t k)
+            : nx{nx}, ny{ny}, nz{nz}, i{i}, j{j}, k{k}
         {
         }
 
@@ -302,7 +302,7 @@ class PlaneViewY : public rs::view_adaptor<PlaneViewY<Rng>, Rng>
         constexpr auto end(R& rng)
         {
             auto it = rs::begin(rng.base());
-            rs::advance(it, j * nz);
+            rs::advance(it, i * ny * nz + j * nz + k);
             return it;
         }
 
@@ -311,7 +311,7 @@ class PlaneViewY : public rs::view_adaptor<PlaneViewY<Rng>, Rng>
         {
             ++k;
             ++it;
-            if (k == nz) {
+            if (k == nz && i != nx - 1) {
                 k = 0;
                 ++i;
                 it += (ny - 1) * nz;
@@ -334,7 +334,7 @@ class PlaneViewY : public rs::view_adaptor<PlaneViewY<Rng>, Rng>
         void advance(I& it, rs::difference_type_t<I> n)
         {
             if (n == 0) return;
-           
+
             const auto line_offset = ny * nz;
             // define a new i and k for the adaptor and adjust iterator accordingly.
 
@@ -344,6 +344,11 @@ class PlaneViewY : public rs::view_adaptor<PlaneViewY<Rng>, Rng>
                 auto qr = std::div(n, nz);
                 diff_t i1 = i + qr.quot;
                 diff_t k1 = qr.rem;
+
+                if (i1 == nx) {
+                    i1 = nx - 1;
+                    k1 = nz;
+                }
 
                 rs::advance(it, line_offset * (i1 - i) + (k1 - k));
                 i = i1;
@@ -368,8 +373,8 @@ class PlaneViewY : public rs::view_adaptor<PlaneViewY<Rng>, Rng>
         }
     };
 
-    adaptor begin_adaptor() { return {ny, nz, 0, j, 0}; }
-    adaptor end_adaptor() { return {ny, nz, nx - 1, j + 1, nz}; }
+    adaptor begin_adaptor() { return {nx, ny, nz, 0, j, 0}; }
+    adaptor end_adaptor() { return {nx, ny, nz, nx - 1, j, nz}; }
 
 public:
     PlaneViewY() = default;
@@ -535,6 +540,15 @@ TEST_CASE("yplanes")
             ++beg;
             rs::advance(beg, -(nz + 1));
             REQUIRE(*beg == ny * nz);
+        }
+
+        {
+            REQUIRE(*(rs::begin(v) + nz) == 4);
+            auto first = rs::begin(ymin_plane);
+            auto last = rs::end(ymin_plane);
+            rs::advance(first, rs::distance(first, last));
+            REQUIRE(rs::distance(first, last) == 0);
+            REQUIRE(first == last);
         }
 
         REQUIRE(rs::equal(ymin_plane | vs::take(nz), vs::iota(0, nz)));

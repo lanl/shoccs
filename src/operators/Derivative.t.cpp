@@ -91,7 +91,6 @@ TEST_CASE("Identity Mixed")
         }
     }
 
-#if 0
     SECTION("FFDDDF")
     {
 
@@ -102,8 +101,8 @@ TEST_CASE("Identity Mixed")
             // auto [nx, ny, nz] = extents;
             auto domain = du_exact | selector::D;
             // set zeros for dirichlet at xmin/xmax
-            domain | m.ymin();// = 0;
-            domain | m.ymax(); // = 0;
+            domain | m.ymin() = 0;
+            domain | m.ymax() = 0;
             domain | m.zmin() = 0;
         }
 
@@ -118,5 +117,4 @@ TEST_CASE("Identity Mixed")
                          Approx(get<selector::scalar::D>(du)));
         }
     }
-#endif
 }
