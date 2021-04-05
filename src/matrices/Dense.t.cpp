@@ -4,12 +4,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
-#include <range/v3/algorithm/equal.hpp>
-#include <range/v3/range/conversion.hpp>
-#include <range/v3/view/all.hpp>
-#include <range/v3/view/drop.hpp>
-#include <range/v3/view/iota.hpp>
-#include <range/v3/view/stride.hpp>
+#include <range/v3/all.hpp>
+
+#include "random/random.hpp"
 
 TEST_CASE("Identity")
 {
@@ -26,6 +23,30 @@ TEST_CASE("Identity")
     mat(rng, rhs);
 
     REQUIRE_THAT(rng, Approx(rhs));
+}
+
+TEST_CASE("Identity - NonSquare")
+{
+    using namespace ccs;
+    using Catch::Matchers::Approx;
+    using T = std::vector<real>;
+
+    T imat{0, 1, 0, 0, 0, /* r1 */
+           0, 0, 1, 0, 0, /* r2 */
+           0, 0, 0, 1, 0, /* r3 */
+           0, 0, 0, 0, 1};
+    const auto A = matrix::Dense{4, 5, 1, 0, 1, imat};
+
+    const T x = vs::generate_n([]() { return pick(); }, A.columns()) | rs::to<T>();
+    auto b = T(A.columns());
+
+    A(x, b);
+
+    REQUIRE(b[0] == 0.0);
+
+    const auto xx = x | vs::drop(1) | rs::to<T>();
+    const auto bb = b | vs::drop(1) | rs::to<T>();
+    REQUIRE_THAT(bb, Approx(xx));
 }
 
 TEST_CASE("Non Square1")

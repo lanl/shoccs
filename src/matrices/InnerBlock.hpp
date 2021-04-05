@@ -20,6 +20,7 @@ public:
 
     InnerBlock(integer columns,
                integer row_offset,
+               integer col_offset,
                integer stride,
                Dense&& left,
                Circulant&& i,

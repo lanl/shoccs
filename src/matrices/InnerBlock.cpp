@@ -16,6 +16,7 @@ InnerBlock::InnerBlock(Dense&& left, Circulant&& i, Dense&& right)
 
 InnerBlock::InnerBlock(integer columns,
                        integer row_offset,
+                       integer col_offset,
                        integer stride,
                        Dense&& left,
                        Circulant&& i,
@@ -23,18 +24,18 @@ InnerBlock::InnerBlock(integer columns,
     : Common{left.rows() + i.rows() + right.rows(),
              columns,
              row_offset,
-             row_offset,
+             col_offset,
              stride},
       left_boundary{MOVE(left)},
       interior{MOVE(i)},
       right_boundary{MOVE(right)}
 {
     // set up the offset and stride of the component matrices
-    left_boundary.row_offset(row_offset).col_offset(row_offset).stride(stride);
+    left_boundary.row_offset(row_offset).col_offset(col_offset).stride(stride);
     interior.row_offset(row_offset + stride * left_boundary.rows()).stride(stride);
     right_boundary
         .row_offset(row_offset + stride * (left_boundary.rows() + interior.rows()))
-        .col_offset(row_offset + stride * (columns - right_boundary.columns()))
+        .col_offset(col_offset + stride * (columns - right_boundary.columns()))
         .stride(stride);
 }
 

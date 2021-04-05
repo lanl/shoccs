@@ -19,25 +19,61 @@ TEST_CASE("Identity")
     using Catch::Matchers::Approx;
     using T = std::vector<real>;
 
-    T left_c{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
     T int_c{1.0};
     T right_c{1, 0, 0, 1};
-
-    const auto A = matrix::InnerBlock{16,
-                                      0,
-                                      1,
-                                      matrix::Dense{4, 4, left_c},
-                                      matrix::Circulant{10, int_c},
-                                      matrix::Dense{2, 2, right_c}};
-
-    REQUIRE(A.rows() == 16);
-
     randomize();
-    const auto x = vs::generate_n([]() { return pick(); }, A.rows()) | rs::to<T>();
-    auto b = T(A.rows());
 
-    A(x, b);
-    REQUIRE_THAT(x, Approx(b));
+    SECTION("Square")
+    {
+        T left_c{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+        const auto A = matrix::InnerBlock{16,
+                                          0,
+                                          0,
+                                          1,
+                                          matrix::Dense{4, 4, left_c},
+                                          matrix::Circulant{10, int_c},
+                                          matrix::Dense{2, 2, right_c}};
+
+        REQUIRE(A.rows() == 16);
+
+        const auto x = vs::generate_n([]() { return pick(); }, A.rows()) | rs::to<T>();
+        auto b = T(A.rows());
+
+        A(x, b);
+        REQUIRE_THAT(x, Approx(b));
+    }
+
+    SECTION("Non-Square")
+    {
+        T left_c{0, 1, 0, 0, 0, /* r */
+                 0, 0, 1, 0, 0, /* r */
+                 0, 0, 0, 1, 0, /* r */
+                 0, 0, 0, 0, 1};
+
+        const auto A = matrix::InnerBlock{16,
+                                          1,
+                                          0,
+                                          1,
+                                          matrix::Dense{4, 5, left_c},
+                                          matrix::Circulant{9, int_c},
+                                          matrix::Dense{2, 2, right_c}};
+
+        REQUIRE(A.rows() == 15);
+        REQUIRE(A.columns() == 16);
+        REQUIRE(A.col_offset() == 0);
+        REQUIRE(A.row_offset() == 1);
+
+        const auto x = vs::generate_n([]() { return pick(); }, A.columns()) | rs::to<T>();
+        auto b = T(A.columns());
+
+        A(x, b);
+
+        REQUIRE(b[0] == 0.0);
+
+        const auto xx = x | vs::drop(1) | rs::to<T>();
+        const auto bb = b | vs::drop(1) | rs::to<T>();
+        REQUIRE_THAT(xx, Approx(bb));
+    }
 }
 
 TEST_CASE("Random Boundary")
@@ -63,6 +99,7 @@ TEST_CASE("Random Boundary")
               -1.4713774812532359};
 
     const auto A = matrix::InnerBlock{16,
+                                      2,
                                       2,
                                       1,
                                       matrix::Dense{4, 5, left_c},
@@ -136,6 +173,7 @@ TEST_CASE("strided")
         // Set up strided operator
         const auto A = matrix::InnerBlock{columns,
                                           offset,
+                                          offset,
                                           stride,
                                           matrix::Dense(3, 5, lc),
                                           matrix::Circulant(10, ic),
@@ -146,6 +184,7 @@ TEST_CASE("strided")
 
         // non-strided operator
         const auto AA = matrix::InnerBlock(columns,
+                                           0,
                                            0,
                                            1,
                                            matrix::Dense(3, 5, lc),

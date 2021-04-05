@@ -32,16 +32,19 @@ TEST_CASE("Identity")
     bld.add_InnerBlock(16,
                        1,
                        1,
+                       1,
                        matrix::Dense{4, 4, left_c},
                        matrix::Circulant{10, int_c},
                        matrix::Dense{2, 2, right_c});
     bld.add_InnerBlock(16,
+                       17,
                        17,
                        1,
                        matrix::Dense{4, 4, left_c},
                        matrix::Circulant{10, int_c},
                        matrix::Dense{2, 2, right_c});
     bld.add_InnerBlock(16,
+                       34,
                        34,
                        1,
                        matrix::Dense{4, 4, left_c},
@@ -91,10 +94,12 @@ TEST_CASE("Random Boundary")
     bld.add_InnerBlock(cols,
                        1,
                        1,
+                       1,
                        matrix::Dense{4, 5, left_c},
                        matrix::Circulant{10, int_c},
                        matrix::Dense{2, 3, right_c});
     bld.add_InnerBlock(cols,
+                       cols + 5,
                        cols + 5,
                        1,
                        matrix::Dense{4, 5, left_c},
@@ -169,25 +174,29 @@ TEST_CASE("strided")
     const integer stride = 3;
 
     // Set up strided operator
-    const auto A =
-        matrix::Block{std::vector{matrix::InnerBlock{columns,
-                                                     0,
-                                                     stride,
-                                                     matrix::Dense(3, 5, lc),
-                                                     matrix::Circulant(10, ic),
-                                                     matrix::Dense(2, 3, rc)},
-                                  matrix::InnerBlock{columns,
-                                                     1,
-                                                     stride,
-                                                     matrix::Dense(3, 5, lc),
-                                                     matrix::Circulant(10, ic),
-                                                     matrix::Dense(2, 3, rc)},
-                                  matrix::InnerBlock{columns,
-                                                     2,
-                                                     stride,
-                                                     matrix::Dense(3, 5, lc),
-                                                     matrix::Circulant(10, ic),
-                                                     matrix::Dense(2, 3, rc)}}};
+    const auto A = matrix::Block{std::vector{matrix::InnerBlock{columns,
+                                                                0,
+                                                                0,
+                                                                stride,
+                                                                matrix::Dense(3, 5, lc),
+                                                                matrix::Circulant(10, ic),
+                                                                matrix::Dense(2, 3, rc)},
+                                             matrix::InnerBlock{
+                                                 columns,
+                                                 1,
+                                                 1,
+                                                 stride,
+                                                 matrix::Dense(3, 5, lc),
+                                                 matrix::Circulant(10, ic),
+                                                 matrix::Dense(2, 3, rc)},
+                                             matrix::InnerBlock{
+                                                 columns,
+                                                 2,
+                                                 2,
+                                                 stride,
+                                                 matrix::Dense(3, 5, lc),
+                                                 matrix::Circulant(10, ic),
+                                                 matrix::Dense(2, 3, rc)}}};
     const T x = vs::iota(0, 45) | rs::to<T>();
     T b(x.size());
     A(x, b);
@@ -195,6 +204,7 @@ TEST_CASE("strided")
     for (integer offset = 0; offset < 3; offset++) {
         // non-strided operator
         const auto AA = matrix::InnerBlock(columns,
+                                           0,
                                            0,
                                            1,
                                            matrix::Dense(3, 5, lc),
