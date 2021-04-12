@@ -21,9 +21,9 @@ constexpr bool same_plane(const int3& x, const int3& y)
     return x[J] == y[J] && x[K] == y[K];
 }
 
-constexpr auto offset = [](int3 n) {
-    return [n](int3 ijk) { return ijk[0] * n[1] * n[2] + ijk[1] * n[2] + ijk[2]; };
-};
+// constexpr auto offset = [](int3 n) {
+//     return [n](int3 ijk) { return ijk[0] * n[1] * n[2] + ijk[1] * n[2] + ijk[2]; };
+// };
 
 template <auto I>
 void init_line(std::vector<Line>& v, int3 extents, std::span<const mesh_object_info> r)
@@ -33,7 +33,7 @@ void init_line(std::vector<Line>& v, int3 extents, std::span<const mesh_object_i
 
     constexpr auto S = index::dir<I>::slow;
     constexpr auto F = index::dir<I>::fast;
-    auto off = offset(extents);
+    // auto off = offset(extents);
 
     integer ns = extents[S];
     integer nf = extents[F];
@@ -60,7 +60,7 @@ void init_line(std::vector<Line>& v, int3 extents, std::span<const mesh_object_i
                 if (first->ray_outside) {
                     // set the `right` point and add both to line
                     v.emplace_back(
-                        off(left_boundary->mesh_coordinate),
+                        // off(left_boundary->mesh_coordinate),
                         index::stride<I>(extents),
                         *left_boundary,
                         Boundary{.mesh_coordinate = first->solid_coord,
@@ -81,7 +81,7 @@ void init_line(std::vector<Line>& v, int3 extents, std::span<const mesh_object_i
             // consume the left boundary
             if (left_boundary) {
                 v.emplace_back(
-                    off(left_boundary->mesh_coordinate),
+                    // off(left_boundary->mesh_coordinate),
                     index::stride<I>(extents),
                     *left_boundary,
                     Boundary{.mesh_coordinate = right, .object_boundary = std::nullopt});

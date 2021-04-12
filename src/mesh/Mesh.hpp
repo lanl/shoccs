@@ -23,7 +23,6 @@ struct Boundary {
 };
 
 struct Line {
-    integer offset; // offset of mesh_coordinate in F
     integer stride; // stride associated with moving in this diriection
     Boundary start;
     Boundary end;
@@ -69,6 +68,13 @@ public:
 
     constexpr int3 extents() const { return cartesian.extents(); }
 
+    // convert an int3 coordinate to a flattened integer coordinate
+    constexpr integer ic(int3 ijk) const
+    {
+        const auto& n = extents();
+        return ijk[0] * n[1] * n[2] + ijk[1] * n[2] + ijk[2];
+    }
+
     constexpr auto xmin() const { return views::xmin(extents()); }
 
     constexpr auto xmax() const { return views::xmax(extents()); }
@@ -80,5 +86,14 @@ public:
     constexpr auto zmin() const { return views::zmin(extents()); }
 
     constexpr auto zmax() const { return views::zmax(extents()); }
+
+    // Intersection of rays in x and all objects
+    std::span<const mesh_object_info> Rx() const { return geometry.Rx(); }
+    // Intersection of rays in y and all objects
+    std::span<const mesh_object_info> Ry() const { return geometry.Ry(); }
+    // Intersection of rays in z and all objects
+    std::span<const mesh_object_info> Rz() const { return geometry.Rz(); }
+
+    auto R() const { return field::Tuple{geometry.Rx(), geometry.Ry(), geometry.Rz()}; }
 };
 } // namespace ccs::mesh

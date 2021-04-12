@@ -40,17 +40,14 @@ TEST_CASE("lines")
         REQUIRE(extents[1] * extents[2] + n_intersections / 2 == (integer)line.size());
 
         // check first two lines
-        REQUIRE(line[0].offset == 0);
         REQUIRE(line[0].stride == extents[1] * extents[2]);
         REQUIRE(line[0].start.mesh_coordinate == int3{0, 0, 0});
         REQUIRE(line[0].end.mesh_coordinate == int3{20, 0, 0});
-        REQUIRE(line[1].offset == 1);
         REQUIRE(line[1].stride == extents[1] * extents[2]);
         REQUIRE(line[1].start.mesh_coordinate == int3{0, 0, 1});
         REQUIRE(line[1].end.mesh_coordinate == int3{20, 0, 1});
 
         // check last line
-        REQUIRE(line.back().offset == extents[1] * extents[2] - 1);
         REQUIRE(line.back().stride == extents[1] * extents[2]);
         REQUIRE(line.back().start.mesh_coordinate == int3{0, 21, 22});
         REQUIRE(line.back().end.mesh_coordinate == int3{20, 21, 22});
@@ -58,7 +55,6 @@ TEST_CASE("lines")
         // check first/second intersection point at 10,6,3
         {
             const auto& l = line[6 * extents[2] + 3];
-            REQUIRE(l.offset == 6 * extents[2] + 3);
             REQUIRE(l.start.mesh_coordinate == int3{0, 6, 3});
             REQUIRE(!l.start.object_boundary);
             REQUIRE(l.end.mesh_coordinate == int3{10, 6, 3});
@@ -70,7 +66,6 @@ TEST_CASE("lines")
 
         {
             const auto& l = line[6 * extents[2] + 3 + 1];
-            REQUIRE(l.offset == 10 * extents[1] * extents[2] + 6 * extents[2] + 3);
             REQUIRE(l.start.mesh_coordinate == int3{10, 6, 3});
             REQUIRE(l.start.object_boundary);
             REQUIRE(l.start.object_boundary->object_coordinate == 1);
@@ -89,17 +84,14 @@ TEST_CASE("lines")
         REQUIRE(extents[0] * extents[2] + n_intersections / 2 == (integer)line.size());
 
         // check first two lines
-        REQUIRE(line[0].offset == 0);
         REQUIRE(line[0].stride == extents[2]);
         REQUIRE(line[0].start.mesh_coordinate == int3{0, 0, 0});
         REQUIRE(line[0].end.mesh_coordinate == int3{0, 21, 0});
-        REQUIRE(line[1].offset == 1);
         REQUIRE(line[1].stride == extents[2]);
         REQUIRE(line[1].start.mesh_coordinate == int3{0, 0, 1});
         REQUIRE(line[1].end.mesh_coordinate == int3{0, 21, 1});
 
         // check last line
-        REQUIRE(line.back().offset == 20 * extents[1] * extents[2] + extents[2] - 1);
         REQUIRE(line.back().stride == extents[2]);
         REQUIRE(line.back().start.mesh_coordinate == int3{20, 0, 22});
         REQUIRE(line.back().end.mesh_coordinate == int3{20, 21, 22});
@@ -107,7 +99,6 @@ TEST_CASE("lines")
         // check first/second intersection point at 8,7,4
         {
             const auto& l = line[8 * extents[2] + 4];
-            REQUIRE(l.offset == 8 * extents[1] * extents[2] + 4);
             REQUIRE(l.start.mesh_coordinate == int3{8, 0, 4});
             REQUIRE(!l.start.object_boundary);
             REQUIRE(l.end.mesh_coordinate == int3{8, 7, 4});
@@ -119,7 +110,6 @@ TEST_CASE("lines")
 
         {
             const auto& l = line[8 * extents[2] + 4 + 1];
-            REQUIRE(l.offset == 8 * extents[1] * extents[2] + 7 * extents[2] + 4);
             REQUIRE(l.start.mesh_coordinate == int3{8, 7, 4});
             REQUIRE(l.start.object_boundary);
             REQUIRE(l.start.object_boundary->object_coordinate == 1);
@@ -137,17 +127,14 @@ TEST_CASE("lines")
         REQUIRE(extents[0] * extents[1] + n_intersections / 2 == (integer)line.size());
 
         // check first two lines
-        REQUIRE(line[0].offset == 0);
         REQUIRE(line[0].stride == 1);
         REQUIRE(line[0].start.mesh_coordinate == int3{0, 0, 0});
         REQUIRE(line[0].end.mesh_coordinate == int3{0, 0, 22});
-        REQUIRE(line[1].offset == extents[2]);
         REQUIRE(line[1].stride == 1);
         REQUIRE(line[1].start.mesh_coordinate == int3{0, 1, 0});
         REQUIRE(line[1].end.mesh_coordinate == int3{0, 1, 22});
 
         // check last line
-        REQUIRE(line.back().offset == extents[0] * extents[1] * extents[2] - extents[2]);
         REQUIRE(line.back().stride == 1);
         REQUIRE(line.back().start.mesh_coordinate == int3{20, 21, 0});
         REQUIRE(line.back().end.mesh_coordinate == int3{20, 21, 22});
@@ -155,7 +142,6 @@ TEST_CASE("lines")
         // check last intersection points at 12,8,5
         {
             const auto& l = line[12 * extents[1] + 8 + (n_intersections / 2) - 1];
-            REQUIRE(l.offset == 12 * extents[1] * extents[2] + 8 * extents[2]);
             REQUIRE(l.start.mesh_coordinate == int3{12, 8, 0});
             REQUIRE(!l.start.object_boundary);
             REQUIRE(l.end.mesh_coordinate == int3{12, 8, 5});
@@ -167,7 +153,6 @@ TEST_CASE("lines")
 
         {
             const auto& l = line[12 * extents[1] + 8 + (n_intersections / 2)];
-            REQUIRE(l.offset == 12 * extents[1] * extents[2] + 8 * extents[2] + 5);
             REQUIRE(l.start.mesh_coordinate == int3{12, 8, 5});
             REQUIRE(l.start.object_boundary);
             REQUIRE(l.start.object_boundary->object_coordinate == n_intersections - 1);

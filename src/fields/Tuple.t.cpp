@@ -4,15 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <range/v3/algorithm/equal.hpp>
-#include <range/v3/range/conversion.hpp>
-#include <range/v3/view/all.hpp>
-#include <range/v3/view/concat.hpp>
-#include <range/v3/view/iota.hpp>
-#include <range/v3/view/take.hpp>
-#include <range/v3/view/take_exactly.hpp>
-#include <range/v3/view/transform.hpp>
-#include <range/v3/view/zip_with.hpp>
+#include <range/v3/all.hpp>
 
 #include <vector>
 
@@ -280,6 +272,30 @@ TEST_CASE("Copy and Move Owning TwoTuple")
         U x{MOVE(y)};
         REQUIRE(rs::equal(get<0>(x), i));
         REQUIRE(rs::equal(get<1>(x), j));
+    }
+
+    SECTION("copy from other")
+    {
+        U x{};
+        auto y = Tuple{i, j};
+        x = y;
+        REQUIRE(rs::equal(get<0>(x), i));
+        REQUIRE(rs::equal(get<1>(x), j));
+    }
+
+    SECTION("from generate")
+    {
+        U x{};
+        int k;
+        auto g = [&k]() { return ++k; };
+        const auto tt = tuple::transform(
+            [g = g](auto&& s) { return vs::generate_n(g, rs::size(s)) | rs::to<T>(); },
+            Tuple{i, j});
+        REQUIRE(rs::size(get<0>(tt)) == rs::size(i));
+        REQUIRE(rs::size(get<1>(tt)) == rs::size(j));
+        x = tt;
+        REQUIRE(rs::size(get<0>(x)) == rs::size(get<0>(tt)));
+        REQUIRE(rs::size(get<1>(x)) == rs::size(get<1>(tt)));
     }
 }
 
