@@ -72,11 +72,26 @@ struct E2_2 {
 
     void nbs_dirichlet(real h, real psi, std::span<real> c, bool right) const
     {
-        nbs_floating(h, psi, c, right);
-        if (right)
-            ranges::fill(c.subspan((R - 1) * T), real{});
-        else
-            ranges::fill(c.subspan(0, T), real{});
+        real t6 = psi * psi;
+        // real t8 = psi * psi * psi;
+        // real t9 = -1 * t8;
+        real t5 = -2 * psi;
+        // c[0] = psi;
+        // c[1] = (2 + t5 + -3 * t6 + t9) * 0.5;
+        // c[2] = -2 + 2 * t6 + t8;
+        // c[3] = (2 + -1 * t6 + t9) * 0.5;
+        c[0] = (2 + 4 * psi) * 1.0 / (2 + 3 * psi + t6);
+        c[1] = t5;
+        c[2] = (-2 + 4 * t6) * 1.0 / (1 + psi);
+        c[3] = (2 + -2 * t6) * 1.0 / (2 + psi);
+        for (auto&& v : c) v /= (h * h);
+
+        if (right) ranges::reverse(c);
+        // nbs_floating(h, psi, c, right);
+        // if (right)
+        //     ranges::fill(c.subspan((R - 1) * T), real{});
+        // else
+        //     ranges::fill(c.subspan(0, T), real{});
     }
 
     void

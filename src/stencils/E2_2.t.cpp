@@ -8,10 +8,11 @@
 
 #include <range/v3/view/zip.hpp>
 
+using Catch::Matchers::Approx;
+
 TEST_CASE("dirichlet")
 {
     using namespace ccs;
-    using Catch::Matchers::Approx;
 
     auto st = stencils::make_E2_2();
 
@@ -32,24 +33,12 @@ TEST_CASE("dirichlet")
     std::vector<real> extra{};
 
     st.nbs(0.5, bcs::Dirichlet, 0.0, false, left, extra);
-
-    {
-        std::vector<real> exact{0., 0., 0., 0., 4., 0., -8., 4.};
-        REQUIRE_THAT(left, Approx(exact));
-    }
+    REQUIRE_THAT(left, Approx(std::vector{4., 0., -8., 4.}));
 
     st.nbs(0.5, bcs::Dirichlet, 0.9, true, right, extra);
-    {
-        auto exact = std::vector<real>{0.5241379310344828,
-                                       2.610526315789474,
-                                       -7.2,
-                                       4.0653357531760435,
-                                       0.,
-                                       0.,
-                                       0.,
-                                       0.};
-        REQUIRE_THAT(right, Approx(exact));
-    }
+    REQUIRE_THAT(right,
+                 Approx(std::vector{
+                     0.5241379310344828, 2.610526315789474, -7.2, 4.0653357531760435}));
 }
 
 TEST_CASE("floating")
@@ -68,18 +57,13 @@ TEST_CASE("floating")
     std::vector<real> extra{};
 
     st.nbs(0.5, bcs::Floating, 0.0, false, c, extra);
-
-    std::vector<real> exact{0., 4., -8., 4., 4., 0., -8., 4.};
-
-    for (auto&& [comp, ex] : ranges::views::zip(c, exact))
-        REQUIRE(comp == Catch::Approx(ex));
+    REQUIRE_THAT(c, Approx(std::vector{0., 4., -8., 4., 4., 0., -8., 4.}));
 
     st.nbs(0.5, bcs::Floating, 0.5, true, c, extra);
-    exact = std::vector<real>{
-        2.4, -2.6666666666666665, -4., 4.266666666666667, 3.25, -5.5, 0.25, 2.};
-
-    for (auto&& [comp, ex] : ranges::views::zip(c, exact))
-        REQUIRE(comp == Catch::Approx(ex));
+    REQUIRE_THAT(
+        c,
+        Approx(std::vector{
+            2.4, -2.6666666666666665, -4., 4.266666666666667, 3.25, -5.5, 0.25, 2.}));
 }
 
 TEST_CASE("neumann")
@@ -98,28 +82,18 @@ TEST_CASE("neumann")
     std::vector<real> extra(x);
 
     st.nbs(0.5, bcs::Neumann, 0.0, false, c, extra);
-
-    std::vector<real> exact{-8., 0., 8., 0., 0., -8., 8., 0.};
-    std::vector<real> exact_extra{-4., -4.};
-
-    for (auto&& [comp, ex] : ranges::views::zip(c, exact))
-        REQUIRE(comp == Catch::Approx(ex));
-    for (auto&& [comp, ex] : ranges::views::zip(extra, exact_extra))
-        REQUIRE(comp == Catch::Approx(ex));
+    REQUIRE_THAT(c, Approx(std::vector{-8., 0., 8., 0., 0., -8., 8., 0.}));
+    REQUIRE_THAT(extra, Approx(std::vector{-4., -4.}));
 
     st.nbs(0.5, bcs::Neumann, 0.8, true, c, extra);
-    exact = std::vector<real>{-0.384,
-                              4.928,
-                              -7.744,
-                              3.2,
-                              -0.45714285714285713,
-                              2.311111111111111,
-                              6.4,
-                              -8.253968253968255};
-    exact_extra = std::vector<real>{0.8, 4.0};
-
-    for (auto&& [comp, ex] : ranges::views::zip(c, exact))
-        REQUIRE(comp == Catch::Approx(ex));
-    for (auto&& [comp, ex] : ranges::views::zip(extra, exact_extra))
-        REQUIRE(comp == Catch::Approx(ex));
+    REQUIRE_THAT(c,
+                 Approx(std::vector{-0.384,
+                                    4.928,
+                                    -7.744,
+                                    3.2,
+                                    -0.45714285714285713,
+                                    2.311111111111111,
+                                    6.4,
+                                    -8.253968253968255}));
+    REQUIRE_THAT(extra, Approx(std::vector{0.8, 4.}));
 }
