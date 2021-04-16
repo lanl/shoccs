@@ -2,6 +2,7 @@
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_vector.hpp>
 
 #include <vector>
 
@@ -10,6 +11,7 @@
 TEST_CASE("dirichlet")
 {
     using namespace ccs;
+    using Catch::Matchers::Approx;
 
     auto st = stencils::make_E2_2();
 
@@ -21,27 +23,33 @@ TEST_CASE("dirichlet")
 
     auto q = st.query(bcs::Dirichlet);
     REQUIRE(q.p == p);
-    REQUIRE(q.r == r);
+    REQUIRE(q.r == r - 1);
     REQUIRE(q.t == t);
     REQUIRE(q.nextra == 0);
 
-    std::vector<real> left(r * t);
-    std::vector<real> right(r * t);
+    std::vector<real> left(q.r * t);
+    std::vector<real> right(q.r * t);
     std::vector<real> extra{};
 
     st.nbs(0.5, bcs::Dirichlet, 0.0, false, left, extra);
 
-    std::vector<real> exact{0., 0., 0., 0., 4., 0., -8., 4.};
-
-    for (auto&& [comp, ex] : ranges::views::zip(left, exact))
-        REQUIRE(comp == Catch::Approx(ex));
+    {
+        std::vector<real> exact{0., 0., 0., 0., 4., 0., -8., 4.};
+        REQUIRE_THAT(left, Approx(exact));
+    }
 
     st.nbs(0.5, bcs::Dirichlet, 0.9, true, right, extra);
-    exact = std::vector<real>{
-        0.5241379310344828, 2.610526315789474, -7.2, 4.0653357531760435, 0., 0., 0., 0.};
-
-    for (auto&& [comp, ex] : ranges::views::zip(right, exact))
-        REQUIRE(comp == Catch::Approx(ex));
+    {
+        auto exact = std::vector<real>{0.5241379310344828,
+                                       2.610526315789474,
+                                       -7.2,
+                                       4.0653357531760435,
+                                       0.,
+                                       0.,
+                                       0.,
+                                       0.};
+        REQUIRE_THAT(right, Approx(exact));
+    }
 }
 
 TEST_CASE("floating")

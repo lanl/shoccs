@@ -17,7 +17,7 @@ struct E2_2 {
     {
         switch (b) {
         case bcs::Dirichlet:
-            [[fallthrough]];
+            return {P, R - 1, T, 0};
         case bcs::Floating:
             return {P, R, T, 0};
         case bcs::Neumann:
@@ -45,7 +45,7 @@ struct E2_2 {
         case bcs::Floating:
             return nbs_floating(h, psi, c.subspan(0, R * T), right);
         case bcs::Dirichlet:
-            return nbs_dirichlet(h, psi, c.subspan(0, R * T), right);
+            return nbs_dirichlet(h, psi, c.subspan(0, (R - 1) * T), right);
         case bcs::Neumann:
             return nbs_neumann(h, psi, c.subspan(0, R * T), x.subspan(0, X), right);
         }
