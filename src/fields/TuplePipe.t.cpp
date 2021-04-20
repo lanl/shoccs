@@ -78,15 +78,13 @@ TEST_CASE("Pipe syntax for ThreeTuples")
     auto x = Tuple{std::vector{1, 2, 3}, std::vector{4, 5}, std::vector{4, 3, 2, 1}};
     auto y = x | vs::transform([](auto&& i) { return i * i; });
     REQUIRE(traits::ThreeTuple<decltype(y)>);
-    REQUIRE(rs::equal(get<0>(y), std::vector{1, 4, 9}));
-    REQUIRE(rs::equal(get<1>(y), std::vector{16, 25}));
-    REQUIRE(rs::equal(get<2>(y), std::vector{16, 9, 4, 1}));
+    REQUIRE(y ==
+            Tuple{std::vector{1, 4, 9}, std::vector{16, 25}, std::vector{16, 9, 4, 1}});
 
     auto z = Tuple<std::vector<int>, std::vector<int>, std::vector<int>>{};
     z = y | vs::transform([](auto&& i) { return i + i; });
-    REQUIRE(rs::equal(get<0>(z), std::vector{2, 8, 18}));
-    REQUIRE(rs::equal(get<1>(z), std::vector{32, 50}));
-    REQUIRE(rs::equal(get<2>(z), std::vector{32, 18, 8, 2}));
+    REQUIRE(z ==
+            Tuple{std::vector{2, 8, 18}, std::vector{32, 50}, std::vector{32, 18, 8, 2}});
 }
 
 TEST_CASE("Pipe syntax for Non-Owning ThreeTuples")
@@ -97,9 +95,8 @@ TEST_CASE("Pipe syntax for Non-Owning ThreeTuples")
     auto x = Tuple{std::vector{1, 2, 3}, std::vector{4, 5}, std::vector{4, 3, 2, 1}};
     auto y = x | vs::transform([](auto&& i) { return i * i; });
     REQUIRE(traits::ThreeTuple<decltype(y)>);
-    REQUIRE(rs::equal(get<0>(y), std::vector{1, 4, 9}));
-    REQUIRE(rs::equal(get<1>(y), std::vector{16, 25}));
-    REQUIRE(rs::equal(get<2>(y), std::vector{16, 9, 4, 1}));
+    REQUIRE(y ==
+            Tuple{std::vector{1, 4, 9}, std::vector{16, 25}, std::vector{16, 9, 4, 1}});
 
     auto a = std::vector<int>(3);
     auto b = std::vector<int>(2);
@@ -107,9 +104,8 @@ TEST_CASE("Pipe syntax for Non-Owning ThreeTuples")
     auto z = Tuple{a, b, c};
 
     z = y | vs::transform([](auto&& i) { return i + i; });
-    REQUIRE(rs::equal(get<0>(z), std::vector{2, 8, 18}));
-    REQUIRE(rs::equal(get<1>(z), std::vector{32, 50}));
-    REQUIRE(rs::equal(get<2>(z), std::vector{32, 18, 8, 2}));
+    REQUIRE(z ==
+            Tuple{std::vector{2, 8, 18}, std::vector{32, 50}, std::vector{32, 18, 8, 2}});
 }
 
 TEST_CASE("ThreeTuples with ThreeTuplePipes")
@@ -123,18 +119,17 @@ TEST_CASE("ThreeTuples with ThreeTuplePipes")
     auto x = Tuple{std::vector{1, 2, 3}, std::vector{4, 5}, std::vector{4, 3, 2, 1}};
     auto y = x | std::tuple{f, g, h};
     REQUIRE(traits::ThreeTuple<decltype(y)>);
-    REQUIRE(rs::equal(get<0>(y), std::vector{1, 4, 9}));
-    REQUIRE(rs::equal(get<1>(y), std::vector{8, 10}));
-    REQUIRE(rs::equal(get<2>(y), std::vector{64, 27, 8, 1}));
+    REQUIRE(y ==
+            Tuple{std::vector{1, 4, 9}, std::vector{8, 10}, std::vector{64, 27, 8, 1}});
 
     auto a = std::vector<int>(3);
     auto b = std::vector<int>(2);
     auto c = std::vector<int>(4);
     auto z = Tuple{a, b, c};
     z = y | g; // vs::transform([](auto&& i) { return i + i; });
-    REQUIRE(rs::equal(get<0>(z), std::vector{2, 8, 18}));
-    REQUIRE(rs::equal(get<1>(z), std::vector{16, 20}));
-    REQUIRE(rs::equal(get<2>(z), std::vector{128, 54, 16, 2}));
+    REQUIRE(z == Tuple{std::vector{2, 8, 18},
+                       std::vector{16, 20},
+                       std::vector{128, 54, 16, 2}});
 
     auto q = Tuple<std::span<int>, std::span<int>, std::span<int>>{a, b, c};
 
@@ -164,8 +159,7 @@ TEST_CASE("Nested Pipe")
               Tuple{std::vector{-1, -2, -3}}};
     auto y = x | vs::transform([](auto&& i) { return i + 2; });
 
-    REQUIRE(rs::equal(get<0, 0>(y), std::vector{3, 4, 5}));
-    REQUIRE(rs::equal(get<0, 1>(y), std::vector{6, 7}));
-    REQUIRE(rs::equal(get<0, 2>(y), std::vector{6, 5, 4, 3}));
-    REQUIRE(rs::equal(get<1, 0>(y), std::vector{1, 0, -1}));
+    REQUIRE(y ==
+            Tuple{Tuple{std::vector{3, 4, 5}, std::vector{6, 7}, std::vector{6, 5, 4, 3}},
+                  Tuple{std::vector{1, 0, -1}}});
 }
