@@ -1,5 +1,6 @@
 #pragma once
 
+#include <range/v3/algorithm/equal.hpp>
 #include <range/v3/view/all.hpp>
 
 #include "TupleMath.hpp"
@@ -124,6 +125,26 @@ public:
     {
         for_each([](auto&& x, auto&& y) { x = FWD(y); }, *this, FWD(t));
         return *this;
+    }
+
+    template <traits::NonTupleRange T>
+    friend bool operator==(const ViewBaseTuple& x, const T& y)
+    {
+        return [&]<auto... Is>(std::index_sequence<Is...>)
+        {
+            return (rs::equal(get<Is>(x), y) && ...);
+        }
+        (TupleIndex<ViewBaseTuple>);
+    }
+
+    template <traits::SimilarTuples<ViewBaseTuple> T>
+    friend bool operator==(const ViewBaseTuple& x, const T& y)
+    {
+        return [&]<auto... Is>(std::index_sequence<Is...>)
+        {
+            return (rs::equal(get<Is>(x), get<Is>(y)) && ...);
+        }
+        (TupleIndex<ViewBaseTuple>);
     }
 };
 

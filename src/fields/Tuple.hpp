@@ -69,6 +69,28 @@ struct Tuple : ContainerTuple<Args...>, ViewTuple<Args&...> {
         return *this;
     }
 
+    template <traits::NonTupleRange T>
+    friend bool operator==(const Tuple& x,
+                           const T& y) requires traits::NestedTupleLike<Tuple>
+    {
+        return [&]<auto... Is>(std::index_sequence<Is...>)
+        {
+            return ((get<Is>(x) == y) && ...);
+        }
+        (TupleIndex<Tuple>);
+    }
+
+    template <traits::SimilarTuples<Tuple> T>
+    friend bool operator==(const Tuple& x,
+                           const T& y) requires traits::NestedTupleLike<Tuple>
+    {
+        return [&]<auto... Is>(std::index_sequence<Is...>)
+        {
+            return ((get<Is>(x) == get<Is>(y)) && ...);
+        }
+        (TupleIndex<Tuple>);
+    }
+
     Tuple& as_Tuple() & { return *this; }
     const Tuple& as_Tuple() const& { return *this; }
     Tuple&& as_Tuple() && { return MOVE(*this); }

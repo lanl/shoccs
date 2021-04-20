@@ -69,10 +69,10 @@ TEST_CASE("construction from subrange")
 
     auto r = Tuple{x | vs::take_exactly(5)};
 
-    REQUIRE(rs::equal(r, vs::iota(0, 5)));
+    REQUIRE(r == vs::iota(0, 5));
 
     r = 0;
-    REQUIRE(rs::equal(x, T{0, 0, 0, 0, 0, 5, 6, 7, 8, 9}));
+    REQUIRE(x == T{0, 0, 0, 0, 0, 5, 6, 7, 8, 9});
 }
 
 TEST_CASE("construction")
@@ -91,7 +91,7 @@ TEST_CASE("construction")
     r[1] = -1;
     REQUIRE(r[1] == -1);
 
-    REQUIRE(rs::equal(r, x));
+    REQUIRE(r == x);
 
     SECTION("owning from size")
     {
@@ -112,10 +112,10 @@ TEST_CASE("construction")
         // try different sizes to flush out memory issues
         for (int i = 10; i < 1024; i += 9) {
             auto xx = Tuple<std::vector<real>>{vs::iota(0, i)};
-            REQUIRE(rs::equal(vs::iota(0, i), xx));
+            REQUIRE(xx == vs::iota(0, i));
 
             xx = vs::iota(0, i / 2);
-            REQUIRE(rs::equal(xx, vs::iota(0, i / 2)));
+            REQUIRE(xx == vs::iota(0, i / 2));
         }
     }
 
@@ -125,11 +125,11 @@ TEST_CASE("construction")
         REQUIRE(r_owning[1] == 1);
         r_owning[1] = -1;
         REQUIRE(r_owning[1] == -1);
-        REQUIRE(rs::equal(r_owning, x));
+        REQUIRE(r_owning == x);
 
         r_owning = r;
-        REQUIRE(rs::equal(r_owning, x));
-        REQUIRE(rs::equal(r_owning, r));
+        REQUIRE(r_owning == x);
+        REQUIRE(r_owning == r);
         auto x0 = x[0];
         // this shouldn't change r/x
         r_owning[0] = 1000;
@@ -145,9 +145,7 @@ TEST_CASE("construction")
         auto a = Tuple{x, y, z};
 
         r_owning = a;
-        REQUIRE(rs::equal(get<0>(r_owning), x));
-        REQUIRE(rs::equal(get<1>(r_owning), y));
-        REQUIRE(rs::equal(get<2>(r_owning), z));
+        REQUIRE(r_owning == a);
     }
 
     auto rr = Tuple(x, y, z);
@@ -161,14 +159,12 @@ TEST_CASE("construction")
         auto zz = z;
         auto r_owning = Tuple{MOVE(xx), MOVE(yy), MOVE(zz)};
 
-        REQUIRE(rs::equal(get<0>(rr), get<0>(r_owning)));
-        REQUIRE(rs::equal(get<1>(rr), get<1>(r_owning)));
-        REQUIRE(rs::equal(get<2>(rr), get<2>(r_owning)));
+        REQUIRE(rr == r_owning);
     }
 
     {
         auto x = Tuple{vs::concat(Tuple{vs::iota(0, 16)}, vs::iota(16, 21))};
-        REQUIRE(rs::equal(x, vs::iota(0, 21)));
+        REQUIRE(x == vs::iota(0, 21));
     }
 }
 
@@ -186,15 +182,13 @@ TEST_CASE("Copy and Move Owning OneTuple")
         Tuple<T> x{};
         Tuple<T> y{i};
         x = y;
-        REQUIRE(x.size() == y.size());
-        REQUIRE(rs::equal(x, i));
-        REQUIRE(rs::equal(y, i));
+        REQUIRE(x == y);
+        REQUIRE(y == i);
 
         auto z = Tuple{j};
         x = z;
-        REQUIRE(x.size() == z.size());
-        REQUIRE(rs::equal(x, j));
-        REQUIRE(rs::equal(z, j));
+        REQUIRE(x == z);
+        REQUIRE(z == j);
     }
 
     SECTION("copy construction")
@@ -202,14 +196,14 @@ TEST_CASE("Copy and Move Owning OneTuple")
         Tuple<T> y{i};
         Tuple<T> x{y};
         REQUIRE(x.size() == y.size());
-        REQUIRE(rs::equal(x, i));
-        REQUIRE(rs::equal(y, i));
+        REQUIRE(x == i);
+        REQUIRE(x == y);
 
         auto z = Tuple{j};
         Tuple<T> u{z};
         REQUIRE(u.size() == z.size());
-        REQUIRE(rs::equal(u, j));
-        REQUIRE(rs::equal(z, j));
+        REQUIRE(u == z);
+        REQUIRE(z == j);
     }
 
     SECTION("move assignment")
@@ -218,7 +212,7 @@ TEST_CASE("Copy and Move Owning OneTuple")
         Tuple<T> y{i};
         x = MOVE(y);
         REQUIRE(x.size() == 10u);
-        REQUIRE(rs::equal(x, i));
+        REQUIRE(x == i);
     }
 
     SECTION("move construction")
@@ -226,7 +220,7 @@ TEST_CASE("Copy and Move Owning OneTuple")
         Tuple<T> y{i};
         Tuple<T> x{MOVE(y)};
         REQUIRE(x.size() == 10u);
-        REQUIRE(rs::equal(x, i));
+        REQUIRE(x == i);
     }
 }
 
@@ -245,16 +239,14 @@ TEST_CASE("Copy and Move Owning TwoTuple")
         U x{};
         U y{i, j};
         x = y;
-        REQUIRE(rs::equal(get<0>(x), i));
-        REQUIRE(rs::equal(get<1>(x), j));
+        REQUIRE(x == y);
     }
 
     SECTION("copy construction")
     {
         U y{i, j};
         U x{y};
-        REQUIRE(rs::equal(get<0>(x), i));
-        REQUIRE(rs::equal(get<1>(x), j));
+        REQUIRE(x == y);
     }
 
     SECTION("move assignment")
@@ -262,8 +254,7 @@ TEST_CASE("Copy and Move Owning TwoTuple")
         U x{};
         U y{i, j};
         x = MOVE(y);
-        REQUIRE(rs::equal(get<0>(x), i));
-        REQUIRE(rs::equal(get<1>(x), j));
+        REQUIRE(x == y);
     }
 
     SECTION("move construction")
@@ -279,8 +270,7 @@ TEST_CASE("Copy and Move Owning TwoTuple")
         U x{};
         auto y = Tuple{i, j};
         x = y;
-        REQUIRE(rs::equal(get<0>(x), i));
-        REQUIRE(rs::equal(get<1>(x), j));
+        REQUIRE(x == y);
     }
 
     SECTION("from generate")
@@ -296,6 +286,7 @@ TEST_CASE("Copy and Move Owning TwoTuple")
         x = tt;
         REQUIRE(rs::size(get<0>(x)) == rs::size(get<0>(tt)));
         REQUIRE(rs::size(get<1>(x)) == rs::size(get<1>(tt)));
+        REQUIRE(x == tt);
     }
 }
 
@@ -311,17 +302,21 @@ TEST_CASE("Nested Construction")
 
     {
         Tuple<Tuple<T>> x{Tuple<T>{i}};
+        REQUIRE(x == i);
 
         auto&& [a] = x;
-        REQUIRE(rs::equal(a, i));
+        REQUIRE(a == i);
 
         Tuple<Tuple<T>> y{x};
+        REQUIRE(y == x);
+
         auto&& [b] = y;
-        REQUIRE(rs::equal(b, i));
+        REQUIRE(b == i);
     }
 
     {
         Tuple<Tuple<T, T>> x{Tuple<T, T>{i, j}};
+        REQUIRE(x == Tuple{Tuple{i, j}});
 
         auto&& [a, b] = get<0>(x);
         REQUIRE(rs::equal(a, i));
@@ -330,20 +325,20 @@ TEST_CASE("Nested Construction")
 
     {
         Tuple<Tuple<T>, Tuple<T, T>> x{Tuple<T>{i}, Tuple<T, T>{j, k}};
+        REQUIRE(x == Tuple{Tuple{i}, Tuple{j, k}});
 
         auto&& [a, b] = x;
-        REQUIRE(rs::equal(a, i));
-        REQUIRE(rs::equal(get<0>(b), j));
-        REQUIRE(rs::equal(get<1>(b), k));
+        REQUIRE(a == i);
+        REQUIRE(b == Tuple{j, k});
     }
 
     {
         Tuple<Tuple<T>, Tuple<T, T>> x{Tuple{i}, Tuple{j, k}};
+        REQUIRE(x == Tuple{Tuple{i}, Tuple{j, k}});
 
         auto&& [a, b] = x;
-        REQUIRE(rs::equal(a, i));
-        REQUIRE(rs::equal(get<0>(b), j));
-        REQUIRE(rs::equal(get<1>(b), k));
+        REQUIRE(a == i);
+        REQUIRE(b == Tuple{j, k});
     }
 }
 
@@ -355,25 +350,23 @@ TEST_CASE("Conversion OneTuples")
     auto x = Tuple<std::vector<int>>{std::vector{1, 2, 3}};
     Tuple<std::span<int>> y = x;
 
-    REQUIRE(x.size() == y.size());
-    REQUIRE(rs::equal(x, y));
+    REQUIRE(x == y);
 
     Tuple<std::span<int>> yy{};
     yy = x;
-    REQUIRE(x.size() == yy.size());
-    REQUIRE(rs::equal(x, yy));
+    REQUIRE(x == yy);
 
     Tuple<std::span<const int>> z = x;
     REQUIRE(x.size() == z.size());
-    REQUIRE(rs::equal(x, z));
+    REQUIRE(x == z);
 
     Tuple<std::span<const int>> zz = y;
     REQUIRE(x.size() == zz.size());
-    REQUIRE(rs::equal(x, zz));
+    REQUIRE(x == zz);
 
     Tuple<std::vector<int>> q = y;
     REQUIRE(q.size() == y.size());
-    REQUIRE(rs::equal(q, y));
+    REQUIRE(q == y);
 }
 
 TEST_CASE("Conversion ThreeTuples")
@@ -388,23 +381,16 @@ TEST_CASE("Conversion ThreeTuples")
         Tuple<T, T, T>{std::vector{1, 2, 3}, std::vector{1}, std::vector{5, 4, 3, 2}};
     Tuple<U, U, U> y = x;
 
-    auto&& [a, b, c] = x;
-
-    REQUIRE(rs::equal(a, get<0>(y)));
-    REQUIRE(rs::equal(b, get<1>(y)));
-    REQUIRE(rs::equal(c, get<2>(y)));
+    REQUIRE(x == y);
 
     Tuple<V, V, V> z = x;
-    REQUIRE(rs::equal(a, get<0>(z)));
-    REQUIRE(rs::equal(b, get<1>(z)));
-    REQUIRE(rs::equal(c, get<2>(z)));
+    REQUIRE(z == x);
 
     Tuple<V, V, V> zz = y;
-    REQUIRE(rs::equal(a, get<0>(zz)));
-    REQUIRE(rs::equal(b, get<1>(zz)));
-    REQUIRE(rs::equal(c, get<2>(zz)));
+    REQUIRE(zz == y);
 
     Tuple<T, T, T> q = y;
+    REQUIRE(q == y);
 }
 
 TEST_CASE("Conversion Nested ThreeTuples")
@@ -438,22 +424,13 @@ TEST_CASE("Conversion Nested ThreeTuples")
     REQUIRE(rs::equal(get<Rz>(x), get<Rz>(z)));
 
     Tuple<Tuple<V>, Tuple<V, V, V>> zz = y;
-    REQUIRE(rs::equal(get<0>(x), get<0>(zz)));
-    REQUIRE(rs::equal(get<1, 0>(x), get<1, 0>(zz)));
-    REQUIRE(rs::equal(get<1, 1>(x), get<1, 1>(zz)));
-    REQUIRE(rs::equal(get<1, 2>(x), get<1, 2>(zz)));
+    REQUIRE(zz == y);
 
     Tuple<Tuple<T>, Tuple<T, T, T>> a = x;
-    REQUIRE(rs::equal(get<0>(x), get<0>(a)));
-    REQUIRE(rs::equal(get<1, 0>(x), get<1, 0>(a)));
-    REQUIRE(rs::equal(get<1, 1>(x), get<1, 1>(a)));
-    REQUIRE(rs::equal(get<1, 2>(x), get<1, 2>(a)));
+    REQUIRE(a == x);
 
     Tuple<Tuple<T>, Tuple<T, T, T>> b = zz;
-    REQUIRE(rs::equal(get<0>(x), get<0>(b)));
-    REQUIRE(rs::equal(get<1, 0>(x), get<1, 0>(b)));
-    REQUIRE(rs::equal(get<1, 1>(x), get<1, 1>(b)));
-    REQUIRE(rs::equal(get<1, 2>(x), get<1, 2>(b)));
+    REQUIRE(b == zz);
 }
 
 TEST_CASE("numeric assignment with owning tuple")
@@ -465,13 +442,12 @@ TEST_CASE("numeric assignment with owning tuple")
     auto x = Tuple{std::vector{1, 2, 3}};
     x = 0;
     REQUIRE(rs::size(x) == 3u);
-    REQUIRE(rs::equal(x, zeros));
+    REQUIRE(x == zeros);
 
     auto y = Tuple{std::vector{1, 2, 3}, std::vector{4, 5, 6}};
-    REQUIRE(rs::equal(get<1>(y), std::vector{4, 5, 6}));
+    REQUIRE(y == Tuple(vs::iota(1, 4), vs::iota(4, 7)));
     y = 0;
-    REQUIRE(rs::equal(get<0>(y), zeros));
-    REQUIRE(rs::equal(get<1>(y), zeros));
+    REQUIRE(y == Tuple{zeros, zeros});
 }
 
 TEST_CASE("numeric assignment with non-owning tuple")
@@ -485,15 +461,14 @@ TEST_CASE("numeric assignment with non-owning tuple")
     auto x = Tuple{v};
     x = 0;
     REQUIRE(rs::size(x) == 3u);
-    REQUIRE(rs::equal(x, zeros));
-    REQUIRE(rs::equal(x, v));
+    REQUIRE(x == zeros);
+    REQUIRE(x == v);
 
     auto u = std::vector{1, 2, 3};
     auto w = std::vector{4, 5, 6};
     auto y = Tuple{u, w};
-    REQUIRE(rs::equal(get<1>(y), w));
+    REQUIRE(y == Tuple{vs::iota(1, 4), vs::iota(4, 7)});
     y = 0;
-    REQUIRE(rs::equal(get<0>(y), zeros));
-    REQUIRE(rs::equal(get<1>(y), zeros));
-    REQUIRE(rs::equal(get<1>(y), w));
+    REQUIRE(y == Tuple{zeros, zeros});
+    REQUIRE(y == Tuple{u, v});
 }

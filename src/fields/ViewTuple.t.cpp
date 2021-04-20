@@ -29,7 +29,7 @@ TEST_CASE("construction")
     ViewTuple<T&> zz{MOVE(yy)};
     ViewTuple<T&> x{zz};
 
-    REQUIRE(rs::equal(x, v));
+    REQUIRE(x == v);
 
     auto [y] = x;
     REQUIRE(rs::equal(y, v));
@@ -41,7 +41,7 @@ TEST_CASE("construction")
     REQUIRE(rs::equal(a, std::vector<real>{1, 2, 3}));
     REQUIRE(rs::equal(b, std::vector<real>{3, 4, 5}));
     for (auto&& i : b) i *= 2;
-    REQUIRE(rs::equal(vv, T{6, 8, 10}));
+    REQUIRE(vv == T{6, 8, 10});
 }
 
 TEST_CASE("AsView")
@@ -79,8 +79,8 @@ TEST_CASE("Assignment with ViewTuple<Vector&>")
     U x{v};
 
     x = -1;
-    REQUIRE(rs::equal(v, T{-1, -1, -1}));
-    REQUIRE(rs::equal(v, x));
+    REQUIRE(v == T{-1, -1, -1});
+    REQUIRE(x == v);
     REQUIRE(rs::equal(get<0>(x), v));
 
     x = vs::iota(1, 10);
@@ -89,7 +89,7 @@ TEST_CASE("Assignment with ViewTuple<Vector&>")
 
     x = T{-1, -2};
     REQUIRE(x.size() == 2u);
-    REQUIRE(rs::equal(v, T{-1, -2}));
+    REQUIRE(v == T{-1, -2});
 }
 
 TEST_CASE("Assignment from Container")
@@ -104,7 +104,7 @@ TEST_CASE("Assignment from Container")
     auto c = ContainerTuple<T>{vs::iota(0, 10)};
     x = c;
 
-    REQUIRE(rs::equal(x, vs::iota(0, 10)));
+    REQUIRE(x == vs::iota(0, 10));
 }
 
 TEST_CASE("Copy with ViewTuple<Vector&>")
@@ -121,12 +121,12 @@ TEST_CASE("Copy with ViewTuple<Vector&>")
     ViewTuple<T&> y{u};
 
     x = y;
-    REQUIRE(rs::equal(v, T{4, 5, 6}));
+    REQUIRE(v == T{4, 5, 6});
 
     auto w = T{3, 4, 5, 6};
     x = ViewTuple<T&>{w};
-    REQUIRE(rs::equal(w, T{3, 4, 5, 6}));
-    REQUIRE(rs::equal(x, w));
+    REQUIRE(w == T{3, 4, 5, 6});
+    REQUIRE(x == w);
 }
 
 TEST_CASE("Assignment with ViewTuple<Vector&, Vector&>")
@@ -141,19 +141,15 @@ TEST_CASE("Assignment with ViewTuple<Vector&, Vector&>")
     ViewTuple<T&, T&> x{u, v};
 
     x = -1;
-    REQUIRE(rs::equal(v, T{-1, -1, -1, -1}));
-    REQUIRE(rs::equal(u, T{-1, -1, -1}));
+    REQUIRE(x == ViewTuple{vs::repeat_n(-1, u.size()), vs::repeat_n(-1, v.size())});
     REQUIRE(rs::equal(v, get<1>(x)));
     REQUIRE(rs::equal(get<0>(x), u));
 
-    {
-        auto q = T{6, 7, 8, 9};
-        auto r = T{10, 11, 12, 13, 14};
-        x = ViewTuple<T&, T&>{q, r};
-    }
+    auto q = T{6, 7, 8, 9};
+    auto r = T{10, 11, 12, 13, 14};
+    x = ViewTuple<T&, T&>{q, r};
 
-    REQUIRE(rs::equal(u, T{6, 7, 8, 9}));
-    REQUIRE(rs::equal(v, T{10, 11, 12, 13, 14}));
+    REQUIRE(ViewTuple{u, v} == ViewTuple{q, r});
 }
 
 TEST_CASE("Assignment with ViewTuple<span>")
@@ -167,17 +163,17 @@ TEST_CASE("Assignment with ViewTuple<span>")
     ViewTuple<std::span<real>> x{v};
 
     x = -1;
-    REQUIRE(rs::equal(v, T{-1, -1, -1}));
-    REQUIRE(rs::equal(v, x));
+    REQUIRE(v == T{-1, -1, -1});
+    REQUIRE(x == v);
     REQUIRE(rs::equal(get<0>(x), v));
 
     x = vs::iota(1, 10);
     REQUIRE(x.size() == 3u);
-    REQUIRE(rs::equal(v, T{1, 2, 3}));
+    REQUIRE(v == T{1, 2, 3});
 
     x = T{-1, -2};
     REQUIRE(x.size() == 3u);
-    REQUIRE(rs::equal(v, T{-1, -2, 3}));
+    REQUIRE(v == T{-1, -2, 3});
 }
 
 TEST_CASE("Assignment with ViewTuple of Const")
@@ -202,34 +198,34 @@ TEST_CASE("Copying NonOutput OneTuples")
     using T = ViewTuple<X>;
 
     T t{vs::iota(0, 10)};
-    REQUIRE(rs::equal(t, vs::iota(0, 10)));
+    REQUIRE(t == vs::iota(0, 10));
 
     {
         T u{};
         u = t;
-        REQUIRE(rs::equal(u, vs::iota(0, 10)));
+        REQUIRE(u == vs::iota(0, 10));
     }
 
     {
         T u{t};
-        REQUIRE(rs::equal(u, vs::iota(0, 10)));
+        REQUIRE(u == vs::iota(0, 10));
     }
 
     {
         T u{t};
         T v{MOVE(u)};
-        REQUIRE(rs::equal(v, vs::iota(0, 10)));
+        REQUIRE(v == vs::iota(0, 10));
     }
 
     {
         T v{};
         T u{t};
         v = MOVE(u);
-        REQUIRE(rs::equal(v, vs::iota(0, 10)));
+        REQUIRE(v == vs::iota(0, 10));
     }
 
     t = T{vs::iota(5, 10)};
-    REQUIRE(rs::equal(t, vs::iota(5, 10)));
+    REQUIRE(t == vs::iota(5, 10));
 }
 
 TEST_CASE("Copying NonOutput TwoTuples")
@@ -250,33 +246,25 @@ TEST_CASE("Copying NonOutput TwoTuples")
     {
         T u{};
         u = t;
-        auto [x, y] = u;
-        REQUIRE(rs::equal(x, vs::iota(0, 10)));
-        REQUIRE(rs::equal(y, vs::iota(5, 10)));
+        REQUIRE(t == u);
     }
 
     {
         T u{t};
-        auto [x, y] = u;
-        REQUIRE(rs::equal(x, vs::iota(0, 10)));
-        REQUIRE(rs::equal(y, vs::iota(5, 10)));
+        REQUIRE(t == u);
     }
 
     {
         T u{t};
         T v{MOVE(u)};
-        auto [x, y] = v;
-        REQUIRE(rs::equal(x, vs::iota(0, 10)));
-        REQUIRE(rs::equal(y, vs::iota(5, 10)));
+        REQUIRE(t == u);
     }
 
     {
         T v{};
         T u{t};
         v = MOVE(u);
-        auto [x, y] = v;
-        REQUIRE(rs::equal(x, vs::iota(0, 10)));
-        REQUIRE(rs::equal(y, vs::iota(5, 10)));
+        REQUIRE(t == v);
     }
 
     t = T{vs::iota(2, 5), vs::iota(3, 10)};
@@ -298,21 +286,21 @@ TEST_CASE("Non-Modifying Math OneTuples")
 
     static_assert(std::tuple_size_v<std::remove_cvref_t<decltype(u)>> == 1u);
 
-    REQUIRE(rs::equal(1 + u + 1 + u, T{4, 6, 8}));
+    REQUIRE(1 + u + 1 + u == T{4, 6, 8});
 
     auto v_ = T(3);
     ViewTuple<T&> v{v_};
 
     // conversion
     v = 1 + u + 1 + u;
-    REQUIRE(rs::equal(v, T{4, 6, 8}));
+    REQUIRE(v == T{4, 6, 8});
 
     ViewTuple<std::span<real>> w{v_};
     w = 0;
-    REQUIRE(rs::equal(v_, T{0, 0, 0}));
+    REQUIRE(v_ == T{0, 0, 0});
 
     w = 1 + u + 1 + u;
-    REQUIRE(rs::equal(w, T{4, 6, 8}));
+    REQUIRE(w == T{4, 6, 8});
 }
 
 TEST_CASE("Non-Modifying Math TwoTuples")
@@ -320,6 +308,7 @@ TEST_CASE("Non-Modifying Math TwoTuples")
     using namespace ccs;
     using namespace field::tuple;
     using T = std::vector<real>;
+    using C = ContainerTuple<T, T>;
 
     auto a_ = T{1, 2, 3};
     auto b_ = T{3, 4};
@@ -338,9 +327,7 @@ TEST_CASE("Non-Modifying Math TwoTuples")
     ViewTuple<std::span<real>, std::span<real>> v{c_, d_};
 
     v = 1 + u + 1 + u;
-    auto [a, b] = v;
-    REQUIRE(rs::equal(a, T{4, 6, 8}));
-    REQUIRE(rs::equal(b, T{8, 10}));
+    REQUIRE(v == C{T{4, 6, 8}, T{8, 10}});
 }
 
 TEST_CASE("Modifying Math OneTuples")
@@ -355,14 +342,13 @@ TEST_CASE("Modifying Math OneTuples")
     static_assert(std::tuple_size_v<std::remove_cvref_t<decltype(u)>> == 1u);
 
     u += 2;
-    REQUIRE(rs::equal(u, T{3, 4, 5}));
-    // REQUIRE(rs::equal(1 + u + 1 + u, T{4, 6, 8}));
+    REQUIRE(u == T{3, 4, 5});
 
     auto v_ = T{1, 2, 3};
     ViewTuple<T&> v{v_};
 
     u += v;
-    REQUIRE(rs::equal(u, T{4, 6, 8}));
+    REQUIRE(u == T{4, 6, 8});
 }
 
 TEST_CASE("Pipe Syntax OneTuples")
@@ -380,7 +366,7 @@ TEST_CASE("Pipe Syntax OneTuples")
     auto v = ViewTuple{b};
 
     v = u | vs::transform([](auto&& i) { return i * i; });
-    REQUIRE(rs::equal(b, T{1, 4, 9}));
+    REQUIRE(b == T{1, 4, 9});
 }
 
 TEST_CASE("Pipe Syntax TwoTuples")
@@ -394,12 +380,8 @@ TEST_CASE("Pipe Syntax TwoTuples")
 
     auto v = ViewTuple{vs::iota(0, 10), vs::iota(-10, 10)};
 
-    auto u = v | vs::transform(f);
-
-    auto [a, b] = u;
-
-    REQUIRE(rs::equal(a, vs::zip_with(std::plus{}, i, i)));
-    REQUIRE(rs::equal(b, vs::zip_with(std::plus{}, j, j)));
+    REQUIRE((v | vs::transform(f)) ==
+            ViewTuple{vs::zip_with(std::plus{}, i, i), vs::zip_with(std::plus{}, j, j)});
 }
 
 TEST_CASE("MultiPipe Syntax")
@@ -415,12 +397,9 @@ TEST_CASE("MultiPipe Syntax")
 
     auto v = ViewTuple{vs::iota(0, 10), vs::iota(-10, 10)};
 
-    auto u = v | std::tuple{vs::transform(f), vs::transform(g)};
-
-    auto [a, b] = u;
-
-    REQUIRE(rs::equal(a, vs::zip_with(std::plus{}, i, i)));
-    REQUIRE(rs::equal(b, vs::zip_with(std::multiplies{}, j, j)));
+    REQUIRE((v | std::tuple{vs::transform(f), vs::transform(g)}) ==
+            ViewTuple{vs::zip_with(std::plus{}, i, i),
+                      vs::zip_with(std::multiplies{}, j, j)});
 }
 
 // type for mocking Selection
