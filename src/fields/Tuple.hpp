@@ -19,7 +19,7 @@ struct Tuple : ContainerTuple<Args...>, ViewTuple<Args&...> {
     using View = ViewTuple<Args&...>;
     using Type = Tuple<Args...>;
 
-    Tuple() = default;
+    Tuple() : Container{}, View{*this} {}
 
     Tuple(Args&&... args) : Container{FWD(args)...}, View{*this} {}
 

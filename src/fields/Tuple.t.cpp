@@ -56,6 +56,36 @@ TEST_CASE("concepts")
     REQUIRE(All<Tuple<W&>>);
 }
 
+TEST_CASE("Default construction")
+{
+    using namespace ccs;
+    using namespace field;
+    using T = std::vector<real>;
+
+    {
+        T t{};
+        REQUIRE(rs::size(t) == 0);
+    }
+
+    {
+        Tuple<T> t{};
+        REQUIRE(rs::size(t) == 0);
+    }
+
+    {
+        Tuple<T, T> t{};
+        REQUIRE(rs::size(get<0>(t)) == 0);
+        REQUIRE(rs::size(get<1>(t)) == 0);
+    }
+
+    {
+        Tuple<Tuple<T>, Tuple<T, T>> t{};
+        REQUIRE(rs::size(get<0>(t)) == 0);
+        REQUIRE(rs::size(get<1, 0>(t)) == 0);
+        REQUIRE(rs::size(get<1, 1>(t)) == 0);
+    }
+}
+
 TEST_CASE("construction from subrange")
 {
     using namespace ccs;

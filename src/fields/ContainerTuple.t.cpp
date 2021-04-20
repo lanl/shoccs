@@ -13,6 +13,43 @@
 
 #include <vector>
 
+TEST_CASE("default construction")
+{
+    using namespace ccs;
+    using namespace ccs::field::tuple;
+
+    using T = std::vector<real>;
+
+    {
+        T t{};
+        REQUIRE(rs::size(t) == 0);
+    }
+
+    {
+        std::tuple<T> t{};
+        REQUIRE(rs::size(get<0>(t)) == 0);
+    }
+
+    {
+        ContainerTuple<T> t{};
+        REQUIRE(rs::size(get<0>(t)) == 0);
+    }
+
+    {
+        ContainerTuple<T, T> t{};
+        REQUIRE(rs::size(get<0>(t)) == 0);
+        REQUIRE(rs::size(get<1>(t)) == 0);
+    }
+
+    {
+        ContainerTuple<ContainerTuple<T>, ContainerTuple<T, T>> t{};
+        auto&& [a, b] = t;
+        REQUIRE(rs::size(get<0>(a)) == 0);
+        REQUIRE(rs::size(get<0>(b)) == 0);
+        REQUIRE(rs::size(get<1>(b)) == 0);
+    }
+}
+
 TEST_CASE("Structured Binding")
 {
     using namespace ccs;
