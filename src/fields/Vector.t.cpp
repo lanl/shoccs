@@ -72,9 +72,7 @@ TEST_CASE("conversion")
                       Tuple{vs::iota(1, 5), vs::iota(5, 10), vs::iota(8, 10)}}};
 
     Vector<std::span<const int>> r = v;
-
-    REQUIRE(get<Dx>(v).size() == get<Dx>(r).size());
-    REQUIRE(rs::equal(get<Dx>(v), get<Dx>(r)));
+    REQUIRE(r == v);
 
     // auto f = [](SimpleVector<std::span<int>> x) {
     //     auto q = SimpleVector<std::vector<int>>{
@@ -106,36 +104,36 @@ TEST_CASE("to scalar")
 
     {
         ScalarView_Const sx = get<X>(v);
-        REQUIRE(rs::equal(get<D>(sx), get<Dx>(v)));
-        REQUIRE(rs::equal(get<Rx>(sx), get<xRx>(v)));
+        REQUIRE(sx == get<0>(v));
     }
 
     {
         ScalarView_Mutable sx = get<X>(v);
+        REQUIRE(sx == get<0>(v));
         sx | selector::D = 1;
         REQUIRE(rs::equal(get<Dx>(v), vs::repeat_n(1., 10)));
     }
 
     {
         ScalarView_Const sy = get<Y>(v);
-        REQUIRE(rs::equal(sy | selector::D, get<Dy>(v)));
-        REQUIRE(rs::equal(sy | selector::Ry, get<yRy>(v)));
+        REQUIRE(sy == get<1>(v));
     }
 
     {
         ScalarView_Mutable sy = get<Y>(v);
+        REQUIRE(sy == get<1>(v));
         sy | selector::D = 1;
         REQUIRE(rs::equal(get<Dy>(v), vs::repeat_n(1., 10)));
     }
 
     {
         ScalarView_Const sz = get<Z>(v);
-        REQUIRE(rs::equal(sz | selector::D, get<Dz>(v)));
-        REQUIRE(rs::equal(sz | selector::Rz, get<zRz>(v)));
+        REQUIRE(sz == get<2>(v));
     }
 
     {
         ScalarView_Mutable sz = get<Z>(v);
+        REQUIRE(sz == get<2>(v));
         sz | selector::D = 1;
         REQUIRE(rs::equal(get<Dz>(v), vs::repeat_n(1., 10)));
     }
@@ -143,7 +141,7 @@ TEST_CASE("to scalar")
     {
         VectorView_Const vvc = v;
         ScalarView_Const sx = get<X>(vvc);
-        REQUIRE(rs::equal(sx | selector::D, get<Dx>(vvc)));
+        REQUIRE(sx == get<0>(vvc));
     }
 }
 
@@ -162,7 +160,7 @@ TEST_CASE("selection")
                        Tuple{vs::iota(1, 5), vs::iota(5, 10), vs::iota(8, 10)}}};
     VectorView_Mutable v = v_;
 
-    REQUIRE(rs::equal(vs::iota(0, 10), v | selector::Dx));
+    REQUIRE((v | selector::Dx) == vs::iota(0, 10));
     REQUIRE(rs::equal(vs::iota(10, 20), v | selector::Dy));
     REQUIRE(rs::equal(vs::iota(20, 30), v | selector::Dz));
     REQUIRE(rs::equal(vs::iota(0, 3), get<X>(v | selector::Rx)));

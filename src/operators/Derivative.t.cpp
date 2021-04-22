@@ -7,6 +7,7 @@
 #include "IdentityStencil.hpp"
 #include "fields/Selector.hpp"
 #include "random/random.hpp"
+#include "stencils/Stencils.hpp"
 
 #include <range/v3/algorithm/mismatch.hpp>
 #include <range/v3/all.hpp>
@@ -15,7 +16,16 @@
 #include <range/v3/view/generate_n.hpp>
 #include <range/v3/view/stride.hpp>
 
-constexpr auto g = []() { return ccs::pick(); };
+using namespace ccs;
+
+constexpr auto g = []() { return pick(); };
+
+// 2nd order polynomial for use with E2
+constexpr auto f2 = [](auto&& loc) {
+    auto&& [x, y, z] = loc;
+    return x * x * (y + z) + y * y * (x + z) + z * z * (x + y) + 3 * x * y * z + x + y +
+           z;
+};
 
 TEST_CASE("Identity FFFFFF")
 {
@@ -37,6 +47,37 @@ TEST_CASE("Identity FFFFFF")
     randomize();
     Scalar<T> u{};
     u | selector::D = vs::generate_n(g, m.size());
+
+    Scalar<T> du{u};
+    REQUIRE((integer)rs::size(du | selector::D) == m.size());
+
+    for (int i = 0; i < 3; i++) {
+        auto d = operators::Derivative{i, m, stencils::Identity, gridBcs, objectBcs};
+        d(u, du);
+
+        REQUIRE_THAT(get<selector::scalar::D>(u), Approx(get<selector::scalar::D>(du)));
+    }
+}
+
+TEST_CASE("E2_2 FFFFFF")
+{
+    using namespace ccs;
+    using namespace mesh;
+    using namespace field;
+    using Catch::Matchers::Approx;
+    using T = std::vector<real>;
+
+    const auto extents = int3{5, 7, 6};
+
+    auto m =
+        Mesh{DomainBounds{.min = {-1, -1, 0}, .max = {1, 2, 2.2}}, IndexExtents{extents}};
+
+    const auto gridBcs = bcs::Grid{bcs::ff, bcs::ff, bcs::ff};
+    const auto objectBcs = bcs::Object{};
+
+    // initialize fields
+    Scalar<T> u{};
+    u | selector::D = m.location() | vs::transform(f2);
 
     Scalar<T> du{u};
     REQUIRE((integer)rs::size(du | selector::D) == m.size());

@@ -41,7 +41,6 @@ class Mesh
 {
     Cartesian cartesian;
     CutGeometry geometry;
-    field::tuple::Location location;
     std::array<std::vector<Line>, 3> lines_;
 
 public:
@@ -58,8 +57,6 @@ public:
 
     constexpr int dims() const { return cartesian.dims(); }
 
-    operator field::tuple::Location() const { return location; }
-
     const auto& lines(int i) const { return lines_[i]; }
 
     constexpr real h(int i) const { return cartesian.h(i); }
@@ -74,6 +71,8 @@ public:
         const auto& n = extents();
         return ijk[0] * n[1] * n[2] + ijk[1] * n[2] + ijk[2];
     }
+
+    constexpr auto location() const { return views::location(); }
 
     constexpr auto xmin() const { return views::xmin(extents()); }
 

@@ -38,10 +38,8 @@ TEST_CASE("construction")
                 Tuple{vs::iota(0, 3), vs::iota(3, 6), vs::iota(-1, 2)}};
 
     auto&& [D, Rxyz] = s;
-    REQUIRE(rs::equal(get<0>(D), vs::iota(0, 10)));
-    REQUIRE(rs::equal(get<0>(Rxyz), vs::iota(0, 3)));
-    REQUIRE(rs::equal(get<1>(Rxyz), vs::iota(3, 6)));
-    REQUIRE(rs::equal(get<2>(Rxyz), vs::iota(-1, 2)));
+    REQUIRE(D == vs::iota(0, 10));
+    REQUIRE(Rxyz == Tuple{vs::iota(0, 3), vs::iota(3, 6), vs::iota(-1, 2)});
 
     static_assert(std::same_as<decltype(get<0, 0>(s)), decltype(get<0>(get<0>(s)))>);
     static_assert(
@@ -59,8 +57,7 @@ TEST_CASE("conversion")
 
     Scalar<std::span<const int>> r = s;
 
-    REQUIRE(get<0>(s).size() == get<0>(r).size());
-    REQUIRE(rs::equal(get<0>(s), get<0>(r)));
+    REQUIRE(r == s);
 
     // auto f = [](SimpleScalar<std::span<int>> x) {
     //     auto q = SimpleScalar<std::vector<int>>{
@@ -126,22 +123,18 @@ TEST_CASE("math")
     constexpr auto plus = [](auto&& a, auto&& b) {
         return vs::zip_with(std::plus{}, FWD(a), FWD(b));
     };
-    REQUIRE(rs::equal(plus(vs::iota(2, 6), vs::iota(1, 5)), get<0>(r)));
-    REQUIRE(rs::equal(plus(vs::iota(11, 16), vs::iota(10, 15)), get<Rz>(r)));
+    REQUIRE(r == Tuple{Tuple{plus(vs::iota(2, 6), vs::iota(1, 5))},
+                       Tuple{plus(vs::iota(6, 10), vs::iota(7, 11)),
+                             plus(vs::iota(6, 12), vs::iota(7, 13)),
+                             plus(vs::iota(10, 15), vs::iota(11, 16))}});
 
     Scalar<std::vector<int>> t = r;
-    REQUIRE(rs::equal(get<0>(t), get<0>(r)));
-    REQUIRE(rs::equal(get<Rx>(t), get<Rx>(r)));
-    REQUIRE(rs::equal(get<Ry>(t), get<Ry>(r)));
-    REQUIRE(rs::equal(get<Rz>(t), get<Rz>(r)));
+    REQUIRE(t == r);
 
     Scalar<std::vector<int>> a{s};
     Scalar<std::span<int>> b = a;
     b = r;
-    REQUIRE(rs::equal(get<0>(b), get<0>(r)));
-    REQUIRE(rs::equal(get<Rx>(b), get<Rx>(r)));
-    REQUIRE(rs::equal(get<Ry>(b), get<Ry>(r)));
-    REQUIRE(rs::equal(get<Rz>(b), get<Rz>(r)));
+    REQUIRE(b == r);
 }
 
 TEST_CASE("lifting single arg")
@@ -156,10 +149,7 @@ TEST_CASE("lifting single arg")
     auto j = f(s);
     auto k = s + 1;
 
-    REQUIRE(rs::equal(get<0>(j), get<0>(k)));
-    REQUIRE(rs::equal(get<Rx>(j), get<Rx>(k)));
-    REQUIRE(rs::equal(get<Ry>(j), get<Ry>(k)));
-    REQUIRE(rs::equal(get<Rz>(j), get<Rz>(k)));
+    REQUIRE(j == k);
 }
 
 TEST_CASE("lifting multiple args")
