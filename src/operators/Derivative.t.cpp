@@ -189,6 +189,86 @@ TEST_CASE("Identity Mixed")
     }
 }
 
+TEST_CASE("E2 Mixed")
+{
+    using namespace ccs;
+    using namespace mesh;
+    using namespace field;
+    using Catch::Matchers::Approx;
+    using T = std::vector<real>;
+
+    const auto extents = int3{5, 7, 6};
+
+    auto m = Mesh{DomainBounds{.min = {0.1, 0.2, 0.3}, .max = {1, 2, 2.2}},
+                  IndexExtents{extents}};
+
+    const auto objectBcs = bcs::Object{};
+
+    // initialize fields
+    Scalar<T> u{};
+    u | selector::D = m.location() | vs::transform(f2);
+
+    SECTION("DDFFFD")
+    {
+
+        const auto gridBcs = bcs::Grid{bcs::dd, bcs::ff, bcs::fd};
+        // set the exact du we expect based on zeros assigned to dirichlet locations
+        Scalar<T> dx{u}, dy{u}, dz{u};
+        dx | selector::D = m.location() | vs::transform(f2_dx);
+        dy | selector::D = m.location() | vs::transform(f2_dy);
+        dz | selector::D = m.location() | vs::transform(f2_dz);
+        std::array<Scalar<T>*, 3> dd{&dx, &dy, &dz};
+
+        Scalar<T> du{u};
+        REQUIRE((integer)rs::size(du | selector::D) == m.size());
+
+        for (int i = 0; i < m.dims(); i++) {
+            auto d =
+                operators::Derivative{i, m, stencils::second::E2, gridBcs, objectBcs};
+            d(u, du);
+
+            auto& ex = *dd[i];
+            // zero boundaries
+            ex | selector::D | m.xmin() = 0;
+            ex | selector::D | m.xmax() = 0;
+            ex | selector::D | m.zmax() = 0;
+
+            REQUIRE_THAT(get<selector::scalar::D>(ex),
+                         Approx(get<selector::scalar::D>(du)));
+        }
+    }
+
+    SECTION("FFDDDF")
+    {
+
+        const auto gridBcs = bcs::Grid{bcs::ff, bcs::dd, bcs::df};
+        // set the exact du we expect based on zeros assigned to dirichlet locations
+        Scalar<T> dx{u}, dy{u}, dz{u};
+        dx | selector::D = m.location() | vs::transform(f2_dx);
+        dy | selector::D = m.location() | vs::transform(f2_dy);
+        dz | selector::D = m.location() | vs::transform(f2_dz);
+        std::array<Scalar<T>*, 3> dd{&dx, &dy, &dz};
+
+        Scalar<T> du{u};
+        REQUIRE((integer)rs::size(du | selector::D) == m.size());
+
+        for (int i = 0; i < m.dims(); i++) {
+            auto d =
+                operators::Derivative{i, m, stencils::second::E2, gridBcs, objectBcs};
+            d(u, du);
+
+            auto& ex = *dd[i];
+            // zero boundaries
+            ex | selector::D | m.ymin() = 0;
+            ex | selector::D | m.ymax() = 0;
+            ex | selector::D | m.zmin() = 0;
+
+            REQUIRE_THAT(get<selector::scalar::D>(ex),
+                         Approx(get<selector::scalar::D>(du)));
+        }
+    }
+}
+
 TEST_CASE("Identity with Objects")
 {
     using namespace ccs;
@@ -240,4 +320,51 @@ TEST_CASE("Identity with Objects")
 
     REQUIRE_THAT(get<selector::scalar::D>(du_x), Approx(get<selector::scalar::D>(du_y)));
     REQUIRE_THAT(get<selector::scalar::D>(du_x), Approx(get<selector::scalar::D>(du_z)));
+}
+
+TEST_CASE("E2 with Objects")
+{
+    using namespace ccs;
+    using namespace mesh;
+    using namespace field;
+    using Catch::Matchers::Approx;
+    using T = std::vector<real>;
+
+    const auto extents = int3{16, 19, 18};
+
+    auto m = Mesh{DomainBounds{.min = {0.1, 0.2, 0.3}, .max = {1, 2, 2.2}},
+                  IndexExtents{extents},
+                  std::vector<shape>{make_sphere(0, real3{0.45, 1.011, 1.31}, 0.25)}};
+
+    const auto gridBcs = bcs::Grid{bcs::ff, bcs::ff, bcs::ff};
+    const auto objectBcs = bcs::Object{bcs::Dirichlet};
+
+    // initialize fields
+    Scalar<T> u{};
+    u | selector::D = m.location() | vs::transform(f2);
+    u | selector::R = m.location() | vs::transform(f2);
+    REQUIRE(rs::size(u | selector::Rx) == m.Rx().size());
+
+    Scalar<T> du_x{u}, du_y{u}, du_z{u};
+    du_x | selector::D = m.location() | vs::transform(f2_dx);
+    du_x | selector::Rx = m.location() | vs::transform(f2_dx);
+    du_y | selector::D = m.location() | vs::transform(f2_dy);
+    du_y | selector::Ry = m.location() | vs::transform(f2_dy);
+    du_z | selector::D = m.location() | vs::transform(f2_dz);
+    du_z | selector::Rz = m.location() | vs::transform(f2_dz);
+
+    REQUIRE((integer)rs::size(du_x | selector::D) == m.size());
+
+    auto dx = operators::Derivative{0, m, stencils::second::E2, gridBcs, objectBcs};
+    auto dy = operators::Derivative{1, m, stencils::second::E2, gridBcs, objectBcs};
+    auto dz = operators::Derivative{2, m, stencils::second::E2, gridBcs, objectBcs};
+
+    dx(u, du_x);
+    dy(u, du_y);
+    dz(u, du_z);
+
+    // REQUIRE_THAT(get<selector::scalar::D>(du_x),
+    // Approx(get<selector::scalar::D>(du_y)));
+    // REQUIRE_THAT(get<selector::scalar::D>(du_x),
+    // Approx(get<selector::scalar::D>(du_z)));
 }
