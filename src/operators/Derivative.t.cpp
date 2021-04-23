@@ -27,6 +27,21 @@ constexpr auto f2 = [](auto&& loc) {
            z;
 };
 
+constexpr auto f2_dx = [](auto&& loc) {
+    auto&& [_, y, z] = loc;
+    return 2. * (y + z);
+};
+
+constexpr auto f2_dy = [](auto&& loc) {
+    auto&& [x, _, z] = loc;
+    return 2. * (x + z);
+};
+
+constexpr auto f2_dz = [](auto&& loc) {
+    auto&& [x, y, _] = loc;
+    return 2. * (x + y);
+};
+
 TEST_CASE("Identity FFFFFF")
 {
     using namespace ccs;
@@ -69,8 +84,9 @@ TEST_CASE("E2_2 FFFFFF")
 
     const auto extents = int3{5, 7, 6};
 
-    auto m =
-        Mesh{DomainBounds{.min = {-1, -1, 0}, .max = {1, 2, 2.2}}, IndexExtents{extents}};
+    // shift domain bounds away from zero to avoid problems with Catch::Approx
+    auto m = Mesh{DomainBounds{.min = {0.1, 0.2, 0.3}, .max = {1, 2, 2.2}},
+                  IndexExtents{extents}};
 
     const auto gridBcs = bcs::Grid{bcs::ff, bcs::ff, bcs::ff};
     const auto objectBcs = bcs::Object{};
@@ -82,11 +98,19 @@ TEST_CASE("E2_2 FFFFFF")
     Scalar<T> du{u};
     REQUIRE((integer)rs::size(du | selector::D) == m.size());
 
+    // exact
+    Scalar<T> dx{u}, dy{u}, dz{u};
+    dx | selector::D = m.location() | vs::transform(f2_dx);
+    dy | selector::D = m.location() | vs::transform(f2_dy);
+    dz | selector::D = m.location() | vs::transform(f2_dz);
+    std::array<Scalar<T>*, 3> dd{&dx, &dy, &dz};
+
     for (int i = 0; i < 3; i++) {
-        auto d = operators::Derivative{i, m, stencils::Identity, gridBcs, objectBcs};
+        auto d = operators::Derivative{i, m, stencils::second::E2, gridBcs, objectBcs};
         d(u, du);
 
-        REQUIRE_THAT(get<selector::scalar::D>(u), Approx(get<selector::scalar::D>(du)));
+        REQUIRE_THAT(get<selector::scalar::D>(*dd[i]),
+                     Approx(get<selector::scalar::D>(du)));
     }
 }
 

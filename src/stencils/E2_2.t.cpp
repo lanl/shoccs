@@ -14,7 +14,7 @@ TEST_CASE("dirichlet")
 {
     using namespace ccs;
 
-    auto st = stencils::make_E2_2();
+    auto st = stencils::second::E2;
 
     auto [p, r, t, x] = st.query_max();
     REQUIRE(p == 1);
@@ -45,7 +45,7 @@ TEST_CASE("floating")
 {
     using namespace ccs;
 
-    auto st = stencils::make_E2_2();
+    const auto& st = stencils::second::E2;
 
     auto [p, r, t, x] = st.query(bcs::Floating);
     REQUIRE(p == 1);

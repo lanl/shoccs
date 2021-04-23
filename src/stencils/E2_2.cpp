@@ -125,4 +125,8 @@ struct E2_2 {
 };
 
 Stencil make_E2_2() { return E2_2{}; }
+
+namespace second {
+    Stencil E2 {E2_2{}};
+}
 } // namespace ccs::stencils

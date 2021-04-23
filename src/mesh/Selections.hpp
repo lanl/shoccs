@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Cartesian.hpp"
+#include "CutGeometry.hpp"
 #include "fields/Selector.hpp"
 
 #include <range/v3/view/chunk.hpp>
@@ -241,6 +243,24 @@ constexpr auto zmax(int3 extents)
 {
     return rs::make_view_closure([extents = MOVE(extents)]<DomainSelection S>(S&& s) {
         return field::Tuple{FWD(s) | plane_view<2>(extents, extents[2] - 1)};
+    });
+}
+
+constexpr auto location(const Cartesian& cartesian, const CutGeometry& geometry)
+{
+    using namespace ccs::field::tuple;
+    return rs::make_view_closure([&]<traits::SelectionType S>(S&&) {
+        if constexpr (traits::is_domain_selection_v<S>)
+            return vs::cartesian_product(cartesian.x(), cartesian.y(), cartesian.z());
+        else if constexpr (traits::is_Rx_selection_v<S>)
+            return geometry.Rx() | vs::transform([](auto&& o) { return o.position; });
+        else if constexpr (traits::is_Ry_selection_v<S>)
+            return geometry.Ry() | vs::transform([](auto&& o) { return o.position; });
+        else if constexpr (traits::is_Rz_selection_v<S>)
+            return geometry.Rz() | vs::transform([](auto&& o) { return o.position; });
+
+        else
+            static_assert("unaccounted selection type");
     });
 }
 

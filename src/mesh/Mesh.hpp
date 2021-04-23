@@ -72,7 +72,10 @@ public:
         return ijk[0] * n[1] * n[2] + ijk[1] * n[2] + ijk[2];
     }
 
-    constexpr auto location() const { return views::location(); }
+    constexpr auto location() const
+    {
+        return views::location(cartesian, geometry);
+    }
 
     constexpr auto xmin() const { return views::xmin(extents()); }
 

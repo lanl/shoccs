@@ -150,4 +150,9 @@ public:
 };
 
 Stencil make_E2_2();
+
+namespace second {
+    extern Stencil E2;
+}
+
 } // namespace ccs::stencils

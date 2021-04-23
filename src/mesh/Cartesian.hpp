@@ -53,6 +53,10 @@ public:
         return {min_[i], max_[i], h_[i], n_[i]};
     }
 
+    constexpr std::span<const real> x() const { return x_; }
+    constexpr std::span<const real> y() const { return y_; }
+    constexpr std::span<const real> z() const { return z_; }
+
     constexpr real3 h() const { return h_; }
     constexpr real h(int i) const { return h_[i]; }
 

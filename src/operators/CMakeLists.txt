@@ -5,7 +5,7 @@ target_link_libraries(shoccs-operators PUBLIC shoccs-mesh matrices)
 target_include_directories(shoccs-operators PUBLIC ..)
 
 #add_unit_test(directional "operators" operators)
-add_unit_test(Derivative "operators" shoccs-operators shoccs-random)
+add_unit_test(Derivative "operators" shoccs-operators shoccs-random shoccs-stencils)
 #add_unit_test(gradient "operators" operators random)
 #add_unit_test(divergence "operators" operators random)
 
