@@ -17,7 +17,7 @@ TEST_CASE("mesh api")
         real3 max{1.0, 2.0, 3.0};
         int3 n{11, 31, 51};
 
-        m = mesh::Cartesian{min, max, n};
+        m = mesh::Cartesian{n, min, max};
 
         REQUIRE(m.dims() == 3);
 
@@ -64,7 +64,7 @@ TEST_CASE("mesh api")
         real3 max{1.0, 2.0};
         int3 n{11, 31};
 
-        m = mesh::Cartesian{min, max, n};
+        m = mesh::Cartesian{n, min, max};
 
         REQUIRE(m.dims() == 2);
 
@@ -96,7 +96,7 @@ TEST_CASE("mesh api")
         std::vector<real> max{2.0};
         std::vector<int> n{21};
 
-        m = mesh::Cartesian{min, max, n};
+        m = mesh::Cartesian{n, min, max};
 
         REQUIRE(m.dims() == 1);
 

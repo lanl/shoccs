@@ -1,10 +1,7 @@
 // matchers to be used for catch tests
 #pragma once
 
-#include "scalar_field.hpp"
-#include "vector_field.hpp"
-#include "scalar.hpp"
-#include "vector.hpp"
+#include "Tuple.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
@@ -14,7 +11,10 @@ namespace Catch::Matchers
 template <typename T, int I>
 struct ScalarFieldMatcher final : MatcherBase<ccs::scalar_field<T, I>> {
 
-    ScalarFieldMatcher(ccs::scalar_field<T, I> const& comparator) : m_comparator(comparator) {}
+    ScalarFieldMatcher(ccs::scalar_field<T, I> const& comparator)
+        : m_comparator(comparator)
+    {
+    }
 
     bool match(ccs::scalar_field<T, I> const& v) const override
     {
@@ -53,7 +53,9 @@ struct ScalarFieldMatcher final : MatcherBase<ccs::scalar_field<T, I>> {
 template <typename T>
 struct VectorFieldMatcher final : MatcherBase<ccs::vector_field<T>> {
 
-    VectorFieldMatcher(ccs::vector_field<T> const& comparator) : m_comparator(comparator) {}
+    VectorFieldMatcher(ccs::vector_field<T> const& comparator) : m_comparator(comparator)
+    {
+    }
 
     bool match(ccs::vector_field<T> const& v) const override
     {
@@ -97,8 +99,7 @@ struct VectorRangeMatcher final : MatcherBase<ccs::vector_range<std::vector<T>>>
 
     bool match(ccs::vector_range<std::vector<T>> const& v) const override
     {
-        return Approx(m_comparator.x).match(v.x) &&
-               Approx(m_comparator.y).match(v.y) &&
+        return Approx(m_comparator.x).match(v.x) && Approx(m_comparator.y).match(v.y) &&
                Approx(m_comparator.z).match(v.z);
     }
     std::string describe() const override
@@ -131,10 +132,7 @@ struct VectorRangeMatcher final : MatcherBase<ccs::vector_range<std::vector<T>>>
 template <typename T, int I>
 struct ScalarMatcher final : MatcherBase<ccs::scalar<T, I>> {
 
-    ScalarMatcher(ccs::scalar<T, I> const& comparator)
-        : m_comparator(comparator)
-    {
-    }
+    ScalarMatcher(ccs::scalar<T, I> const& comparator) : m_comparator(comparator) {}
 
     bool match(ccs::scalar<T, I> const& v) const override
     {

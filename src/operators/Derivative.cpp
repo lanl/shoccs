@@ -8,7 +8,6 @@
 #include <range/v3/view/join.hpp>
 
 #include <cassert>
-#include <iostream>
 
 namespace ccs::operators
 {
@@ -104,8 +103,7 @@ Derivative::Derivative(int dir,
             columns--;
 
             // add points to B
-            integer boundary_offset =
-                mesh.ic(end.mesh_coordinate) - (rRight + 1) * stride;
+            integer boundary_offset = mesh.ic(end.mesh_coordinate) - rRight * stride;
             auto b_coeffs =
                 right | vs::drop(tRight - 1) | vs::stride(tRight) | vs::take(rRight);
             for (auto&& [row, val] : vs::enumerate(b_coeffs)) {

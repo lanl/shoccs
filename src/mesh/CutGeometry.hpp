@@ -2,6 +2,7 @@
 
 #include "Cartesian.hpp"
 #include "Shapes.hpp"
+#include "mesh_types.hpp"
 #include "types.hpp"
 #include <span>
 #include <vector>

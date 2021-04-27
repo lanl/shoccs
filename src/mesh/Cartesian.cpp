@@ -1,29 +1,20 @@
 #include "Cartesian.hpp"
 
-#include <range/v3/algorithm/copy.hpp>
-#include <range/v3/algorithm/count_if.hpp>
-#include <range/v3/range/concepts.hpp>
-#include <range/v3/range/conversion.hpp>
-#include <range/v3/view/concat.hpp>
-#include <range/v3/view/linear_distribute.hpp>
-#include <range/v3/view/repeat.hpp>
-#include <range/v3/view/take.hpp>
-#include <range/v3/view/zip_with.hpp>
+#include <range/v3/all.hpp>
 
 namespace ccs::mesh
 {
 
-Cartesian::Cartesian(span<const real> min, span<const real> max, span<const int> n)
+Cartesian::Cartesian(span<const int> n, span<const real> min, span<const real> max)
 {
     constexpr auto concat_copy = [](auto&& in, auto val, auto&& out) {
         rs::copy(vs::concat(in, vs::repeat(val)) | vs::take(3), rs::begin(out));
     };
     concat_copy(min, 0.0, min_);
     concat_copy(max, null_v<>, max_);
-    concat_copy(n, 1, n_);
 
-    // ensure that unspecified dimensions get set to 1
-    for (auto&& i : n_) i = std::max(1, i);
+    int3& n_ = as_extents();
+    concat_copy(n | vs::transform([](auto&& v) { return v > 0 ? v : 1; }), 1, n_);
 
     rs::copy(vs::zip_with([](real mn,
                              real mx,

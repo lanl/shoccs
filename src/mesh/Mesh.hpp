@@ -5,37 +5,12 @@
 #include "boundaries.hpp"
 #include "fields/Location.hpp"
 #include "fields/Tuple.hpp"
+#include "mesh_types.hpp"
 
 #include "Selections.hpp"
 
 namespace ccs::mesh
 {
-
-struct ObjectBoundary {
-    integer object_coordinate; // the coordinate in R associated with this point
-    integer objectID;
-    real psi;
-};
-
-struct Boundary {
-    int3 mesh_coordinate; // mesh coordinate associated with this point
-    std::optional<ObjectBoundary> object_boundary;
-};
-
-struct Line {
-    integer stride; // stride associated with moving in this diriection
-    Boundary start;
-    Boundary end;
-};
-
-struct DomainBounds {
-    real3 min;
-    real3 max;
-};
-
-struct IndexExtents {
-    int3 extents;
-};
 
 class Mesh
 {
@@ -45,10 +20,10 @@ class Mesh
 
 public:
     Mesh() = default;
-    Mesh(const DomainBounds& bounds, const IndexExtents& extents);
+    Mesh(const IndexExtents& extents, const DomainBounds& bounds);
 
-    Mesh(const DomainBounds& bounds,
-         const IndexExtents& extents,
+    Mesh(const IndexExtents& extents,
+         const DomainBounds& bounds,
          const std::vector<shape>& shapes);
 
     bool dirichlet_line(const int3& start, int dir, const bcs::Grid& cartesian_bcs) const;
@@ -63,7 +38,7 @@ public:
 
     constexpr real3 h() const { return cartesian.h(); }
 
-    constexpr int3 extents() const { return cartesian.extents(); }
+    constexpr decltype(auto) extents() const { return cartesian.extents(); }
 
     // convert an int3 coordinate to a flattened integer coordinate
     constexpr integer ic(int3 ijk) const
@@ -72,10 +47,7 @@ public:
         return ijk[0] * n[1] * n[2] + ijk[1] * n[2] + ijk[2];
     }
 
-    constexpr auto location() const
-    {
-        return views::location(cartesian, geometry);
-    }
+    constexpr auto location() const { return views::location(cartesian, geometry); }
 
     constexpr auto xmin() const { return views::xmin(extents()); }
 
@@ -88,6 +60,18 @@ public:
     constexpr auto zmin() const { return views::zmin(extents()); }
 
     constexpr auto zmax() const { return views::zmax(extents()); }
+
+    auto F() const
+    {
+        auto ex = extents();
+        auto [nx, ny, nz] = ex;
+        if (nz > 1)
+            return views::F(ex, lines(2));
+        else if (ny > 1)
+            return views::F(ex, lines(1));
+        else
+            return views::F(ex, lines(0));
+    }
 
     // Intersection of rays in x and all objects
     std::span<const mesh_object_info> Rx() const { return geometry.Rx(); }

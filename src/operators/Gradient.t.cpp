@@ -30,8 +30,8 @@ TEST_CASE("domain")
     // auto m = mesh::Cartesian{real3{-1, -1, -1}, real3{1, 1, 1}, extents};
     // auto g = mesh::CutGeometry{};
 
-    auto m = mesh::Mesh{mesh::DomainBounds{real3{-1, -1, -1}, real3{1, 1, 1}},
-                        mesh::IndexExtents{31, 33, 32}};
+    auto m = mesh::Mesh{mesh::IndexExtents{31, 33, 32},
+                        mesh::DomainBounds{real3{-1, -1, -1}, real3{1, 1, 1}}};
 
     auto gradient = operators::DiscreteOperator(Identity, m)
                         .to<operators::Gradient>(bcs::Grid{bcs::dd, bcs::ff, bcs::dd});

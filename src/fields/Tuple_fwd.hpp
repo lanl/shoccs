@@ -144,6 +144,10 @@ template <typename... Args>
 struct is_tuple_like_impl<std::tuple<Args...>> : std::true_type {
 };
 
+template <typename... Args>
+struct is_tuple_like_impl<rs::common_tuple<Args...>> : std::true_type {
+};
+
 template <template <typename...> typename T, typename... Args>
 struct is_tuple_like_impl<T<Args...>>
     : mp_or<std::is_base_of<ContainerTuple<Args...>, T<Args...>>,

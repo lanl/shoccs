@@ -53,7 +53,7 @@ TEST_CASE("Identity FFFFFF")
     const auto extents = int3{5, 7, 6};
 
     auto m =
-        Mesh{DomainBounds{.min = {-1, -1, 0}, .max = {1, 2, 2.2}}, IndexExtents{extents}};
+        Mesh{IndexExtents{extents}, DomainBounds{.min = {-1, -1, 0}, .max = {1, 2, 2.2}}};
 
     const auto gridBcs = bcs::Grid{bcs::ff, bcs::ff, bcs::ff};
     const auto objectBcs = bcs::Object{};
@@ -85,8 +85,8 @@ TEST_CASE("E2_2 FFFFFF")
     const auto extents = int3{5, 7, 6};
 
     // shift domain bounds away from zero to avoid problems with Catch::Approx
-    auto m = Mesh{DomainBounds{.min = {0.1, 0.2, 0.3}, .max = {1, 2, 2.2}},
-                  IndexExtents{extents}};
+    auto m = Mesh{IndexExtents{extents},
+                  DomainBounds{.min = {0.1, 0.2, 0.3}, .max = {1, 2, 2.2}}};
 
     const auto gridBcs = bcs::Grid{bcs::ff, bcs::ff, bcs::ff};
     const auto objectBcs = bcs::Object{};
@@ -125,7 +125,7 @@ TEST_CASE("Identity Mixed")
     const auto extents = int3{5, 7, 6};
 
     auto m =
-        Mesh{DomainBounds{.min = {-1, -1, 0}, .max = {1, 2, 2.2}}, IndexExtents{extents}};
+        Mesh{IndexExtents{extents}, DomainBounds{.min = {-1, -1, 0}, .max = {1, 2, 2.2}}};
 
     const auto objectBcs = bcs::Object{};
 
@@ -199,8 +199,8 @@ TEST_CASE("E2 Mixed")
 
     const auto extents = int3{5, 7, 6};
 
-    auto m = Mesh{DomainBounds{.min = {0.1, 0.2, 0.3}, .max = {1, 2, 2.2}},
-                  IndexExtents{extents}};
+    auto m = Mesh{IndexExtents{extents},
+                  DomainBounds{.min = {0.1, 0.2, 0.3}, .max = {1, 2, 2.2}}};
 
     const auto objectBcs = bcs::Object{};
 
@@ -279,8 +279,8 @@ TEST_CASE("Identity with Objects")
 
     const auto extents = int3{16, 19, 18};
 
-    auto m = Mesh{DomainBounds{.min = {-1, -1, 0}, .max = {1, 2, 2.2}},
-                  IndexExtents{extents},
+    auto m = Mesh{IndexExtents{extents},
+                  DomainBounds{.min = {-1, -1, 0}, .max = {1, 2, 2.2}},
                   std::vector<shape>{make_sphere(0, real3{0.01, -0.01, 0.99}, 0.25)}};
 
     const auto gridBcs = bcs::Grid{bcs::ff, bcs::ff, bcs::ff};
@@ -330,13 +330,13 @@ TEST_CASE("E2 with Objects")
     using Catch::Matchers::Approx;
     using T = std::vector<real>;
 
-    const auto extents = int3{16, 19, 18};
+    const auto extents = int3{25, 26, 27};
 
-    auto m = Mesh{DomainBounds{.min = {0.1, 0.2, 0.3}, .max = {1, 2, 2.2}},
-                  IndexExtents{extents},
+    auto m = Mesh{IndexExtents{extents},
+                  DomainBounds{.min = {0.1, 0.2, 0.3}, .max = {1, 2, 2.2}},
                   std::vector<shape>{make_sphere(0, real3{0.45, 1.011, 1.31}, 0.25)}};
 
-    const auto gridBcs = bcs::Grid{bcs::ff, bcs::ff, bcs::ff};
+    const auto gridBcs = bcs::Grid{bcs::ff, bcs::dd, bcs::ff};
     const auto objectBcs = bcs::Object{bcs::Dirichlet};
 
     // initialize fields
@@ -345,13 +345,34 @@ TEST_CASE("E2 with Objects")
     u | selector::R = m.location() | vs::transform(f2);
     REQUIRE(rs::size(u | selector::Rx) == m.Rx().size());
 
-    Scalar<T> du_x{u}, du_y{u}, du_z{u};
-    du_x | selector::D = m.location() | vs::transform(f2_dx);
-    du_x | selector::Rx = m.location() | vs::transform(f2_dx);
-    du_y | selector::D = m.location() | vs::transform(f2_dy);
-    du_y | selector::Ry = m.location() | vs::transform(f2_dy);
-    du_z | selector::D = m.location() | vs::transform(f2_dz);
-    du_z | selector::Rz = m.location() | vs::transform(f2_dz);
+    Scalar<T> du_x{u}, du_y{u}, du_z{u}, dd{u};
+    dd | selector::D = m.location() | vs::transform(f2_dx);
+    dd | selector::D | m.ymin() = 0;
+    dd | selector::D | m.ymax() = 0;
+    du_x | selector::D = 0;
+    {
+        auto out = du_x | selector::D | m.F();
+        rs::copy(dd | selector::D | m.F(), rs::begin(out));
+    }
+    // This direct copy doesn't work.. why?
+    // du_x | selector::D | m.F() = dd | selector::D | m.F();
+    dd | selector::D = m.location() | vs::transform(f2_dy);
+    dd | selector::D | m.ymin() = 0;
+    dd | selector::D | m.ymax() = 0;
+    du_y | selector::D = 0;
+    {
+        auto out = du_y | selector::D | m.F();
+        rs::copy(dd | selector::D | m.F(), rs::begin(out));
+    }
+
+    dd | selector::D = m.location() | vs::transform(f2_dz);
+    dd | selector::D | m.ymin() = 0;
+    dd | selector::D | m.ymax() = 0;
+    du_z | selector::D = 0;
+    {
+        auto out = du_z | selector::D | m.F();
+        rs::copy(dd | selector::D | m.F(), rs::begin(out));
+    }
 
     REQUIRE((integer)rs::size(du_x | selector::D) == m.size());
 
@@ -359,12 +380,14 @@ TEST_CASE("E2 with Objects")
     auto dy = operators::Derivative{1, m, stencils::second::E2, gridBcs, objectBcs};
     auto dz = operators::Derivative{2, m, stencils::second::E2, gridBcs, objectBcs};
 
-    dx(u, du_x);
-    dy(u, du_y);
-    dz(u, du_z);
+    Scalar<T> du{u};
 
-    // REQUIRE_THAT(get<selector::scalar::D>(du_x),
-    // Approx(get<selector::scalar::D>(du_y)));
-    // REQUIRE_THAT(get<selector::scalar::D>(du_x),
-    // Approx(get<selector::scalar::D>(du_z)));
+    dx(u, du);
+    REQUIRE_THAT(get<selector::scalar::D>(du), Approx(get<selector::scalar::D>(du_x)));
+
+    dy(u, du);
+    REQUIRE_THAT(get<selector::scalar::D>(du), Approx(get<selector::scalar::D>(du_y)));
+
+    dz(u, du);
+    REQUIRE_THAT(get<selector::scalar::D>(du), Approx(get<selector::scalar::D>(du_z)));
 }

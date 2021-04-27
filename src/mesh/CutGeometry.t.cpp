@@ -14,7 +14,7 @@ TEST_CASE("sphere intersections")
     int3 n{21, 22, 23};
     real3 min{-1, -1, 0};
     real3 max{1, 2, 2.2};
-    CutGeometry g{shapes, Cartesian{min, max, n}};
+    CutGeometry g{shapes, Cartesian{n, min, max}};
 
     // intersections in x from Mathematica
     SECTION("X")
@@ -307,7 +307,7 @@ TEST_CASE("rect_intersections")
 {
     using namespace ccs;
 
-    auto m = mesh::Cartesian{real3{}, real3{1, 1, 1}, int3{11, 2, 1}};
+    auto m = mesh::Cartesian{int3{11, 2, 1}, real3{}, real3{1, 1, 1}};
     REQUIRE(m.dims() == 2);
 
     real loc = 1.0 - 1e-6;

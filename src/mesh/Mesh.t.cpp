@@ -1,8 +1,19 @@
 #include "Mesh.hpp"
+#include "Selections.hpp"
+#include "fields/Selector.hpp"
+#include "random/random.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
+
+#include "real3_operators.hpp"
+
+#include <range/v3/algorithm/count.hpp>
+
+using namespace ccs;
+
+constexpr auto g = []() { return pick(); };
 
 TEST_CASE("lines with no cut-cells")
 {
@@ -12,7 +23,7 @@ TEST_CASE("lines with no cut-cells")
     const auto db = DomainBounds{.min = {-1, -1, 0}, .max = {1, 2, 2.2}};
     const auto extents = int3{21, 22, 23};
 
-    auto m = Mesh{db, IndexExtents{extents}};
+    auto m = Mesh{IndexExtents{extents}, db};
 
     REQUIRE(extents[1] * extents[2] == (integer)m.lines(0).size());
     REQUIRE(extents[0] * extents[2] == (integer)m.lines(1).size());
@@ -27,8 +38,8 @@ TEST_CASE("lines")
     const auto db = DomainBounds{.min = {-1, -1, 0}, .max = {1, 2, 2.2}};
     const auto extents = int3{21, 22, 23};
 
-    auto m = Mesh{db,
-                  IndexExtents{extents},
+    auto m = Mesh{IndexExtents{extents},
+                  db,
                   std::vector<shape>{make_sphere(0, real3{0.01, -0.01, 0.5}, 0.25)}};
 
     // intersections in x from Mathematica
@@ -162,4 +173,99 @@ TEST_CASE("lines")
             REQUIRE(!l.end.object_boundary);
         }
     }
-};
+}
+
+TEST_CASE("selections")
+{
+    using namespace ccs;
+    using namespace mesh;
+    using T = std::vector<real>;
+
+    const auto db = DomainBounds{.min = {-1, -1, 0}, .max = {1, 2, 2.2}};
+    const auto extents = int3{21, 22, 23};
+
+    auto m = Mesh{IndexExtents{extents}, db};
+
+    randomize();
+    field::Scalar<T> u{};
+    u | selector::D = vs::generate_n(g, m.size());
+    // test whole field comparison
+    REQUIRE(rs::equal(u | selector::D, u | selector::D | m.F()));
+    REQUIRE(rs::size(u | selector::D) == rs::size(u | selector::D | m.F()));
+
+    auto view = u | selector::D | m.F();
+    auto d = u | selector::D;
+
+    // test next/prev going over a line
+    {
+        auto it = rs::begin(view);
+        for (int i = 0; i < extents[2]; i++) REQUIRE(*it++ == d[i]);
+        for (int i = 0; i < extents[2]; i++) REQUIRE(*it-- == d[extents[2] - i]);
+    }
+
+    // test advance a
+    {
+        auto it = rs::begin(view);
+        rs::advance(it, 1);
+        REQUIRE(*it == d[1]);
+        rs::advance(it, -1);
+        REQUIRE(*it == d[0]);
+        rs::advance(it, extents[2]);
+        REQUIRE(*it == d[extents[2]]);
+        rs::advance(it, extents[2] + 1);
+        REQUIRE(*it == d[2 * extents[2] + 1]);
+        rs::advance(it, -2 * extents[2] - 1);
+        REQUIRE(*it == d[0]);
+    }
+}
+
+TEST_CASE("selections with object")
+{
+    using namespace ccs;
+    using namespace mesh;
+    using T = std::vector<int>;
+
+    const auto db = DomainBounds{.min = {-1, -1, 0}, .max = {1, 2, 2.2}};
+    const auto extents = int3{21, 22, 23};
+
+    auto m = Mesh{IndexExtents{extents},
+                  db,
+                  std::vector<shape>{make_sphere(0, real3{0.01, -0.01, 0.5}, 0.25)}};
+
+    field::Scalar<T> u{};
+    u | selector::D = vs::repeat_n(-1, m.size());
+    u | selector::D | m.F() = 1;
+
+    {
+        using F = decltype(u | selector::D | m.F());
+
+        REQUIRE(rs::bidirectional_range<F>);
+        REQUIRE(!rs::contiguous_range<F>);
+        REQUIRE(rs::random_access_range<F>);
+        REQUIRE(rs::sized_range<F>);
+    }
+
+    auto nsolid = rs::count(u | selector::D, -1);
+    REQUIRE(nsolid > 0);
+    auto nfluid = rs::count(u | selector::D, 1);
+    REQUIRE(nfluid > 0);
+
+    REQUIRE(nfluid + nsolid == m.size());
+    REQUIRE(nfluid == (integer)rs::size(u | selector::D | m.F()));
+
+    field::Scalar<T> v{u};
+
+    v | selector::D =
+        m.location() | vs::transform([center = real3{0.01, -0.01, 0.5}](auto&& loc) {
+            return length(loc - center) > 0.25 ? 1 : -1;
+        });
+
+    REQUIRE(u == v);
+
+    // test assignment
+    field::Scalar<T> w{};
+    w | selector::D = vs::repeat_n(-1, m.size());
+
+    w | selector::D | m.F() = u | selector::D | m.F();
+    REQUIRE(w == u);
+}

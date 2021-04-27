@@ -91,15 +91,15 @@ void init_line(std::vector<Line>& v, int3 extents, std::span<const mesh_object_i
 }
 } // namespace
 
-Mesh::Mesh(const DomainBounds& bounds, const IndexExtents& extents)
-    : Mesh{bounds, extents, std::vector<shape>{}}
+Mesh::Mesh(const IndexExtents& extents, const DomainBounds& bounds)
+    : Mesh{extents, bounds, std::vector<shape>{}}
 {
 }
 
-Mesh::Mesh(const DomainBounds& bounds,
-           const IndexExtents& extents,
+Mesh::Mesh(const IndexExtents& extents,
+           const DomainBounds& bounds,
            const std::vector<shape>& shapes)
-    : cartesian{bounds.min, bounds.max, extents.extents}, geometry{shapes, cartesian}
+    : cartesian{extents.extents, bounds.min, bounds.max}, geometry{shapes, cartesian}
 {
     init_line<0>(lines_[0], cartesian.extents(), geometry.R(0));
     init_line<1>(lines_[1], cartesian.extents(), geometry.R(1));
