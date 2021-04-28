@@ -28,6 +28,9 @@ public:
 
     integer rows() const { return u.size() ? u.size() - 1 : 0; }
 
+    // number of non-zero entries
+    integer size() const { return (integer)w.size(); }
+
     void operator()(std::span<const real> x, std::span<real> b) const;
 
     struct Builder;

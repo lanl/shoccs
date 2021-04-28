@@ -35,6 +35,7 @@ Derivative::Derivative(int dir,
 
     auto B_builder = matrix::CSR::Builder();
     auto O_builder = matrix::Block::Builder();
+    auto N_builder = matrix::CSR::Builder();
 
     for (auto [stride, start, end] : mesh.lines(dir)) {
         // assert(offset == mesh.ic(start.mesh_coordinate));
@@ -81,6 +82,12 @@ Derivative::Derivative(int dir,
             if (grid_bcs[dir].left == bcs::Dirichlet) {
                 rows--;
                 row_offset += stride;
+            } else if (grid_bcs[dir].left == bcs::Neumann) {
+                // add data to N matrix
+                for (int row = 0; row < exLeft; row++) {
+                    N_builder.add_point(
+                        row_offset + stride * row, row_offset, extra[row]);
+                }
             }
         }
 
@@ -116,7 +123,16 @@ Derivative::Derivative(int dir,
             stencil.nbs(h, grid_bcs[dir].right, 1.0, true, right, extra);
 
             rightMat = matrix::Dense{rRight, tRight, right};
-            if (grid_bcs[dir].right == bcs::Dirichlet) { rows--; }
+            if (grid_bcs[dir].right == bcs::Dirichlet) {
+                rows--;
+            } else if (grid_bcs[dir].right == bcs::Neumann) {
+                auto ic = mesh.ic(end.mesh_coordinate);
+                integer boundary_offset = ic - (exRight - 1) * stride;
+
+                for (int row = 0; row < exRight; row++) {
+                    N_builder.add_point(boundary_offset + stride * row, ic, extra[row]);
+                }
+            }
         }
         const integer n_interior = rows - leftMat.rows() - rightMat.rows();
 
@@ -127,20 +143,11 @@ Derivative::Derivative(int dir,
                                  MOVE(leftMat),
                                  matrix::Circulant{n_interior, interior_c},
                                  MOVE(rightMat));
-
-        // grab the left right portions of the line
-
-        // if the left is a domain boundary all of it stays in a O (till neumann)
-
-        // if the left is an object boundary the first column goes into B, the rest in O
-
-        // if the right is a domain boundary all of it stays in O
-
-        // if the right is an object boundary the last column goes into B, the rest in O
     }
 
     O = MOVE(O_builder).to_Block();
     B = MOVE(B_builder.to_CSR(mesh.size()));
+    N = MOVE(N_builder.to_CSR(mesh.size()));
 }
 
 void Derivative::operator()(field::ScalarView_Const u, field::ScalarView_Mutable du) const
@@ -159,6 +166,16 @@ void Derivative::operator()(field::ScalarView_Const u, field::ScalarView_Mutable
     default:
         B(get<Rz>(u), get<D>(du));
     }
+}
+
+void Derivative::operator()(field::ScalarView_Const u,
+                            field::ScalarView_Const nu,
+                            field::ScalarView_Mutable du) const
+{
+    using namespace selector::scalar;
+
+    (*this)(u, du);
+    N(get<D>(nu), get<D>(du));
 }
 
 } // namespace ccs::operators

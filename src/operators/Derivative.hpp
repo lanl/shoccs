@@ -16,6 +16,7 @@ class Derivative
     int dir;
     matrix::Block O;
     matrix::CSR B;
+    matrix::CSR N;
     std::vector<real> interior_c;
 
 public:
@@ -27,6 +28,12 @@ public:
                const bcs::Grid& grid_bcs,
                const bcs::Object& object_bcs);
 
+    // operator for when neumann conditions are not needed
     void operator()(field::ScalarView_Const, field::ScalarView_Mutable) const;
+
+    // operaotr for when neumann conditions may be applied
+    void operator()(field::ScalarView_Const field_values,
+                    field::ScalarView_Const derivative_values,
+                    field::ScalarView_Mutable) const;
 };
 } // namespace ccs::operators
