@@ -12,17 +12,25 @@ TEST_CASE("Identity")
 {
     using namespace ccs;
     using Catch::Matchers::Approx;
+    using T = std::vector<real>;
 
-    std::vector<real> imat{1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1,
-                           0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1};
+    T imat{1, 0, 0, 0, 0, /* r1 */
+           0, 1, 0, 0, 0, /* r2 */
+           0, 0, 1, 0, 0, /* r3 */
+           0, 0, 0, 1, 0, /* r4 */
+           0, 0, 0, 0, 1};
     const auto mat = matrix::Dense{5, 5, imat};
 
-    const std::vector rng{-2.0, -1.0, 0.0, 1.0, 2.0};
-    std::vector<real> rhs(rng.size());
+    const T rng{-2.0, -1.0, 0.0, 1.0, 2.0};
+    T rhs(rng.size());
 
     mat(rng, rhs);
 
     REQUIRE_THAT(rng, Approx(rhs));
+
+    mat(rng, rhs, plus_eq);
+    const T rng2 = rng | vs::transform([](auto&& x) { return x + x; }) | rs::to<T>();
+    REQUIRE_THAT(rng2, Approx(rhs));
 }
 
 TEST_CASE("Identity - NonSquare")

@@ -17,6 +17,11 @@
 #include <range/v3/view/single.hpp>
 #include <range/v3/view/stride.hpp>
 #include <range/v3/view/take.hpp>
+#include <range/v3/view/transform.hpp>
+
+using namespace ccs;
+constexpr auto g = []() { return pick(); };
+constexpr auto x2 = [](auto&& x) { return x + x; };
 
 TEST_CASE("Identity")
 {
@@ -54,7 +59,7 @@ TEST_CASE("Identity")
     const auto A = MOVE(bld).to_Block();
 
     REQUIRE(A.rows() == 50);
-    const T x = vs::generate_n([]() { return pick(); }, A.rows()) | rs::to<T>();
+    const T x = vs::generate_n(g, A.rows()) | rs::to<T>();
     T b(x.size());
 
     A(x, b);
@@ -64,6 +69,10 @@ TEST_CASE("Identity")
     xx[0] = xx[33] = 0;
 
     REQUIRE_THAT(b, Approx(xx));
+
+    const T xx2 = xx | vs::transform(x2) | rs::to<T>();
+    A(x, b, plus_eq);
+    REQUIRE_THAT(b, Approx(xx2));
 }
 
 TEST_CASE("Random Boundary")

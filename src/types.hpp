@@ -44,6 +44,26 @@ constexpr auto null_v = std::numeric_limits<T>::max();
 // enum for labeling directions
 enum class dim { X, Y, Z };
 
+// types for matrix/operator accumulation policy
+struct eq_t {
+    template <typename X, typename Y>
+    constexpr void operator()(X& x, Y&& y)
+    {
+        x = FWD(y);
+    }
+};
+
+struct plus_eq_t {
+    template <typename X, typename Y>
+    constexpr void operator()(X& x, Y&& y)
+    {
+        x += FWD(y);
+    }
+};
+
+constexpr auto eq = eq_t{};
+constexpr auto plus_eq = plus_eq_t{};
+
 } // namespace ccs
 
 #ifndef NDEBUG

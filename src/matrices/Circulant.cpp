@@ -9,6 +9,7 @@
 #include <range/v3/view/repeat_n.hpp>
 #include <range/v3/view/sliding.hpp>
 #include <range/v3/view/stride.hpp>
+#include <range/v3/view/zip.hpp>
 #include <range/v3/view/zip_with.hpp>
 
 namespace ccs::matrix
@@ -28,7 +29,8 @@ Circulant::Circulant(integer rows,
 {
 }
 
-void Circulant::operator()(std::span<const real> x, std::span<real> b) const
+template <typename Op>
+void Circulant::operator()(std::span<const real> x, std::span<real> b, Op op) const
 {
     assert(row_offset() >= stride() * (size() / 2));
     assert((integer)b.size() >= row_offset() + rows() * stride());
@@ -44,8 +46,8 @@ void Circulant::operator()(std::span<const real> x, std::span<real> b) const
                          vs::repeat_n(v, rows()),
                          x | vs::sliding(size()));
 
-        rs::copy(rng, rs::begin(b));
-
+        // rs::copy(rng, rs::begin(b));
+        for (auto&& [y, z] : vs::zip(b, rng)) op(y, z);
     } else {
         auto in = x | vs::stride(st);
         auto out = b | vs::stride(st);
@@ -55,8 +57,14 @@ void Circulant::operator()(std::span<const real> x, std::span<real> b) const
                          vs::repeat_n(v, rows()),
                          in | vs::sliding(size()));
 
-        rs::copy(rng, rs::begin(out));
+        // rs::copy(rng, rs::begin(out));
+        for (auto&& [y, z] : vs::zip(out, rng)) op(y, z);
     }
 }
+
+template void
+Circulant::operator()<eq_t>(std::span<const real>, std::span<real>, eq_t) const;
+template void
+Circulant::operator()<plus_eq_t>(std::span<const real>, std::span<real>, plus_eq_t) const;
 
 } // namespace ccs::matrix

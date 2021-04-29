@@ -12,10 +12,15 @@
 #include <range/v3/view/generate_n.hpp>
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/stride.hpp>
+#include <range/v3/view/transform.hpp>
+
+using namespace ccs;
+constexpr auto g = []() { return pick(); };
+constexpr auto x2 = [](auto&& x) { return x + x; };
 
 TEST_CASE("Identity")
 {
-    using namespace ccs;
+
     using Catch::Matchers::Approx;
     using T = std::vector<real>;
 
@@ -36,11 +41,15 @@ TEST_CASE("Identity")
 
         REQUIRE(A.rows() == 16);
 
-        const auto x = vs::generate_n([]() { return pick(); }, A.rows()) | rs::to<T>();
+        const auto x = vs::generate_n(g, A.rows()) | rs::to<T>();
         auto b = T(A.rows());
 
         A(x, b);
         REQUIRE_THAT(x, Approx(b));
+
+        A(x, b, plus_eq);
+        const T b2 = x | vs::transform(x2) | rs::to<T>();
+        REQUIRE_THAT(b2, Approx(b));
     }
 
     SECTION("Non-Square")

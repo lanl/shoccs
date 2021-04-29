@@ -35,6 +35,7 @@ public:
     Common& col_offset(integer) = delete;
     Common& stride(integer) = delete;
 
-    void operator()(std::span<const real> x, std::span<real> b) const;
+    template <typename Op = eq_t>
+    void operator()(std::span<const real> x, std::span<real> b, Op op = {}) const;
 };
 } // namespace ccs::matrix

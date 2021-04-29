@@ -9,12 +9,7 @@
 #include "random/random.hpp"
 #include "stencils/Stencils.hpp"
 
-#include <range/v3/algorithm/mismatch.hpp>
 #include <range/v3/all.hpp>
-#include <range/v3/range/conversion.hpp>
-#include <range/v3/view/drop.hpp>
-#include <range/v3/view/generate_n.hpp>
-#include <range/v3/view/stride.hpp>
 
 using namespace ccs;
 
@@ -84,11 +79,16 @@ TEST_CASE("E2_Neumann")
     ex | selector::D | m.xmax() = 0;
 
     Scalar<T> du{u};
+    du = 0;
 
     {
         const auto gridBcs = bcs::Grid{bcs::dd, bcs::ff, bcs::nn};
         auto d = operators::Derivative(2, m, stencils::second::E2, gridBcs, objectBcs);
         d(u, nu, du);
+        REQUIRE_THAT(get<selector::scalar::D>(du), Approx(get<selector::scalar::D>(ex)));
+
+        d(u, nu, du, plus_eq);
+        ex *= 2;
         REQUIRE_THAT(get<selector::scalar::D>(du), Approx(get<selector::scalar::D>(ex)));
     }
 }
@@ -119,6 +119,7 @@ TEST_CASE("Identity FFFFFF")
 
     for (int i = 0; i < 3; i++) {
         auto d = operators::Derivative{i, m, stencils::Identity, gridBcs, objectBcs};
+        du = 0;
         d(u, du);
 
         REQUIRE_THAT(get<selector::scalar::D>(u), Approx(get<selector::scalar::D>(du)));
@@ -158,6 +159,7 @@ TEST_CASE("E2_2 FFFFFF")
 
     for (int i = 0; i < 3; i++) {
         auto d = operators::Derivative{i, m, stencils::second::E2, gridBcs, objectBcs};
+        du = 0;
         d(u, du);
 
         REQUIRE_THAT(get<selector::scalar::D>(*dd[i]),
@@ -205,6 +207,7 @@ TEST_CASE("Identity Mixed")
 
         for (int i = 0; i < m.dims(); i++) {
             auto d = operators::Derivative{i, m, stencils::Identity, gridBcs, objectBcs};
+            du = 0;
             d(u, nu, du);
 
             REQUIRE_THAT(get<selector::scalar::D>(du_exact),
@@ -232,6 +235,7 @@ TEST_CASE("Identity Mixed")
 
         for (int i = 0; i < m.dims(); i++) {
             auto d = operators::Derivative{i, m, stencils::Identity, gridBcs, objectBcs};
+            du = 0;
             d(u, nu, du);
 
             REQUIRE_THAT(get<selector::scalar::D>(du_exact),
@@ -276,6 +280,7 @@ TEST_CASE("E2 Mixed")
         for (int i = 0; i < m.dims(); i++) {
             auto d =
                 operators::Derivative{i, m, stencils::second::E2, gridBcs, objectBcs};
+            du = 0;
             d(u, du);
 
             auto& ex = *dd[i];
@@ -307,6 +312,7 @@ TEST_CASE("E2 Mixed")
         for (int i = 0; i < m.dims(); i++) {
             auto d =
                 operators::Derivative{i, m, stencils::second::E2, gridBcs, objectBcs};
+            du = 0;
             d(u, nu, du);
 
             auto& ex = *dd[i];
@@ -366,8 +372,11 @@ TEST_CASE("Identity with Objects")
     auto dy = operators::Derivative{1, m, stencils::Identity, gridBcs, objectBcs};
     auto dz = operators::Derivative{2, m, stencils::Identity, gridBcs, objectBcs};
 
+    du_x = 0;
     dx(u, du_x);
+    du_y = 0;
     dy(u, du_y);
+    du_z = 0;
     dz(u, du_z);
 
     REQUIRE_THAT(get<selector::scalar::D>(du_x), Approx(get<selector::scalar::D>(du_y)));
@@ -435,12 +444,15 @@ TEST_CASE("E2 with Objects")
 
     Scalar<T> du{u};
 
+    du = 0;
     dx(u, nu, du);
     REQUIRE_THAT(get<selector::scalar::D>(du), Approx(get<selector::scalar::D>(du_x)));
 
+    du = 0;
     dy(u, du);
     REQUIRE_THAT(get<selector::scalar::D>(du), Approx(get<selector::scalar::D>(du_y)));
 
+    du = 0;
     dz(u, du);
     REQUIRE_THAT(get<selector::scalar::D>(du), Approx(get<selector::scalar::D>(du_z)));
 }

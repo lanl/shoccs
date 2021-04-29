@@ -150,11 +150,12 @@ Derivative::Derivative(int dir,
     N = MOVE(N_builder.to_CSR(mesh.size()));
 }
 
-void Derivative::operator()(field::ScalarView_Const u, field::ScalarView_Mutable du) const
+template <typename Op>
+requires(!field::tuple::traits::ScalarType<Op>) void Derivative::operator()(
+    field::ScalarView_Const u, field::ScalarView_Mutable du, Op op) const
 {
     using namespace selector::scalar;
-    du = 0;
-    O(get<D>(u), get<D>(du));
+    O(get<D>(u), get<D>(du), op);
     // This is ugly
     switch (dir) {
     case 0:
@@ -168,14 +169,35 @@ void Derivative::operator()(field::ScalarView_Const u, field::ScalarView_Mutable
     }
 }
 
-void Derivative::operator()(field::ScalarView_Const u,
-                            field::ScalarView_Const nu,
-                            field::ScalarView_Mutable du) const
+template <typename Op>
+requires(!field::tuple::traits::ScalarType<Op>) void Derivative::operator()(
+    field::ScalarView_Const u,
+    field::ScalarView_Const nu,
+    field::ScalarView_Mutable du,
+    Op op) const
 {
     using namespace selector::scalar;
 
-    (*this)(u, du);
+    (*this)(u, du, op);
     N(get<D>(nu), get<D>(du));
 }
+
+template void Derivative::operator()<eq_t>(field::ScalarView_Const,
+                                           field::ScalarView_Mutable,
+                                           eq_t) const;
+
+template void Derivative::operator()<plus_eq_t>(field::ScalarView_Const,
+                                                field::ScalarView_Mutable,
+                                                plus_eq_t) const;
+
+template void Derivative::operator()<eq_t>(field::ScalarView_Const,
+                                           field::ScalarView_Const,
+                                           field::ScalarView_Mutable,
+                                           eq_t) const;
+
+template void Derivative::operator()<plus_eq_t>(field::ScalarView_Const,
+                                                field::ScalarView_Const,
+                                                field::ScalarView_Mutable,
+                                                plus_eq_t) const;
 
 } // namespace ccs::operators

@@ -50,28 +50,18 @@ TEST_CASE("conversion")
 {
     using namespace ccs;
     using namespace field;
+    using T = std::vector<int>;
 
-    auto s = Scalar<std::vector<int>>{
-        Tuple{std::vector{1, 2, 3}},
-        Tuple{std::vector{1}, std::vector{2, 3}, std::vector{4, 5, 6}}};
+    auto s = Scalar<T>{Tuple{std::vector{1, 2, 3}},
+                       Tuple{std::vector{1}, std::vector{2, 3}, std::vector{4, 5, 6}}};
 
     Scalar<std::span<const int>> r = s;
 
     REQUIRE(r == s);
 
-    // auto f = [](SimpleScalar<std::span<int>> x) {
-    //     auto q = SimpleScalar<std::vector<int>>{
-    //         &global::loc,
-    //         Tuple{std::vector{1, 2, 3}},
-    //         Tuple{std::vector{1}, std::vector{2, 3}, std::vector{4, 5, 6}}};
-    //     x = 2 * q;
-    // };
-
-    // s = f;
-    // REQUIRE(rs::equal(s | selector::D, std::vector{2, 4, 6}));
-    // REQUIRE(rs::equal(s | selector::Rx, std::vector{2}));
-    // REQUIRE(rs::equal(s | selector::Ry, std::vector{4, 6}));
-    // REQUIRE(rs::equal(s | selector::Rz, std::vector{8, 10, 12}));
+    auto f = [](Scalar<std::span<int>> x) { x *= 2; };
+    s = f;
+    REQUIRE(r == Scalar<T>{Tuple{T{2, 4, 6}}, Tuple{T{2}, T{4, 6}, T{8, 10, 12}}});
 }
 
 TEST_CASE("selection")

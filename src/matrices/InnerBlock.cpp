@@ -39,11 +39,19 @@ InnerBlock::InnerBlock(integer columns,
         .stride(stride);
 }
 
-void InnerBlock::operator()(std::span<const real> x, std::span<real> b) const
+template <typename Op>
+void InnerBlock::operator()(std::span<const real> x, std::span<real> b, Op op) const
 {
-    left_boundary(x, b);
-    interior(x, b);
-    right_boundary(x, b);
+    left_boundary(x, b, op);
+    interior(x, b, op);
+    right_boundary(x, b, op);
 }
+
+template void
+InnerBlock::operator()<eq_t>(std::span<const real>, std::span<real>, eq_t) const;
+
+template void InnerBlock::operator()<plus_eq_t>(std::span<const real>,
+                                                std::span<real>,
+                                                plus_eq_t) const;
 
 } // namespace ccs::matrix

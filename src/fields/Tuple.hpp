@@ -50,6 +50,13 @@ struct Tuple : ContainerTuple<Args...>, ViewTuple<Args&...> {
         return *this;
     }
 
+    template <std::invocable<Tuple&> Fn>
+    Tuple& operator=(Fn fn)
+    {
+        std::invoke(fn, *this);
+        return *this;
+    }
+
     // need to define custom copy and move construction/assignment here since the
     // component-wise approach is not correct
     Tuple(const Tuple& r) : Container{r}, View{*this} {}
@@ -119,6 +126,13 @@ struct Tuple<Args...> : ViewTuple<Args...> {
     requires std::is_assignable_v<View&, T> Tuple& operator=(T&& t)
     {
         View::operator=(FWD(t));
+        return *this;
+    }
+
+    template <std::invocable<Tuple&> Fn>
+    Tuple& operator=(Fn fn)
+    {
+        std::invoke(fn, *this);
         return *this;
     }
 

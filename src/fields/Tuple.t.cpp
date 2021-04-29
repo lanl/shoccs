@@ -397,6 +397,13 @@ TEST_CASE("Conversion OneTuples")
     Tuple<std::vector<int>> q = y;
     REQUIRE(q.size() == y.size());
     REQUIRE(q == y);
+
+    auto f = [](Tuple<std::span<int>> x) { x = vs::iota(0, (int)x.size()); };
+    y = f;
+    REQUIRE(x == std::vector{0, 1, 2});
+    auto g = [](Tuple<std::span<int>> x) { x = vs::iota(1, 1 + (int)x.size()); };
+    x = g;
+    REQUIRE(y == std::vector{1, 2, 3});
 }
 
 TEST_CASE("Conversion ThreeTuples")
@@ -421,6 +428,12 @@ TEST_CASE("Conversion ThreeTuples")
 
     Tuple<T, T, T> q = y;
     REQUIRE(q == y);
+
+    auto f = [](Tuple<U, U, U> u) {
+        u = Tuple{vs::iota(0, 3), vs::iota(2, 3), vs::iota(0, 4)};
+    };
+    x = f;
+    REQUIRE(y == Tuple{vs::iota(0, 3), vs::iota(2, 3), vs::iota(0, 4)});
 }
 
 TEST_CASE("Conversion Nested ThreeTuples")
@@ -461,6 +474,14 @@ TEST_CASE("Conversion Nested ThreeTuples")
 
     Tuple<Tuple<T>, Tuple<T, T, T>> b = zz;
     REQUIRE(b == zz);
+
+    auto f = [](Tuple<Tuple<U>, Tuple<U, U, U>> u) {
+        u = Tuple{Tuple{vs::iota(0, 2)},
+                  Tuple{vs::iota(0, 3), vs::iota(0, 1), vs::iota(0, 4)}};
+    };
+    x = f;
+    REQUIRE(x == Tuple{Tuple{vs::iota(0, 2)},
+                       Tuple{vs::iota(0, 3), vs::iota(0, 1), vs::iota(0, 4)}});
 }
 
 TEST_CASE("numeric assignment with owning tuple")

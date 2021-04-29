@@ -27,9 +27,10 @@ public:
         return b.row_offset() + b.rows() * b.stride();
     }
 
-    void operator()(std::span<const real> x, std::span<real> b) const
+    template <typename Op = eq_t>
+    void operator()(std::span<const real> x, std::span<real> b, Op op = {}) const
     {
-        for (auto&& block : blocks) { block(x, b); }
+        for (auto&& block : blocks) { block(x, b, op); }
     }
 
     struct Builder;

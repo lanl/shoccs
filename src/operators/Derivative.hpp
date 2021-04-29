@@ -29,11 +29,16 @@ public:
                const bcs::Object& object_bcs);
 
     // operator for when neumann conditions are not needed
-    void operator()(field::ScalarView_Const, field::ScalarView_Mutable) const;
+    template <typename Op = eq_t>
+    requires(!field::tuple::traits::ScalarType<Op>) void
+    operator()(field::ScalarView_Const, field::ScalarView_Mutable, Op op = {}) const;
 
     // operaotr for when neumann conditions may be applied
-    void operator()(field::ScalarView_Const field_values,
-                    field::ScalarView_Const derivative_values,
-                    field::ScalarView_Mutable) const;
+    template <typename Op = eq_t>
+    requires(!field::tuple::traits::ScalarType<Op>) void
+    operator()(field::ScalarView_Const field_values,
+               field::ScalarView_Const derivative_values,
+               field::ScalarView_Mutable,
+               Op op = {}) const;
 };
 } // namespace ccs::operators

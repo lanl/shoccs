@@ -13,10 +13,14 @@
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/stride.hpp>
 #include <range/v3/view/take.hpp>
+#include <range/v3/view/transform.hpp>
+
+using namespace ccs;
+constexpr auto g = []() { return pick(); };
+constexpr auto x2 = [](auto&& x) { return x + x; };
 
 TEST_CASE("Identity")
 {
-    using namespace ccs;
     using T = std::vector<real>;
 
     T coeffs{1.0};
@@ -24,16 +28,20 @@ TEST_CASE("Identity")
 
     {
         const auto A = matrix::Circulant{10, coeffs};
-        const auto x = vs::generate_n([]() { return pick(); }, 10) | rs::to<T>();
+        const auto x = vs::generate_n(g, 10) | rs::to<T>();
         auto b = T(x.size());
 
         A(x, b);
         REQUIRE(x == b);
+
+        A(x, b, plus_eq);
+        const T b2 = x | vs::transform(x2) | rs::to<T>();
+        REQUIRE(b2 == b);
     }
 
     {
         const auto A = matrix::Circulant{10, 1, 2, coeffs};
-        const auto x = vs::generate_n([]() { return pick(); }, 21) | rs::to<T>();
+        const auto x = vs::generate_n(g, 21) | rs::to<T>();
         auto b = T(x.size());
 
         A(x, b);
@@ -46,7 +54,6 @@ TEST_CASE("Identity")
 
 TEST_CASE("Random")
 {
-    using namespace ccs;
     using Catch::Matchers::Approx;
     using T = std::vector<real>;
 
@@ -81,7 +88,6 @@ TEST_CASE("Random")
 
 TEST_CASE("stride")
 {
-    using namespace ccs;
     using Catch::Matchers::Approx;
     using T = std::vector<real>;
 
