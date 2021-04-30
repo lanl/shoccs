@@ -121,7 +121,7 @@ struct gauss3d : detail::gauss {
     }
 };
 
-manufactured_solution build_ms_gauss3d(std::span<const real3> center,
+ManufacturedSolution build_ms_gauss3d(std::span<const real3> center,
                                        std::span<const real3> variance,
                                        std::span<const real> amplitude,
                                        std::span<const real> frequency)

@@ -19,7 +19,7 @@ concept MSolution = requires(const M& ms, real time, const real3& loc, int dim) 
 };
 // clang-format on
 
-class manufactured_solution
+class ManufacturedSolution
 {
     class any_sol
     {
@@ -81,14 +81,14 @@ class manufactured_solution
     any_sol* s;
 
 public:
-    manufactured_solution() : s{nullptr} {}
+    ManufacturedSolution() : s{nullptr} {}
 
-    manufactured_solution(const manufactured_solution& other) : s{nullptr}
+    ManufacturedSolution(const ManufacturedSolution& other) : s{nullptr}
     {
         if (other) s = other.s->clone();
     }
 
-    manufactured_solution(manufactured_solution&& other)
+    ManufacturedSolution(ManufacturedSolution&& other)
         : s{std::exchange(other.s, nullptr)}
     {
     }
@@ -96,29 +96,29 @@ public:
     // construc // construction from anything with a hit method
     template <typename T>
         requires MSolution<T> &&
-        (!std::same_as<manufactured_solution, std::remove_cvref_t<T>>)
-            manufactured_solution(T&& other)
+        (!std::same_as<ManufacturedSolution, std::remove_cvref_t<T>>)
+            ManufacturedSolution(T&& other)
         : s{new any_sol_impl{std::forward<T>(other)}}
     {
     }
 
-    manufactured_solution& operator=(const manufactured_solution& other)
+    ManufacturedSolution& operator=(const ManufacturedSolution& other)
     {
-        manufactured_solution tmp{other};
+        ManufacturedSolution tmp{other};
         swap(*this, tmp);
         return (*this);
     }
 
-    manufactured_solution& operator=(manufactured_solution&& other)
+    ManufacturedSolution& operator=(ManufacturedSolution&& other)
     {
         delete s;
         s = std::exchange(other.s, nullptr);
         return *this;
     }
 
-    ~manufactured_solution() { delete s; }
+    ~ManufacturedSolution() { delete s; }
 
-    friend void swap(manufactured_solution& x, manufactured_solution& y)
+    friend void swap(ManufacturedSolution& x, ManufacturedSolution& y)
     {
         std::swap(x.s, y.s);
     }
@@ -156,22 +156,22 @@ public:
     }
 };
 // factories
-manufactured_solution build_ms_gauss1d(std::span<const real3> center,
+ManufacturedSolution build_ms_gauss1d(std::span<const real3> center,
                                        std::span<const real3> variance,
                                        std::span<const real> amplitude,
                                        std::span<const real> frequency);
 
-manufactured_solution build_ms_gauss2d(std::span<const real3> center,
+ManufacturedSolution build_ms_gauss2d(std::span<const real3> center,
                                        std::span<const real3> variance,
                                        std::span<const real> amplitude,
                                        std::span<const real> frequency);
 
-manufactured_solution build_ms_gauss3d(std::span<const real3> center,
+ManufacturedSolution build_ms_gauss3d(std::span<const real3> center,
                                        std::span<const real3> variance,
                                        std::span<const real> amplitude,
                                        std::span<const real> frequency);
 
-manufactured_solution inline build_ms_gauss(int dims,
+ManufacturedSolution inline build_ms_gauss(int dims,
                                             std::span<const real3> center,
                                             std::span<const real3> variance,
                                             std::span<const real> amplitude,

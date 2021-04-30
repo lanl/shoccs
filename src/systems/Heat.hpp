@@ -12,7 +12,7 @@ class Heat
 {
     operators::Laplacian lap;
 
-    manufactured_solution m_sol;
+    ManufacturedSolution m_sol;
 
     real diffusivity;
 
