@@ -30,7 +30,7 @@ std::optional<ManufacturedSolution> ManufacturedSolution::from_lua(const sol::ta
         std::vector<real> amplitude{};
         std::vector<real> frequency{};
 
-        for (int i = 0; ms[i].valid(); ++i) {
+        for (int i = 1; ms[i].valid(); ++i) {
             auto t = ms[i];
             center.push_back({t["center"][1].get_or(0.0),
                               t["center"][2].get_or(0.0),
@@ -46,7 +46,7 @@ std::optional<ManufacturedSolution> ManufacturedSolution::from_lua(const sol::ta
             return build_ms_gauss(dims, center, variance, amplitude, frequency);
 
     } else {
-        spdlog::error("Got manufactured_solution.type = {}.  Expected one of: {}",
+        spdlog::error("Got manufactured_solution.type = `{}`.  Expected one of: `{}`",
                       ms_t,
                       "gaussian");
     }
