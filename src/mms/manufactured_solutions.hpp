@@ -5,6 +5,8 @@
 #include <cassert>
 #include <concepts>
 
+#include <sol/forward.hpp>
+
 namespace ccs
 {
 
@@ -125,6 +127,8 @@ public:
 
     explicit operator bool() const { return s != nullptr; }
 
+    static std::optional<ManufacturedSolution> from_lua(const sol::table&, int dims);
+
     real operator()(real time, const real3& loc) const
     {
         assert(s);
@@ -157,25 +161,25 @@ public:
 };
 // factories
 ManufacturedSolution build_ms_gauss1d(std::span<const real3> center,
-                                       std::span<const real3> variance,
-                                       std::span<const real> amplitude,
-                                       std::span<const real> frequency);
+                                      std::span<const real3> variance,
+                                      std::span<const real> amplitude,
+                                      std::span<const real> frequency);
 
 ManufacturedSolution build_ms_gauss2d(std::span<const real3> center,
-                                       std::span<const real3> variance,
-                                       std::span<const real> amplitude,
-                                       std::span<const real> frequency);
+                                      std::span<const real3> variance,
+                                      std::span<const real> amplitude,
+                                      std::span<const real> frequency);
 
 ManufacturedSolution build_ms_gauss3d(std::span<const real3> center,
-                                       std::span<const real3> variance,
-                                       std::span<const real> amplitude,
-                                       std::span<const real> frequency);
+                                      std::span<const real3> variance,
+                                      std::span<const real> amplitude,
+                                      std::span<const real> frequency);
 
 ManufacturedSolution inline build_ms_gauss(int dims,
-                                            std::span<const real3> center,
-                                            std::span<const real3> variance,
-                                            std::span<const real> amplitude,
-                                            std::span<const real> frequency)
+                                           std::span<const real3> center,
+                                           std::span<const real3> variance,
+                                           std::span<const real> amplitude,
+                                           std::span<const real> frequency)
 {
     switch (dims) {
     case 1:
