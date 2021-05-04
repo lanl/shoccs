@@ -1,4 +1,4 @@
-add_library(shoccs-simulation SimulationBuilder.cpp SimulationCycle.cpp)
+add_library(shoccs-simulation simulation_builder.cpp simulation_cycle.cpp)
 target_include_directories(shoccs-simulation PUBLIC ..)
 target_link_libraries(shoccs-simulation 
     PUBLIC

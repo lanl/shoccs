@@ -1,4 +1,6 @@
+#include "gauss.hpp"
 #include "manufactured_solutions.hpp"
+
 #include <sol/sol.hpp>
 #include <spdlog/spdlog.h>
 
@@ -12,8 +14,25 @@ using namespace std::string_literals;
 
 namespace ccs
 {
-std::optional<ManufacturedSolution> ManufacturedSolution::from_lua(const sol::table& tbl,
-                                                                   int dims)
+manufactured_solution build_ms_gauss(int dims,
+                                     std::span<const real3> center,
+                                     std::span<const real3> variance,
+                                     std::span<const real> amplitude,
+                                     std::span<const real> frequency)
+{
+    switch (dims) {
+    case 1:
+        return build_ms_gauss1d(center, variance, amplitude, frequency);
+    case 2:
+        return build_ms_gauss2d(center, variance, amplitude, frequency);
+    case 3:
+        return build_ms_gauss3d(center, variance, amplitude, frequency);
+    }
+    return {};
+}
+
+std::optional<manufactured_solution>
+manufactured_solution::from_lua(const sol::table& tbl, int dims)
 {
     auto ms = tbl["manufactured_solution"];
     if (!ms.valid()) {
@@ -21,8 +40,8 @@ std::optional<ManufacturedSolution> ManufacturedSolution::from_lua(const sol::ta
         return std::nullopt;
     }
 
-    std::string ms_t =
-        ms["type"].get_or(""s) | rs::action::transform([](auto c) { return std::tolower(c); });
+    std::string ms_t = ms["type"].get_or(""s) |
+                       rs::action::transform([](auto c) { return std::tolower(c); });
 
     if (ms_t == "gaussian") {
         std::vector<real3> center{};

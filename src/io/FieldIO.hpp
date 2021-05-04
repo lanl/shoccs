@@ -5,14 +5,14 @@
 #include <tuple>
 #include <vector>
 
+#include "fields/system_field.hpp"
 #include "interval.hpp"
 #include "types.hpp"
-#include "fields/SystemField.hpp"
 
 namespace ccs
 {
 // Forward decls
-class StepController;
+class step_controller;
 
 class xdmf
 {
@@ -80,7 +80,7 @@ public:
     void add(const std::string& name, const double* data);
 #endif
 
-    void write(const SystemField& field, const StepController& controller, real dt);
+    void write(const field& field, const step_controller& controller, real dt);
 };
 
 } // namespace ccs

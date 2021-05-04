@@ -1,7 +1,7 @@
 // matchers to be used for catch tests
 #pragma once
 
-#include "Tuple.hpp"
+#include "tuple.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>

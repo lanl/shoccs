@@ -3,8 +3,8 @@
 #include <fstream>
 #include <iomanip>
 
-#include "StepController.hpp"
-#include "fields/SystemField.hpp"
+#include "fields/system_field.hpp"
+#include "step_controller.hpp"
 
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/transform.hpp>
@@ -88,5 +88,5 @@ void field_io::write(int step, real time, real dt)
     ++current_step;
 }
 #endif
-void FieldIO::write(const SystemField&, const StepController&, real) {}
+void FieldIO::write(const field&, const step_controller&, real) {}
 } // namespace ccs

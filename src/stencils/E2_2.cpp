@@ -1,4 +1,4 @@
-#include "Stencils.hpp"
+#include "stencil.hpp"
 
 #include <range/v3/algorithm/fill.hpp>
 #include <range/v3/algorithm/reverse.hpp>
@@ -12,8 +12,8 @@ struct E2_2 {
     static constexpr int T = 4;
     static constexpr int X = 2;
 
-    StencilInfo query_max() const { return {P, R, T, X}; }
-    StencilInfo query(bcs::type b) const
+    info query_max() const { return {P, R, T, X}; }
+    info query(bcs::type b) const
     {
         switch (b) {
         case bcs::Dirichlet:
@@ -124,9 +124,10 @@ struct E2_2 {
     }
 };
 
-Stencil make_E2_2() { return E2_2{}; }
+stencil make_E2_2() { return E2_2{}; }
 
-namespace second {
-    Stencil E2 {E2_2{}};
+namespace second
+{
+stencil E2{E2_2{}};
 }
 } // namespace ccs::stencils

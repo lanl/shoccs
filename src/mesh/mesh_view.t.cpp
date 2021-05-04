@@ -10,7 +10,7 @@ TEST_CASE("location-2D")
 {
     using namespace ccs;
 
-    auto m = mesh::Cartesian{real3{-1, 1}, real3{0, 2}, int3{2, 3, 1}};
+    auto m = mesh::cartesian{real3{-1, 1}, real3{0, 2}, int3{2, 3, 1}};
 
     SECTION("X")
     {
@@ -33,7 +33,7 @@ TEST_CASE("location-3D")
 {
     using namespace ccs;
 
-    auto m = mesh::Cartesian{real3{-1, 1, 3}, real3{0, 2, 4}, int3{2, 2, 3}};
+    auto m = mesh::cartesian{real3{-1, 1, 3}, real3{0, 2, 4}, int3{2, 2, 3}};
 
     SECTION("X")
     {
@@ -94,7 +94,7 @@ TEST_CASE("plane")
 {
     using namespace ccs;
 
-    auto m = mesh::Cartesian{real3{-1, 1, 3}, real3{0, 2, 4}, int3{2, 2, 3}};
+    auto m = mesh::cartesian{real3{-1, 1, 3}, real3{0, 2, 4}, int3{2, 2, 3}};
 
     SECTION("X")
     {

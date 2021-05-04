@@ -4,7 +4,9 @@
 
 namespace ccs::matrix
 {
-class Common
+
+// encapsulate information common to all matrix implementations
+class matrix_base
 {
     integer rows_;
     integer columns_;
@@ -13,13 +15,13 @@ class Common
     integer stride_;
 
 public:
-    Common() = default;
+    matrix_base() = default;
 
-    Common(integer rows,
-           integer columns,
-           integer row_offset = 0,
-           integer col_offset = 0,
-           integer stride = 1)
+    matrix_base(integer rows,
+                integer columns,
+                integer row_offset = 0,
+                integer col_offset = 0,
+                integer stride = 1)
         : rows_{rows},
           columns_{columns},
           row_offset_{row_offset},
@@ -34,17 +36,17 @@ public:
     constexpr auto col_offset() const { return col_offset_; }
     constexpr auto stride() const { return stride_; }
     // these can be set after initialization
-    Common& row_offset(integer x)
+    matrix_base& row_offset(integer x)
     {
         row_offset_ = x;
         return *this;
     }
-    Common& col_offset(integer x)
+    matrix_base& col_offset(integer x)
     {
         col_offset_ = x;
         return *this;
     }
-    Common& stride(integer x)
+    matrix_base& stride(integer x)
     {
         stride_ = x;
         return *this;

@@ -1,4 +1,4 @@
-#include "Stencils.hpp"
+#include "stencil.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -9,11 +9,10 @@
 #include <range/v3/view/zip.hpp>
 
 using Catch::Matchers::Approx;
+using namespace ccs;
 
 TEST_CASE("dirichlet")
 {
-    using namespace ccs;
-
     auto st = stencils::second::E2;
 
     auto [p, r, t, x] = st.query_max();
@@ -43,8 +42,6 @@ TEST_CASE("dirichlet")
 
 TEST_CASE("floating")
 {
-    using namespace ccs;
-
     const auto& st = stencils::second::E2;
 
     auto [p, r, t, x] = st.query(bcs::Floating);
@@ -68,8 +65,6 @@ TEST_CASE("floating")
 
 TEST_CASE("neumann")
 {
-    using namespace ccs;
-
     auto st = stencils::make_E2_2();
 
     auto [p, r, t, x] = st.query(bcs::Neumann);

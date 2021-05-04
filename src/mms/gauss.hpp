@@ -4,8 +4,10 @@
 #include <span>
 #include <vector>
 
-namespace ccs::detail
+namespace ccs
 {
+class manufactured_solution;
+
 // all gauss mms have the same data and constructors so move them to a seperate class
 struct gauss {
     std::vector<real3> center;
@@ -26,4 +28,21 @@ struct gauss {
     {
     }
 };
-} // namespace ccs::detail
+
+// factories
+manufactured_solution build_ms_gauss1d(std::span<const real3> center,
+                                       std::span<const real3> variance,
+                                       std::span<const real> amplitude,
+                                       std::span<const real> frequency);
+
+manufactured_solution build_ms_gauss2d(std::span<const real3> center,
+                                       std::span<const real3> variance,
+                                       std::span<const real> amplitude,
+                                       std::span<const real> frequency);
+
+manufactured_solution build_ms_gauss3d(std::span<const real3> center,
+                                       std::span<const real3> variance,
+                                       std::span<const real> amplitude,
+                                       std::span<const real> frequency);
+
+} // namespace ccs

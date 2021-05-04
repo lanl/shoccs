@@ -1,18 +1,18 @@
 #pragma once
 
-#include "SystemField_fwd.hpp"
+#include "system_field_fwd.hpp"
 #include "types.hpp"
 #include <functional>
 
-namespace ccs::field::lazy
+namespace ccs::detail::lazy
 {
 template <typename T>
-struct ContainerMath;
+struct container_math;
 
-class ContainerAccess
+class container_access
 {
     template <typename T>
-    friend class ContainerMath;
+    friend class container_math;
 };
 
 #define SHOCCS_GEN_OPERATORS(op, f)                                                      \
@@ -31,23 +31,23 @@ class ContainerAccess
     }
 
 template <typename T>
-struct ContainerMath {
+struct container_math {
 
 private:
     SHOCCS_GEN_OPERATORS(operator+=, +=)
     SHOCCS_GEN_OPERATORS(operator-=, -=)
     SHOCCS_GEN_OPERATORS(operator*=, *=)
-    SHOCCS_GEN_OPERATORS(operator/=, /=) 
+    SHOCCS_GEN_OPERATORS(operator/=, /=)
 };
 #undef SHOCCS_GEN_OPERATORS
 
 template <typename T>
-struct ViewMath;
+struct view_math;
 
-class ViewAccess
+class view_access
 {
     template <typename T>
-    friend class ViewMath;
+    friend class view_math;
 };
 
 #define SHOCCS_GEN_OPERATORS(op, f)                                                      \
@@ -72,7 +72,7 @@ class ViewAccess
     }
 
 template <typename T>
-struct ViewMath {
+struct view_math {
 
 private:
     SHOCCS_GEN_OPERATORS(operator+, std::plus{})
@@ -90,4 +90,4 @@ private:
 };
 
 #undef SHOCCS_GEN_OPERATORS
-} // namespace ccs::field::lazy
+} // namespace ccs::detail::lazy

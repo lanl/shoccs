@@ -7,8 +7,8 @@
 namespace ccs
 {
 
-struct gauss3d : detail::gauss {
-    using detail::gauss::gauss;
+struct gauss3d : gauss {
+    using gauss::gauss;
 
     real operator()(real time, const real3& loc) const
     {
@@ -121,7 +121,7 @@ struct gauss3d : detail::gauss {
     }
 };
 
-ManufacturedSolution build_ms_gauss3d(std::span<const real3> center,
+manufactured_solution build_ms_gauss3d(std::span<const real3> center,
                                        std::span<const real3> variance,
                                        std::span<const real> amplitude,
                                        std::span<const real> frequency)

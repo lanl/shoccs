@@ -35,7 +35,7 @@ namespace vs = ranges::views;
 template <int N>
 using lit = std::integral_constant<int, N>;
 
-struct SystemStats {
+struct system_stats {
 };
 
 template <typename T = real>

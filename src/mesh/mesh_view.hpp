@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Cartesian.hpp"
+#include "cartesian.hpp"
 #include "indexing.hpp"
 
 #include <cppcoro/generator.hpp>
@@ -14,7 +14,7 @@ namespace ccs::mesh
 {
 
 template <int I = 2>
-cppcoro::generator<real3> location_view(const Cartesian& m)
+cppcoro::generator<real3> location_view(const cartesian& m)
 {
     constexpr int F = index::dir<I>::fast;
     constexpr int S = index::dir<I>::slow;
@@ -37,7 +37,7 @@ cppcoro::generator<real3> location_view(const Cartesian& m)
 }
 
 template <int I>
-cppcoro::generator<real3> location_view(const Cartesian& m, int i)
+cppcoro::generator<real3> location_view(const cartesian& m, int i)
 {
     constexpr int F = index::dir<I>::fast;
     constexpr int S = index::dir<I>::slow;

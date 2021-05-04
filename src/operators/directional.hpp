@@ -1,13 +1,12 @@
 #pragma once
 
 #include "boundaries.hpp"
+#include "fields/fields.hpp"
 #include "geometry/geometry.hpp"
 #include "matrices/block.hpp"
 #include "matrices/csr.hpp"
 #include "mesh/mesh.hpp"
 #include "stencils/stencils.hpp"
-#include "fields/fields.hpp"
-
 
 namespace ccs::op
 {
@@ -19,7 +18,7 @@ namespace ccs::op
 //
 // To form the operator we need
 // 1) The stencil -> boundary and interior stencils
-// 2) UnCut Cartesian mesh -> defined by the umesh_lines
+// 2) UnCut cartesian mesh -> defined by the umesh_lines
 // 3) cut-cell intersection points
 // 4) solid points we can use to enforce bc's
 //
