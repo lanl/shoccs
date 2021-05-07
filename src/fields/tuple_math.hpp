@@ -27,7 +27,7 @@ private:
 #define SHOCCS_GEN_OPERATORS(op, f)                                                      \
     template <std::derived_from<T> U, Numeric V>                                         \
         requires OutputTuple<U, V>                                                       \
-    friend U& op(U& u, V v)                                                              \
+    constexpr friend U& op(U& u, V v)                                                    \
     {                                                                                    \
         for_each(                                                                        \
             [v](auto&& rng) {                                                            \
@@ -40,7 +40,7 @@ private:
                                                                                          \
     template <std::derived_from<T> U, TupleLike V>                                       \
         requires OutputTuple<U, V>                                                       \
-    friend U& op(U& u, V&& v)                                                            \
+    constexpr friend U& op(U& u, V&& v)                                                  \
     {                                                                                    \
         for_each(                                                                        \
             [](auto&& out, auto&& in) {                                                  \

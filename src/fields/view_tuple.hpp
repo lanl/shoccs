@@ -19,7 +19,7 @@ struct view_tuple_base {
     std::tuple<std::add_pointer_t<std::remove_reference_t<Args>>...> v;
 
     view_tuple_base() = default;
-    view_tuple_base(Args&&... args) : v{FWD(args)...} {};
+    constexpr view_tuple_base(Args&&... args) : v{FWD(args)...} {};
 
     view_tuple_base(const view_tuple_base&) = default;
     view_tuple_base(view_tuple_base&&) = default;
@@ -28,13 +28,13 @@ struct view_tuple_base {
     view_tuple_base& operator=(view_tuple_base&&) = default;
 
     template <typename... C>
-    view_tuple_base(container_tuple<C...>& x)
+    constexpr view_tuple_base(container_tuple<C...>& x)
         : v{tuple_map([](auto&& a) { return std::addressof(FWD(a)); }, x.c)}
     {
     }
 
     template <typename... C>
-    view_tuple_base& operator=(container_tuple<C...>& x)
+    constexpr view_tuple_base& operator=(container_tuple<C...>& x)
     {
         v = tuple_map([](auto&& a) { return std::addressof(FWD(a)); }, x.c);
         return *this;
@@ -56,25 +56,27 @@ public:
     view_tuple_base& operator=(const view_tuple_base&) = default;
     view_tuple_base& operator=(view_tuple_base&&) = default;
 
-    explicit view_tuple_base(Args&&... args) requires(sizeof...(Args) > 0)
+    explicit constexpr view_tuple_base(Args&&... args) requires(sizeof...(Args) > 0)
         : v{vs::all(FWD(args))...} {};
 
     template <NonTupleRange... Ranges>
         requires(std::constructible_from<Args, Ranges>&&...)
-    explicit view_tuple_base(Ranges&&... args) : v{vs::all(Args{FWD(args)})...} {}
-
-    template <TupleLike T>
-    explicit view_tuple_base(T&& t) : v{tuple_map(vs::all, FWD(t))}
+    explicit constexpr view_tuple_base(Ranges&&... args) : v{vs::all(Args{FWD(args)})...}
     {
     }
 
-    view_tuple_base& operator=(const view_tuple_base& x) requires Output
+    template <TupleLike T>
+    explicit constexpr view_tuple_base(T&& t) : v{tuple_map(vs::all, FWD(t))}
+    {
+    }
+
+    constexpr view_tuple_base& operator=(const view_tuple_base& x) requires Output
     {
         resize_and_copy(*this, x);
         return *this;
     }
 
-    view_tuple_base& operator=(view_tuple_base&& x) requires Output
+    constexpr view_tuple_base& operator=(view_tuple_base&& x) requires Output
     {
         resize_and_copy(*this, MOVE(x));
         return *this;
@@ -84,7 +86,7 @@ public:
     // just take news views
     template <OwningTuple C>
         requires(!ViewClosures<C>)
-    view_tuple_base& operator=(C&& c)
+    constexpr view_tuple_base& operator=(C&& c)
     {
         v = tuple_map(vs::all, FWD(c));
         return *this;
@@ -94,8 +96,8 @@ public:
     // have a corresponding container.  Thus, this call results in a copy operation
     // rather than simply resetting the view to the container
     template <typename T>
-        requires(!OwningTuple<T>)
-    &&OutputTuple<view_tuple_base, T> view_tuple_base& operator=(T&& t)
+        requires(!OwningTuple<T> && OutputTuple<view_tuple_base, T>)
+    constexpr view_tuple_base& operator=(T&& t)
     {
         // calling here
         resize_and_copy(*this, FWD(t));
@@ -104,25 +106,25 @@ public:
 
     // Check for direct assignment betweeen components.  Needed for Tuples of Selections
     template <typename T>
-        requires(!OwningTuple<T>)
-    &&(!OutputTuple<view_tuple_base, T>)&&AssignableDirect<view_tuple_base,
-                                                           T> view_tuple_base&
-    operator=(T&& t)
+        requires(!OwningTuple<T> &&
+                 (!OutputTuple<view_tuple_base, T>)&&AssignableDirect<view_tuple_base, T>)
+    constexpr view_tuple_base& operator=(T&& t)
     {
         for_each([t = FWD(t)](auto&& x) { x = t; }, *this);
         return *this;
     }
 
     template <typename T>
-        requires(!OutputTuple<view_tuple_base, T>)
-    &&AssignableDirectTuple<view_tuple_base, T> view_tuple_base& operator=(T&& t)
+        requires(!OutputTuple<view_tuple_base, T> &&
+                 AssignableDirectTuple<view_tuple_base, T>)
+    constexpr view_tuple_base& operator=(T&& t)
     {
         for_each([](auto&& x, auto&& y) { x = FWD(y); }, *this, FWD(t));
         return *this;
     }
 
     template <NonTupleRange T>
-    friend bool operator==(const view_tuple_base& x, const T& y)
+    friend constexpr bool operator==(const view_tuple_base& x, const T& y)
     {
         return [&]<auto... Is>(std::index_sequence<Is...>)
         {
@@ -132,7 +134,7 @@ public:
     }
 
     template <SimilarTuples<view_tuple_base> T>
-    friend bool operator==(const view_tuple_base& x, const T& y)
+    friend constexpr bool operator==(const view_tuple_base& x, const T& y)
     {
         return [&]<auto... Is>(std::index_sequence<Is...>)
         {
@@ -182,12 +184,12 @@ struct single_view {
     single_view& operator=(single_view&&) = default;
 
     template <typename... T>
-    single_view(T&&...)
+    constexpr single_view(T&&...)
     {
     }
 
     template <typename... T>
-    single_view& operator=(T&&...)
+    constexpr single_view& operator=(T&&...)
     {
         return *this;
     }
@@ -205,21 +207,21 @@ public:
     single_view& operator=(const single_view&) = default;
     single_view& operator=(single_view&&) = default;
 
-    single_view(A&& a) : view(vs::all(FWD(a))) {}
+    constexpr single_view(A&& a) : view(vs::all(FWD(a))) {}
 
     template <TupleLike T>
-    single_view(T&& t) : view(get<0>(t))
+    constexpr single_view(T&& t) : view(get<0>(t))
     {
     }
 
-    single_view& operator=(A&& a)
+    constexpr single_view& operator=(A&& a)
     {
         view::operator=(vs::all(FWD(a)));
         return *this;
     }
 
     template <TupleLike T>
-    single_view& operator=(T&& t)
+    constexpr single_view& operator=(T&& t)
     {
         view::operator=(get<0>(t));
         return *this;
@@ -250,7 +252,7 @@ public:
     using base = view_tuple_base<Args...>;
 
     explicit view_tuple() = default;
-    explicit view_tuple(Args&&... args) requires(sizeof...(Args) > 0)
+    explicit constexpr view_tuple(Args&&... args) requires(sizeof...(Args) > 0)
         : base{FWD(args)...}, view{*this}
     {
     }
@@ -258,11 +260,12 @@ public:
     // Forward all construction to view_tuple_base
     template <typename... T>
         requires std::constructible_from<base, T...>
-    explicit view_tuple(T&&... t) : base{FWD(t)...}, view{*this} {}
+    explicit constexpr view_tuple(T&&... t) : base{FWD(t)...}, view{*this} {}
 
     // Foward all assignment to view_tuple_base
     template <typename T>
-    requires std::is_assignable_v<base&, T> view_tuple& operator=(T&& t)
+        requires std::is_assignable_v<base&, T>
+    constexpr view_tuple& operator=(T&& t)
     {
         base::operator=(FWD(t));
         view::operator=(*this);

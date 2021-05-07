@@ -15,16 +15,17 @@ struct tuple : container_tuple<Args...>, view_tuple<Args&...> {
     using container = container_tuple<Args...>;
     using view = view_tuple<Args&...>;
 
-    tuple() : container{}, view{*this} {}
+    constexpr tuple() : container{}, view{*this} {}
 
-    tuple(Args&&... args) : container{FWD(args)...}, view{*this} {}
+    constexpr tuple(Args&&... args) : container{FWD(args)...}, view{*this} {}
 
     template <typename... T>
         requires((sizeof...(Args) > 0) && std::constructible_from<container, T...>)
-    tuple(T&&... args) : container{FWD(args)...}, view{*this} {}
+    constexpr tuple(T&&... args) : container{FWD(args)...}, view{*this} {}
 
     template <typename T>
-    requires std::is_assignable_v<container&, T> tuple& operator=(T&& t)
+        requires std::is_assignable_v<container&, T>
+    constexpr tuple& operator=(T&& t)
     {
         container::operator=(FWD(t));
         // need to adjust the views incase the container has resized
@@ -33,7 +34,7 @@ struct tuple : container_tuple<Args...>, view_tuple<Args&...> {
     }
 
     template <std::invocable<tuple&> Fn>
-    tuple& operator=(Fn fn)
+    constexpr tuple& operator=(Fn fn)
     {
         std::invoke(fn, *this);
         return *this;
@@ -41,17 +42,17 @@ struct tuple : container_tuple<Args...>, view_tuple<Args&...> {
 
     // need to define custom copy and move construction/assignment here since the
     // component-wise approach is not correct
-    tuple(const tuple& r) : container{r}, view{*this} {}
-    tuple& operator=(const tuple& r)
+    constexpr tuple(const tuple& r) : container{r}, view{*this} {}
+    constexpr tuple& operator=(const tuple& r)
     {
         container::operator=(r);
         view::operator=(*this);
         return *this;
     }
 
-    tuple(tuple&& r) noexcept : container{MOVE(r)}, view{*this} {}
+    constexpr tuple(tuple&& r) noexcept : container{MOVE(r)}, view{*this} {}
 
-    tuple& operator=(tuple&& r) noexcept
+    constexpr tuple& operator=(tuple&& r) noexcept
     {
         container::operator=(MOVE(r));
         view::operator=(*this);
@@ -59,7 +60,8 @@ struct tuple : container_tuple<Args...>, view_tuple<Args&...> {
     }
 
     template <NonTupleRange T>
-    friend bool operator==(const tuple& x, const T& y) requires NestedTuple<tuple>
+    friend constexpr bool operator==(const tuple& x,
+                                     const T& y) requires NestedTuple<tuple>
     {
         return [&]<auto... Is>(std::index_sequence<Is...>)
         {
@@ -69,7 +71,8 @@ struct tuple : container_tuple<Args...>, view_tuple<Args&...> {
     }
 
     template <SimilarTuples<tuple> T>
-    friend bool operator==(const tuple& x, const T& y) requires NestedTuple<tuple>
+    friend constexpr bool operator==(const tuple& x,
+                                     const T& y) requires NestedTuple<tuple>
     {
         return [&]<auto... Is>(std::index_sequence<Is...>)
         {
@@ -78,9 +81,9 @@ struct tuple : container_tuple<Args...>, view_tuple<Args&...> {
         (sequence<tuple>);
     }
 
-    tuple& as_tuple() & { return *this; }
-    const tuple& as_tuple() const& { return *this; }
-    tuple&& as_tuple() && { return MOVE(*this); }
+    constexpr tuple& as_tuple() & { return *this; }
+    constexpr const tuple& as_tuple() const& { return *this; }
+    constexpr tuple&& as_tuple() && { return MOVE(*this); }
 };
 
 //
@@ -90,31 +93,32 @@ template <All... Args>
 struct tuple<Args...> : view_tuple<Args...> {
     using view = view_tuple<Args...>;
 
-    explicit tuple(Args&&... args) : view{FWD(args)...} {};
+    explicit constexpr tuple(Args&&... args) : view{FWD(args)...} {};
 
     tuple() = default;
 
     template <typename... T>
         requires(std::constructible_from<view, T...>)
-    tuple(T&&... t) : view{FWD(t)...} {}
+    constexpr tuple(T&&... t) : view{FWD(t)...} {}
 
     template <typename T>
-    requires std::is_assignable_v<view&, T> tuple& operator=(T&& t)
+        requires std::is_assignable_v<view&, T>
+    constexpr tuple& operator=(T&& t)
     {
         view::operator=(FWD(t));
         return *this;
     }
 
     template <std::invocable<tuple&> Fn>
-    tuple& operator=(Fn fn)
+    constexpr tuple& operator=(Fn fn)
     {
         std::invoke(fn, *this);
         return *this;
     }
 
-    tuple& as_tuple() & { return *this; }
-    const tuple& as_tuple() const& { return *this; }
-    tuple&& as_tuple() && { return MOVE(*this); }
+    constexpr tuple& as_tuple() & { return *this; }
+    constexpr const tuple& as_tuple() const& { return *this; }
+    constexpr tuple&& as_tuple() && { return MOVE(*this); }
 };
 
 template <typename... Args>
@@ -186,8 +190,7 @@ namespace ccs
 {
 
 template <typename T, auto N>
-concept NTuple = Tuple<T> && std::tuple_size_v<std::remove_cvref_t<T>>
-== N;
+concept NTuple = Tuple<T> &&(std::tuple_size_v<std::remove_cvref_t<T>> == N);
 
 template <typename T>
 concept OneTuple = NTuple<T, 1u>;

@@ -132,7 +132,7 @@ constexpr auto tuple_map(F&& f, T&& t)
 }
 
 template <TupleLike... T, InvocableOver<T...> F>
-void for_each(F&& f, T&&... t)
+constexpr void for_each(F&& f, T&&... t)
 {
     static_assert(sizeof...(T) > 0);
 
@@ -146,7 +146,7 @@ void for_each(F&& f, T&&... t)
 }
 
 template <TupleLike... T, IndexedInvocableOver<T...> F>
-void for_each(F&& f, T&&... t)
+constexpr void for_each(F&& f, T&&... t)
 {
     static_assert(sizeof...(T) > 0);
 
@@ -160,7 +160,7 @@ void for_each(F&& f, T&&... t)
 }
 
 template <TupleLike... T, TupleInvocableOver<T...> F>
-void for_each(F&& f, T&&... t)
+constexpr void for_each(F&& f, T&&... t)
 {
     static_assert(sizeof...(T) > 0);
 
@@ -174,7 +174,7 @@ void for_each(F&& f, T&&... t)
 }
 
 template <NestedTuple... T, NestedInvocableOver<T...> F>
-void for_each(F&& f, T&&... t)
+constexpr void for_each(F&& f, T&&... t)
 {
     static_assert(sizeof...(T) > 0);
 
@@ -192,7 +192,7 @@ void for_each(F&& f, T&&... t)
 // Given a container and and input range, attempt to resize the container.
 // Either way, copy the input range into the container - may not be safe.
 template <Range R, OutputRange<R> C>
-void resize_and_copy(C&& container, R&& r)
+constexpr void resize_and_copy(C&& container, R&& r)
 {
     constexpr bool can_resize = requires(C c, R r) { c.resize(rs::size(r)); };
     constexpr bool compare_sizes = requires(C c, R r) { rs::size(c) < rs::size(r); };
@@ -215,26 +215,26 @@ void resize_and_copy(C&& container, R&& r)
 // Either way, copy the input range into the container - may not be safe.
 template <Range R, OutputRange<R> C>
     requires RefView<C>
-void resize_and_copy(C&& container, R&& r)
+constexpr void resize_and_copy(C&& container, R&& r)
 {
     resize_and_copy(FWD(container).base(), FWD(r));
 }
 
 template <Numeric N, OutputRange<N> T>
-void resize_and_copy(T&& t, N n)
+constexpr void resize_and_copy(T&& t, N n)
 {
     rs::fill(FWD(t), n);
 }
 
 template <typename R, OutputTuple<R> T>
     requires(!TupleLike<R>)
-void resize_and_copy(T&& t, R&& r)
+constexpr void resize_and_copy(T&& t, R&& r)
 {
     for_each([&r](auto&& e) { resize_and_copy(FWD(e), r); }, FWD(t));
 }
 
 template <TupleLike R, OutputTuple<R> T>
-void resize_and_copy(T&& t, R&& r)
+constexpr void resize_and_copy(T&& t, R&& r)
 {
     // here
     for_each([](auto&& e, auto&& r) { resize_and_copy(FWD(e), FWD(r)); }, FWD(t), FWD(r));

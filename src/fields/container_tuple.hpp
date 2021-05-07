@@ -15,38 +15,39 @@ struct container_tuple {
     std::tuple<Args...> c;
 
     container_tuple() = default;
-    container_tuple(Args&&... args) : c{FWD(args)...} {}
+    constexpr container_tuple(Args&&... args) : c{FWD(args)...} {}
 
     template <typename... T>
         requires(std::constructible_from<Args, T>&&...)
-    container_tuple(T&&... args) : c(FWD(args)...) {}
+    constexpr container_tuple(T&&... args) : c(FWD(args)...) {}
 
     // allow for constructing and assigning from input_ranges
     template <NonTupleRange... Ranges>
         requires(ConstructibleFromRange<Args, Ranges>&&...)
-    container_tuple(Ranges&&... r) : c{Args{rs::begin(r), rs::end(r)}...} {}
+    constexpr container_tuple(Ranges&&... r) : c{Args{rs::begin(r), rs::end(r)}...} {}
 
     template <TupleToTuple<container_tuple> T>
-    container_tuple(T&& t) : c{to<std::tuple<Args...>>(FWD(t))}
+    constexpr container_tuple(T&& t) : c{to<std::tuple<Args...>>(FWD(t))}
     {
     }
 
     template <typename T>
-    requires OutputTuple<container_tuple, T> container_tuple& operator=(T&& t)
+        requires OutputTuple<container_tuple, T>
+    constexpr container_tuple& operator=(T&& t)
     {
         resize_and_copy(*this, FWD(t));
         return *this;
     }
 
-    container_tuple& as_container() { return *this; }
-    const container_tuple& as_container() const { return *this; }
+    constexpr container_tuple& as_container() { return *this; }
+    constexpr const container_tuple& as_container() const { return *this; }
 };
 
 template <typename... Args>
 container_tuple(Args&&...) -> container_tuple<std::remove_reference_t<Args>...>;
 
 template <std::size_t I, ContainerTuple C>
-auto&& get(C&& c)
+constexpr auto&& get(C&& c)
 {
     return std::get<I>(FWD(c).c);
 }

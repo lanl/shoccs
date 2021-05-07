@@ -145,3 +145,10 @@ TEST_CASE("Nested Pipe")
             tuple{tuple{std::vector{3, 4, 5}, std::vector{6, 7}, std::vector{6, 5, 4, 3}},
                   tuple{std::vector{1, 0, -1}}});
 }
+
+TEST_CASE("constexpr tuples of transforms")
+{
+    constexpr auto tup = tuple{vs::transform([](auto&& i) { return i * i; }),
+                               vs::transform([](auto&& i) { return i + i; }),
+                               vs::transform([](auto&& i) { return i * i * i; })};
+}
