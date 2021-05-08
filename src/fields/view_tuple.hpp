@@ -16,28 +16,12 @@ namespace ccs
 template <typename... Args>
 struct view_tuple_base {
 
-    std::tuple<std::add_pointer_t<std::remove_reference_t<Args>>...> v;
-
     view_tuple_base() = default;
-    constexpr view_tuple_base(Args&&... args) : v{FWD(args)...} {};
-
-    view_tuple_base(const view_tuple_base&) = default;
-    view_tuple_base(view_tuple_base&&) = default;
-
-    view_tuple_base& operator=(const view_tuple_base&) = default;
-    view_tuple_base& operator=(view_tuple_base&&) = default;
+    constexpr view_tuple_base(Args&&... args){};
 
     template <typename... C>
-    constexpr view_tuple_base(container_tuple<C...>& x)
-        : v{tuple_map([](auto&& a) { return std::addressof(FWD(a)); }, x.c)}
+    constexpr view_tuple_base(const container_tuple<C...>& x)
     {
-    }
-
-    template <typename... C>
-    constexpr view_tuple_base& operator=(container_tuple<C...>& x)
-    {
-        v = tuple_map([](auto&& a) { return std::addressof(FWD(a)); }, x.c);
-        return *this;
     }
 };
 

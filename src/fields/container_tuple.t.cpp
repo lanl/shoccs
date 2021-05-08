@@ -9,6 +9,7 @@
 #include <range/v3/view/iota.hpp>
 #include <range/v3/view/repeat_n.hpp>
 #include <range/v3/view/take.hpp>
+#include <range/v3/view/transform.hpp>
 #include <range/v3/view/zip_with.hpp>
 
 #include <vector>
@@ -317,4 +318,10 @@ TEST_CASE("Nested")
         auto&& [c] = v;
         REQUIRE(rs::equal(c, T{-1, -2, -3}));
     }
+}
+
+TEST_CASE("constexpr")
+{
+    [[maybe_unused]] constexpr auto x =
+        container_tuple{vs::transform([](auto&& i) { return i + 1; })};
 }

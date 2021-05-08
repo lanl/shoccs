@@ -151,4 +151,10 @@ TEST_CASE("constexpr tuples of transforms")
     constexpr auto tup = tuple{vs::transform([](auto&& i) { return i * i; }),
                                vs::transform([](auto&& i) { return i + i; }),
                                vs::transform([](auto&& i) { return i * i * i; })};
+
+    constexpr auto x =
+        tuple{std::array{1, 2, 3}, std::array{2, 3, 4}, std::array{3, 4, 5}};
+
+    REQUIRE((x | tup) ==
+            tuple{std::array{1, 4, 9}, std::array{4, 6, 8}, std::array{27, 64, 125}});
 }
