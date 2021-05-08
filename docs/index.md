@@ -7,6 +7,7 @@ Welcome to shoccs's documentation!
 ==================================
 
 ```{toctree}
+design.md
 lazyness.md
 field.md
 geometry.md

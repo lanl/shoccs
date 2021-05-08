@@ -113,7 +113,7 @@ B^{c_0} & |  & B^I & \\
 \end{align}
 $$
 
-Note that $B^{c_0}$ does not include the corner point, since it makes more sense to keep all of $B^{r_0} together at the moment.
+Note that $B^{c_0}$ does not include the corner point, since it makes more sense to keep all of $B^{r_0}$ together at the moment.
 Under this approach, the discrete operator, $O$, is made up of the circulant matrices, $C$, as well as the $B^I$ portions of the boundary matrices. Note that while $C$ is independent of $\psi$ and $\boldsymbol{\alpha}$, $B^I$ is a function of them as well as the type of boundary condition (i.e. Neumann, Dirichlet, Floating). By convention, for Dirichlet conditions, $B^{r_0} = 0$.
 
 Given an efficient storage strategy, it doesn't seem unreasonable to store different

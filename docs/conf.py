@@ -31,7 +31,8 @@ release = '2.0'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'myst_parser'
+    'myst_parser',
+    'sphinxcontrib.bibtex',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -57,3 +58,5 @@ html_theme = 'alabaster'
 html_static_path = ['_static']
 
 autosectionlabel_prefix_document = True
+
+bibtex_bibfiles = ["references.bib"]
