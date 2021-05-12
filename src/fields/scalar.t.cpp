@@ -76,8 +76,10 @@ TEST_CASE("selection")
     REQUIRE(rs::equal(ry, s | sel::Ry));
     REQUIRE(rs::equal(rz, s | sel::Rz));
 
-    REQUIRE(rs::equal(s | sel::D | vs::transform([](auto&& x) { return x * x * x; }),
-                      std::vector{1, 8}));
+    // can compose these with pipe syntax since selections are just view closures
+    constexpr auto t = sel::D | vs::transform([](auto&& x) { return x * x * x; });
+
+    REQUIRE(rs::equal(s | t, std::vector{1, 8}));
 
     // modify selection
     s | sel::D = 0;

@@ -64,6 +64,11 @@ struct plus_eq_t {
 constexpr auto eq = eq_t{};
 constexpr auto plus_eq = plus_eq_t{};
 
+struct index_slice {
+    integer first;
+    integer last;
+};
+
 } // namespace ccs
 
 #ifndef NDEBUG

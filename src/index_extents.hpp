@@ -20,6 +20,8 @@ struct index_extents {
 
     constexpr auto operator[](int i) const { return extents[i]; }
     constexpr auto& operator[](int i) { return extents[i]; }
+
+    constexpr integer size() const { return extents[0] * extents[1] * extents[2]; }
 };
 
 template <std::size_t I, typename T>

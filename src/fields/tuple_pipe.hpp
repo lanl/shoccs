@@ -44,6 +44,16 @@ private:
         return transform([f](auto&& e) { return f | FWD(e); }, FWD(u));
     }
 
+    // Some of the view_closures are meant to be applied to the whole structure
+    // rather than recursively on the components
+    template <TupleLike U, typename ViewFn>
+        requires(std::derived_from<std::remove_cvref_t<U>, Type> &&
+                 !PipeableOver<vs::view_closure<ViewFn>, U>)
+    friend constexpr auto operator|(U&& u, vs::view_closure<ViewFn> f)
+    {
+        return f(FWD(u));
+    }
+
     // provide hooks for some non-tuple like entities if they define certain memeber
     // properties
     //
