@@ -156,7 +156,11 @@ struct tuple_element<I, ccs::view_tuple_base<Args...>>
 namespace ccs
 {
 
-// this base class allows for treating tuples of one parameters directly as ranges
+//
+// single_view allows for treating tuples of one parameters directly as ranges.
+// Note that the semantics of the assignment operator here are destroy_and_emplace.
+// Assignment through a single_view to the underlying range does not happen
+//
 template <typename... Args>
 struct single_view {
 
@@ -188,26 +192,40 @@ public:
     single_view() = default;
     single_view(const single_view&) = default;
     single_view(single_view&&) = default;
-    single_view& operator=(const single_view&) = default;
-    single_view& operator=(single_view&&) = default;
 
-    constexpr single_view(A&& a) : view(vs::all(FWD(a))) {}
+    constexpr single_view& operator=(const single_view& other)
+    {
+        this->~single_view();
+        new (this) single_view{other};
+        return *this;
+    }
+
+    constexpr single_view& operator=(single_view&& other)
+    {
+        this->~single_view();
+        new (this) single_view{MOVE(other)};
+        return *this;
+    }
+
+    constexpr single_view(A a) : view(vs::all(a)) {}
 
     template <TupleLike T>
-    constexpr single_view(T&& t) : view(get<0>(t))
+    constexpr single_view(T&& t) : view(vs::all(get<0>(t)))
     {
     }
 
-    constexpr single_view& operator=(A&& a)
+    constexpr single_view& operator=(A a)
     {
-        view::operator=(vs::all(FWD(a)));
+        this->~single_view();
+        new (this) single_view{vs::all(a)};
         return *this;
     }
 
     template <TupleLike T>
     constexpr single_view& operator=(T&& t)
     {
-        view::operator=(get<0>(t));
+        this->~single_view();
+        new (this) single_view{FWD(t)};
         return *this;
     }
 };
@@ -236,8 +254,20 @@ public:
     using base = view_tuple_base<Args...>;
 
     explicit view_tuple() = default;
+
     explicit constexpr view_tuple(Args&&... args) requires(sizeof...(Args) > 0)
         : base{FWD(args)...}, view{*this}
+    {
+    }
+
+    // default copy and move constructors don't do the right thing w.r.t. single_view
+    constexpr view_tuple(const view_tuple& other)
+        : base{static_cast<const base&>(other)}, view{*this}
+    {
+    }
+
+    constexpr view_tuple(view_tuple&& other)
+        : base{static_cast<base&&>(other)}, view{*this}
     {
     }
 
@@ -252,6 +282,19 @@ public:
     constexpr view_tuple& operator=(T&& t)
     {
         base::operator=(FWD(t));
+        view::operator=(static_cast<base &>(*this));
+        return *this;
+    }
+
+    // default copy/move assignment do not do the right thing w.r.t. single_view
+    constexpr view_tuple& operator=(const view_tuple& other) {
+        base::operator=(static_cast<const base&>(other));
+        view::operator=(*this);
+        return *this;
+    }
+
+    constexpr view_tuple& operator=(view_tuple&& other) {
+        base::operator=(static_cast<base&&>(other));
         view::operator=(*this);
         return *this;
     }

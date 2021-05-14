@@ -13,7 +13,7 @@ if (SHOCCS_TPL_DIR)
   list(APPEND CMAKE_PREFIX_PATH ${SHOCCS_TPL_DIR})
 endif()
 
-find_package(Lua REQUIRED)
+find_package(Lua 5.3 REQUIRED)
 # make lua a target
 add_library(lua INTERFACE IMPORTED)
 target_include_directories(lua INTERFACE ${LUA_INCLUDE_DIR})

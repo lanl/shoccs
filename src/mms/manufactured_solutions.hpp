@@ -4,6 +4,7 @@
 #include <array>
 #include <cassert>
 #include <concepts>
+#include <optional>
 
 #include <sol/forward.hpp>
 
@@ -98,66 +99,66 @@ public:
     // construc // construction from anything with a hit method
     template <typename T>
         requires ManufacturedSolution<T> &&
-        (!std::same_as<manufactured_solution, std::remove_cvref_t<T>>)
-            manufactured_solution(T&& other)
-        : s{new any_sol_impl{std::forward<T>(other)}}
-    {
-    }
+            (!std::same_as<manufactured_solution, std::remove_cvref_t<T>>)
+                manufactured_solution(T&& other)
+            : s{new any_sol_impl{std::forward<T>(other)}}
+        {
+        }
 
-    manufactured_solution& operator=(const manufactured_solution& other)
-    {
-        manufactured_solution tmp{other};
-        swap(*this, tmp);
-        return (*this);
-    }
+        manufactured_solution& operator=(const manufactured_solution& other)
+        {
+            manufactured_solution tmp{other};
+            swap(*this, tmp);
+            return (*this);
+        }
 
-    manufactured_solution& operator=(manufactured_solution&& other)
-    {
-        delete s;
-        s = std::exchange(other.s, nullptr);
-        return *this;
-    }
+        manufactured_solution& operator=(manufactured_solution&& other)
+        {
+            delete s;
+            s = std::exchange(other.s, nullptr);
+            return *this;
+        }
 
-    ~manufactured_solution() { delete s; }
+        ~manufactured_solution() { delete s; }
 
-    friend void swap(manufactured_solution& x, manufactured_solution& y)
-    {
-        std::swap(x.s, y.s);
-    }
+        friend void swap(manufactured_solution& x, manufactured_solution& y)
+        {
+            std::swap(x.s, y.s);
+        }
 
-    explicit operator bool() const { return s != nullptr; }
+        explicit operator bool() const { return s != nullptr; }
 
-    static std::optional<manufactured_solution> from_lua(const sol::table&, int dims);
+        static std::optional<manufactured_solution> from_lua(const sol::table&, int dims);
 
-    real operator()(real time, const real3& loc) const
-    {
-        assert(s);
-        return (*s)(time, loc);
-    }
+        real operator()(real time, const real3& loc) const
+        {
+            assert(s);
+            return (*s)(time, loc);
+        }
 
-    real ddt(real time, const real3& loc) const
-    {
-        assert(s);
-        return s->ddt(time, loc);
-    }
+        real ddt(real time, const real3& loc) const
+        {
+            assert(s);
+            return s->ddt(time, loc);
+        }
 
-    real3 gradient(real time, const real3& loc) const
-    {
-        assert(s);
-        return s->gradient(time, loc);
-    }
+        real3 gradient(real time, const real3& loc) const
+        {
+            assert(s);
+            return s->gradient(time, loc);
+        }
 
-    real divergence(real time, const real3& loc) const
-    {
-        assert(s);
-        return s->divergence(time, loc);
-    }
+        real divergence(real time, const real3& loc) const
+        {
+            assert(s);
+            return s->divergence(time, loc);
+        }
 
-    real laplacian(real time, const real3& loc) const
-    {
-        assert(s);
-        return s->laplacian(time, loc);
-    }
+        real laplacian(real time, const real3& loc) const
+        {
+            assert(s);
+            return s->laplacian(time, loc);
+        }
 };
 
 } // namespace ccs

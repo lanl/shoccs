@@ -178,38 +178,3 @@ TEST_CASE("NumericTuple")
     REQUIRE(TupleLike<T>);
     REQUIRE(NumericTuple<rs::common_tuple<const int&, const int&, const int&>>);
 }
-
-struct xslice {
-
-    template <typename T>
-    constexpr auto operator()(T&& t, const int3& extents, int i) const
-    {
-        auto n = extents[1] * extents[2];
-        return FWD(t) | vs::drop_exactly(i * n) | vs::take_exactly(n);
-    }
-
-    constexpr auto operator()(const int3& extents, int i) const
-    {
-        return rs::make_view_closure(rs::bind_back(*this, extents, i));
-    }
-
-    constexpr auto operator()(int i) const { return rs::bind_back(*this, i); }
-};
-
-TEST_CASE("bind_back")
-{
-
-    using T = std::vector<int>;
-    constexpr auto xs = xslice{};
-    constexpr auto min_slice = xs(0);
-
-    auto x = vs::iota(0, 24) | rs::to<T>();
-
-    int3 extents{2, 3, 4};
-
-    auto xmin = xs(extents, 0);
-
-    REQUIRE(rs::equal(x | xmin, vs::iota(0, 12)));
-
-    REQUIRE(rs::equal(x | min_slice(extents), vs::iota(0, 12)));
-}
