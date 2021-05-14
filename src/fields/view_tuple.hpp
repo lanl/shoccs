@@ -282,7 +282,7 @@ public:
     constexpr view_tuple& operator=(T&& t)
     {
         base::operator=(FWD(t));
-        view::operator=(static_cast<base &>(*this));
+        view::operator=(*this);
         return *this;
     }
 
