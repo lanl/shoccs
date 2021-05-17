@@ -364,6 +364,13 @@ inline constexpr auto ymax = y_plane(-1);
 inline constexpr auto zmin = z_plane(0);
 inline constexpr auto zmax = z_plane(-1);
 
+using xmin_t = decltype(sel::xmin(index_extents{}));
+using xmax_t = decltype(sel::xmax(index_extents{}));
+using ymin_t = decltype(sel::ymin(index_extents{}));
+using ymax_t = decltype(sel::ymax(index_extents{}));
+using zmin_t = decltype(sel::zmin(index_extents{}));
+using zmax_t = decltype(sel::zmax(index_extents{}));
+
 } // namespace sel
 
 namespace detail
@@ -553,6 +560,7 @@ struct multi_slice_fn : multi_slice_base_fn {
 namespace sel
 {
 constexpr inline auto multi_slice = ::ccs::detail::multi_slice_fn{};
-}
+using multi_slice_t = decltype(multi_slice(std::span<const index_slice>{}));
+} // namespace sel
 
 } // namespace ccs

@@ -2,6 +2,7 @@
 
 #include "boundaries.hpp"
 #include "cartesian.hpp"
+#include "fields/selector.hpp"
 #include "fields/tuple.hpp"
 #include "mesh_types.hpp"
 #include "object_geometry.hpp"
@@ -16,6 +17,7 @@ class mesh
     cartesian cart;
     object_geometry geometry;
     std::array<std::vector<line>, 3> lines_;
+    std::vector<index_slice> fluid_slices;
 
 public:
     mesh() = default;
@@ -48,18 +50,6 @@ public:
 
     constexpr auto location() const { return views::location(cart, geometry); }
 
-    constexpr auto xmin() const { return views::xmin(extents()); }
-
-    constexpr auto xmax() const { return views::xmax(extents()); }
-
-    constexpr auto ymin() const { return views::ymin(extents()); }
-
-    constexpr auto ymax() const { return views::ymax(extents()); }
-
-    constexpr auto zmin() const { return views::zmin(extents()); }
-
-    constexpr auto zmax() const { return views::zmax(extents()); }
-
     auto F() const
     {
         auto ex = extents();
@@ -80,5 +70,13 @@ public:
     std::span<const mesh_object_info> Rz() const { return geometry.Rz(); }
 
     auto R() const { return tuple{geometry.Rx(), geometry.Ry(), geometry.Rz()}; }
+
+    sel::xmin_t xmin;
+    sel::xmax_t xmax;
+    sel::ymin_t ymin;
+    sel::ymax_t ymax;
+    sel::zmin_t zmin;
+    sel::zmax_t zmax;
+    sel::multi_slice_t fluid;
 };
 } // namespace ccs

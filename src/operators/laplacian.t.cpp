@@ -80,9 +80,9 @@ TEST_CASE("E2_2 Domain")
         scalar<T> ex = ddx + ddy + ddz;
 
         // zero boundaries
-        ex | sel::D | m.xmin() = 0;
-        ex | sel::D | m.xmax() = 0;
-        ex | sel::D | m.zmax() = 0;
+        ex | m.xmin = 0;
+        ex | m.xmax = 0;
+        ex | m.zmax = 0;
 
         scalar<T> du{u};
         REQUIRE((integer)rs::size(du | sel::D) == m.size());
@@ -105,9 +105,9 @@ TEST_CASE("E2_2 Domain")
         scalar<T> ex = ddx + ddy + ddz;
 
         // zero boundaries
-        ex | sel::D | m.xmin() = 0;
-        ex | sel::D | m.xmax() = 0;
-        ex | sel::D | m.zmax() = 0;
+        ex | m.xmin = 0;
+        ex | m.xmax = 0;
+        ex | m.zmax = 0;
 
         // neumann
         scalar<T> nu{u};
@@ -149,15 +149,12 @@ TEST_CASE("E2 with Objects")
     ddz | sel::D = m.location() | vs::transform(f2_ddz);
     scalar<T> ex{u};
     ex | sel::D = 0;
-    {
-        auto out = ex | sel::D | m.F();
-        auto sum = (ddx + ddy + ddz) | sel::D | m.F();
-        rs::copy(sum, rs::begin(out));
-    }
+
+    ex | m.fluid = (ddx + ddy + ddz) | m.fluid;
 
     // zero dirichlet boundaries
-    ex | sel::D | m.xmin() = 0;
-    ex | sel::D | m.zmax() = 0;
+    ex | m.xmin = 0;
+    ex | m.zmax = 0;
 
     // neumann conditions
     scalar<T> nu{u};

@@ -72,8 +72,8 @@ TEST_CASE("E2_Neumann")
     scalar<T> ex{u};
     ex | sel::D = m.location() | vs::transform(f2_ddz);
 
-    ex | sel::D | m.xmin() = 0;
-    ex | sel::D | m.xmax() = 0;
+    ex | m.xmin = 0;
+    ex | m.xmax = 0;
 
     scalar<T> du{u};
     du = 0;
@@ -177,14 +177,11 @@ TEST_CASE("Identity Mixed")
         const auto gridBcs = bcs::Grid{bcs::dd, bcs::fn, bcs::fd};
         // set the exact du we expect based on zeros assigned to dirichlet locations
         scalar<T> du_exact{u}, nu{u};
-        {
-            // auto [nx, ny, nz] = extents;
-            auto domain = du_exact | sel::D;
-            // set zeros for dirichlet at xmin/xmax
-            domain | m.xmin() = 0;
-            domain | m.xmax() = 0;
-            domain | m.zmax() = 0;
-        }
+
+        // set zeros for dirichlet at xmin/xmax
+        du_exact | m.xmin = 0;
+        du_exact | m.xmax = 0;
+        du_exact | m.zmax = 0;
 
         scalar<T> du{u};
         REQUIRE((integer)rs::size(du | sel::D) == m.size());
@@ -204,14 +201,11 @@ TEST_CASE("Identity Mixed")
         const auto gridBcs = bcs::Grid{bcs::nn, bcs::dd, bcs::df};
         // set the exact du we expect based on zeros assigned to dirichlet locations
         scalar<T> du_exact{u}, nu{u};
-        {
-            // auto [nx, ny, nz] = extents;
-            auto domain = du_exact | sel::D;
-            // set zeros for dirichlet at xmin/xmax
-            domain | m.ymin() = 0;
-            domain | m.ymax() = 0;
-            domain | m.zmin() = 0;
-        }
+
+        // set zeros for dirichlet at xmin/xmax
+        du_exact | m.ymin = 0;
+        du_exact | m.ymax = 0;
+        du_exact | m.zmin = 0;
 
         scalar<T> du{u};
         REQUIRE((integer)rs::size(du | sel::D) == m.size());
@@ -262,9 +256,9 @@ TEST_CASE("E2 Mixed")
 
             auto& ex = *dd[i];
             // zero boundaries
-            ex | sel::D | m.xmin() = 0;
-            ex | sel::D | m.xmax() = 0;
-            ex | sel::D | m.zmax() = 0;
+            ex | m.xmin = 0;
+            ex | m.xmax = 0;
+            ex | m.zmax = 0;
 
             REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));
         }
@@ -292,9 +286,9 @@ TEST_CASE("E2 Mixed")
 
             auto& ex = *dd[i];
             // zero boundaries
-            ex | sel::D | m.ymin() = 0;
-            ex | sel::D | m.ymax() = 0;
-            ex | sel::D | m.zmin() = 0;
+            ex | m.ymin = 0;
+            ex | m.ymax = 0;
+            ex | m.zmin = 0;
 
             REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));
         }
@@ -375,32 +369,22 @@ TEST_CASE("E2 with Objects")
     scalar<T> du_x{u}, du_y{u}, du_z{u}, dd{u}, nu{u};
     nu | sel::D = m.location() | vs::transform(f2_dx);
     dd | sel::D = m.location() | vs::transform(f2_ddx);
-    dd | sel::D | m.ymin() = 0;
-    dd | sel::D | m.ymax() = 0;
+    dd | m.ymin = 0;
+    dd | m.ymax = 0;
     du_x | sel::D = 0;
-    {
-        auto out = du_x | sel::D | m.F();
-        rs::copy(dd | sel::D | m.F(), rs::begin(out));
-    }
-    // This direct copy doesn't work.. why?
-    // du_x | sel::D | m.F() = dd | sel::D | m.F();
+    du_x | m.fluid = dd | m.fluid;
+
     dd | sel::D = m.location() | vs::transform(f2_ddy);
-    dd | sel::D | m.ymin() = 0;
-    dd | sel::D | m.ymax() = 0;
+    dd | m.ymin = 0;
+    dd | m.ymax = 0;
     du_y | sel::D = 0;
-    {
-        auto out = du_y | sel::D | m.F();
-        rs::copy(dd | sel::D | m.F(), rs::begin(out));
-    }
+    du_y | m.fluid = dd | m.fluid;
 
     dd | sel::D = m.location() | vs::transform(f2_ddz);
-    dd | sel::D | m.ymin() = 0;
-    dd | sel::D | m.ymax() = 0;
+    dd | m.ymin = 0;
+    dd | m.ymax = 0;
     du_z | sel::D = 0;
-    {
-        auto out = du_z | sel::D | m.F();
-        rs::copy(dd | sel::D | m.F(), rs::begin(out));
-    }
+    du_z | m.fluid = dd | m.fluid;
 
     REQUIRE((integer)rs::size(du_x | sel::D) == m.size());
 

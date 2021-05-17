@@ -178,3 +178,14 @@ TEST_CASE("NumericTuple")
     REQUIRE(TupleLike<T>);
     REQUIRE(NumericTuple<rs::common_tuple<const int&, const int&, const int&>>);
 }
+
+struct a {
+    int x, y;
+};
+TEST_CASE("projection")
+{
+    std::vector<a> v{{1, 0}, {2, 3}, {6, 2}};
+    auto u = v | vs::transform(&a::x);
+
+    REQUIRE(rs::equal(u, std::vector{1, 2, 6}));
+}

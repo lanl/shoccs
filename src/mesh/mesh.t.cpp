@@ -1,5 +1,5 @@
-#include "fields/selector.hpp"
 #include "mesh.hpp"
+#include "fields/selector.hpp"
 #include "random/random.hpp"
 #include "selections.hpp"
 
@@ -182,33 +182,7 @@ TEST_CASE("selections")
     scalar<T> u{};
     u | sel::D = vs::generate_n(g, m.size());
     // test whole field comparison
-    REQUIRE(rs::equal(u | sel::D, u | sel::D | m.F()));
-    REQUIRE(rs::size(u | sel::D) == rs::size(u | sel::D | m.F()));
-
-    auto view = u | sel::D | m.F();
-    auto d = u | sel::D;
-
-    // test next/prev going over a line
-    {
-        auto it = rs::begin(view);
-        for (int i = 0; i < extents[2]; i++) REQUIRE(*it++ == d[i]);
-        for (int i = 0; i < extents[2]; i++) REQUIRE(*it-- == d[extents[2] - i]);
-    }
-
-    // test advance a
-    {
-        auto it = rs::begin(view);
-        rs::advance(it, 1);
-        REQUIRE(*it == d[1]);
-        rs::advance(it, -1);
-        REQUIRE(*it == d[0]);
-        rs::advance(it, extents[2]);
-        REQUIRE(*it == d[extents[2]]);
-        rs::advance(it, extents[2] + 1);
-        REQUIRE(*it == d[2 * extents[2] + 1]);
-        rs::advance(it, -2 * extents[2] - 1);
-        REQUIRE(*it == d[0]);
-    }
+    REQUIRE(rs::equal(u | sel::D, u | m.fluid));
 }
 
 TEST_CASE("selections with object")
@@ -224,10 +198,10 @@ TEST_CASE("selections with object")
 
     scalar<T> u{};
     u | sel::D = vs::repeat_n(-1, m.size());
-    u | sel::D | m.F() = 1;
+    u | m.fluid = 1;
 
     {
-        using F = decltype(u | sel::D | m.F());
+        using F = decltype(u | m.fluid);
 
         REQUIRE(rs::bidirectional_range<F>);
         REQUIRE(!rs::contiguous_range<F>);
@@ -241,7 +215,7 @@ TEST_CASE("selections with object")
     REQUIRE(nfluid > 0);
 
     REQUIRE(nfluid + nsolid == m.size());
-    REQUIRE(nfluid == (integer)rs::size(u | sel::D | m.F()));
+    REQUIRE(nfluid == (integer)rs::size(u | m.fluid));
 
     scalar<T> v{u};
 
@@ -256,6 +230,6 @@ TEST_CASE("selections with object")
     scalar<T> w{};
     w | sel::D = vs::repeat_n(-1, m.size());
 
-    w | sel::D | m.F() = u | sel::D | m.F();
+    w | m.fluid = u | m.fluid;
     REQUIRE(w == u);
 }

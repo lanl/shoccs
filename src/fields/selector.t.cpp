@@ -242,3 +242,15 @@ TEST_CASE("multi_slice scalar assignment")
                                           vs::repeat_n(-1, 10),
                                           vs::iota(23, 25))});
 }
+
+TEST_CASE("default operators for storing selections in mesh")
+{
+    using F_t = sel::multi_slice_t;
+    // default constructible;
+    F_t F{};
+
+    auto v = std::vector<index_slice>{{1, 4}};
+    // move assignable
+
+    F = sel::multi_slice(v);
+}

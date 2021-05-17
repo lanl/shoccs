@@ -89,6 +89,30 @@ void init_line(std::vector<line>& v, int3 extents, std::span<const mesh_object_i
         }
     }
 }
+
+void init_slices(std::vector<index_slice>& fluid_slices,
+                 std::span<const line> lines,
+                 index_extents extents)
+{
+    for (auto&& [_, start, end] : lines) {
+        auto i0 = start.object ? extents(start.mesh_coordinate) + 1
+                               : extents(start.mesh_coordinate);
+        auto i1 =
+            end.object ? extents(end.mesh_coordinate) : extents(end.mesh_coordinate) + 1;
+
+        if (fluid_slices.empty()) {
+            fluid_slices.emplace_back(i0, i1);
+        } else {
+            auto& [i0_prev, i1_prev] = fluid_slices.back();
+            // if this slice is contiguous with the next, make it all one slice
+            if (i1_prev == i0) {
+                i1_prev = i1;
+            } else {
+                fluid_slices.emplace_back(i0, i1);
+            }
+        }
+    }
+}
 } // namespace
 
 mesh::mesh(const index_extents& extents, const domain_extents& bounds)
@@ -99,11 +123,24 @@ mesh::mesh(const index_extents& extents, const domain_extents& bounds)
 mesh::mesh(const index_extents& extents,
            const domain_extents& bounds,
            const std::vector<shape>& shapes)
-    : cart{extents.extents, bounds.min, bounds.max}, geometry{shapes, cart}
+    : cart{extents.extents, bounds.min, bounds.max},
+      geometry{shapes, cart},
+      xmin{sel::xmin(extents)},
+      xmax{sel::xmax(extents)},
+      ymin{sel::ymin(extents)},
+      ymax{sel::ymax(extents)},
+      zmin{sel::zmin(extents)},
+      zmax{sel::zmax(extents)}
+
 {
     init_line<0>(lines_[0], cart.extents(), geometry.R(0));
     init_line<1>(lines_[1], cart.extents(), geometry.R(1));
     init_line<2>(lines_[2], cart.extents(), geometry.R(2));
+
+    // setup fluid selector
+    int i = extents[2] > 1 ? 2 : extents[1] > 1 ? 1 : 0;
+    init_slices(fluid_slices, lines_[i], extents);
+    fluid = sel::multi_slice(fluid_slices);
 }
 
 bool mesh::dirichlet_line(const int3& start, int dir, const bcs::Grid& cart_bcs) const
