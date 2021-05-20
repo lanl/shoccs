@@ -1,3 +1,7 @@
+add_library(shoccs-bcs boundaries.cpp)
+target_link_libraries(shoccs-bcs PUBLIC sol2::sol2 lua spdlog::spdlog)
+add_unit_test(boundaries "bcs" shoccs-bcs)
+
 #add_library(operators directional.cpp derivative.cpp gradient.cpp divergence.cpp)
 add_library(shoccs-operators gradient.cpp laplacian.cpp derivative.cpp)
 #target_link_libraries(operators PUBLIC geometry mesh range-v3::range-v3 matrices fields)

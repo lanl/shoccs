@@ -1,6 +1,9 @@
 #pragma once
 #include <array>
+#include <optional>
 #include <vector>
+
+#include <sol/forward.hpp>
 
 namespace ccs::bcs
 {
@@ -20,6 +23,8 @@ constexpr auto Floating = type::Floating;
 struct Line {
     type left;
     type right;
+
+    friend auto operator<=>(const Line&, const Line&) = default;
 };
 
 using X = Line;
@@ -38,5 +43,7 @@ constexpr auto df = Line{type::D, type::F};
 constexpr auto fd = Line{type::F, type::D};
 constexpr auto fn = Line{type::F, type::N};
 constexpr auto nf = Line{type::N, type::F};
+
+extern std::optional<std::pair<Grid, Object>> from_lua(const sol::table& tbl);
 
 } // namespace ccs::bcs

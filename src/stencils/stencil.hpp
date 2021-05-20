@@ -1,6 +1,6 @@
 #pragma once
 
-#include "boundaries.hpp"
+#include "operators/boundaries.hpp"
 #include "types.hpp"
 
 #include <concepts>

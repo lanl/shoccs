@@ -1,6 +1,6 @@
 #pragma once
 
-#include "boundaries.hpp"
+#include "operators/boundaries.hpp"
 #include "cartesian.hpp"
 #include "fields/selector.hpp"
 #include "mesh_types.hpp"
