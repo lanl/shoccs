@@ -1,4 +1,5 @@
 #include "container_tuple.hpp"
+#include "index_extents.hpp"
 #include "types.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -188,4 +189,93 @@ TEST_CASE("projection")
     auto u = v | vs::transform(&a::x);
 
     REQUIRE(rs::equal(u, std::vector{1, 2, 6}));
+}
+
+TEST_CASE("generate_n")
+{
+    using T = std::vector<int>;
+
+    auto v = vs::generate_n([]() { return vs::iota(0, 2); }, 3) | vs::join | rs::to<T>();
+
+    REQUIRE(v == T{0, 1, 0, 1, 0, 1});
+}
+
+// xplane
+namespace det
+{
+template <typename Rng>
+using X =
+    decltype(std::declval<Rng>() | vs::drop_exactly(int{}) | vs::take_exactly(integer{}));
+
+template <typename Rng>
+using Z = decltype(std::declval<Rng>() | vs::drop_exactly(int{}) | vs::stride(integer{}));
+
+} // namespace det
+
+template <typename Rng>
+class x_plane_view : public det::X<Rng>
+{
+    using base = det::X<Rng>;
+
+public:
+    x_plane_view() = default;
+    explicit constexpr x_plane_view(Rng&& rng, index_extents extents, int i)
+        : base{FWD(rng) | vs::drop_exactly(i * extents[1] * extents[2]) |
+               vs::take_exactly(extents[1] * extents[2])}
+    {
+    }
+};
+
+template <typename Rng>
+class z_plane_view : public det::Z<Rng>
+{
+    using base = det::Z<Rng>;
+
+public:
+    z_plane_view() = default;
+    explicit constexpr z_plane_view(Rng&& rng, index_extents extents, int i)
+        : base{FWD(rng) | vs::drop_exactly(i) | vs::stride(extents[2])}
+    {
+    }
+};
+
+template <typename Rng>
+x_plane_view(Rng&&, index_extents, int) -> x_plane_view<Rng>;
+
+template <typename Rng>
+z_plane_view(Rng&&, index_extents, int) -> z_plane_view<Rng>;
+
+TEST_CASE("x_plane_view")
+{
+
+    index_extents i{.extents = int3{2, 3, 4}};
+    auto t_ = vs::iota(0, 2 * 3 * 4);
+    std::vector<int> t{rs::begin(t_), rs::end(t_)};
+
+    REQUIRE(rs::equal(x_plane_view(t, i, 0), vs::iota(0, 12)));
+
+    using T = decltype(x_plane_view(t, i, 0));
+    REQUIRE(rs::sized_range<T>);
+    REQUIRE(rs::random_access_range<T>);
+
+    using Rng = decltype(vs::iota(0, 2 * 3 * 4));
+    using U =
+        decltype(std::declval<Rng>() | vs::drop_exactly(int{}) | vs::stride(integer{}));
+
+    U u{};
+}
+
+TEST_CASE("z_plane_view")
+{
+
+    index_extents i{.extents = int3{2, 3, 4}};
+    auto t = vs::iota(0, 2 * 3 * 4);
+    // std::vector<int> t{rs::begin(t_), rs::end(t_)};
+
+    // REQUIRE(rs::equal(z_plane_view(t, i, 0), std::vector{}));
+    std::cout << "z: " << z_plane_view(t, i, 0) << '\n';
+
+    using T = decltype(z_plane_view(t, i, 0));
+    REQUIRE(rs::sized_range<T>);
+    REQUIRE(rs::random_access_range<T>);
 }

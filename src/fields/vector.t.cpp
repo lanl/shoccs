@@ -1,14 +1,10 @@
 #include "vector.hpp"
 #include "scalar.hpp"
 
-#include "Location.hpp"
 #include "selector.hpp"
 
 #include <catch2/catch_test_macros.hpp>
-#include <range/v3/algorithm/equal.hpp>
-#include <range/v3/range/conversion.hpp>
-#include <range/v3/view/iota.hpp>
-#include <range/v3/view/transform.hpp>
+#include <range/v3/all.hpp>
 
 using namespace ccs;
 using namespace si;
@@ -17,7 +13,7 @@ using namespace vi;
 constexpr auto plus = lift(std::plus{});
 
 // construct simple mesh geometry
-namespace global
+namespace g
 {
 
 const auto x = std::vector<real>{0, 1, 2, 3, 4};
@@ -26,9 +22,11 @@ const auto z = std::vector<real>{6, 7, 8, 9};
 const auto rx = std::vector<real3>{{0.5, -2, 6}, {1.5, -1, 9}};
 const auto ry = std::vector<real3>{{1, -1.75, 7}, {4, -1.25, 7}, {3, -1.1, 9}};
 const auto rz = std::vector<real3>{{0, -2, 6.1}};
-const auto loc = location{x, y, z, rx, ry, rz};
 
-} // namespace global
+const auto sloc = tuple{tuple{vs::cartesian_product(x, y, z)},
+                        tuple{vs::all(rx), vs::all(ry), vs::all(rz)}};
+const auto loc = tuple{sloc, sloc, sloc};
+} // namespace g
 
 TEST_CASE("construction")
 {
@@ -153,7 +151,7 @@ TEST_CASE("selection")
                        tuple{vs::iota(1, 5), vs::iota(5, 10), vs::iota(8, 10)}}};
     vector_span v = v_;
 
-    REQUIRE((v | sel::Dx) == vs::iota(0, 10));
+    REQUIRE(rs::equal(v | sel::Dx, vs::iota(0, 10)));
     REQUIRE(rs::equal(vs::iota(10, 20), v | sel::Dy));
     REQUIRE(rs::equal(vs::iota(20, 30), v | sel::Dz));
     REQUIRE(rs::equal(vs::iota(0, 3), get<X>(v | sel::Rx)));
@@ -238,7 +236,7 @@ TEST_CASE("lifting single arg")
 
 TEST_CASE("mesh location")
 {
-    using namespace global;
+    using namespace g;
 
     using T = std::vector<real>;
 
@@ -256,7 +254,7 @@ TEST_CASE("mesh location")
         return x * y * z;
     });
 
-    constexpr auto sol = loc.view() | t;
+    const auto sol = loc | t;
 
     v | sel::D = sol;
     REQUIRE(rs::equal(v | sel::Dx, vs::cartesian_product(x, y, z) | t));
@@ -277,7 +275,7 @@ TEST_CASE("mesh location")
         return x * y * y * z;
     });
 
-    v | sel::R = loc.view() | u;
+    v | sel::R = loc | u;
     REQUIRE(rs::equal(v | sel::xRx, rx | u));
     REQUIRE(rs::equal(v | sel::yRy, ry | u));
     REQUIRE(rs::equal(v | sel::zRz, rz | u));
@@ -294,7 +292,7 @@ struct loc_fn {
 
 TEST_CASE("mesh location span")
 {
-    using namespace global;
+    using namespace g;
 
     using T = std::vector<real>;
 
@@ -313,7 +311,7 @@ TEST_CASE("mesh location span")
         return x * y * z;
     });
 
-    constexpr auto sol = loc.view() | t;
+    const auto sol = loc | t;
 
     v | sel::D = sol;
     REQUIRE(rs::equal(v | sel::Dx, vs::cartesian_product(x, y, z) | t));
@@ -334,14 +332,15 @@ TEST_CASE("mesh location span")
         return x * y * y * z;
     });
 
-    v | sel::R = loc.view() | u;
+    v | sel::R = loc | u;
     REQUIRE(rs::equal(v | sel::xRx, rx | u));
     REQUIRE(rs::equal(v | sel::yRy, ry | u));
     REQUIRE(rs::equal(v | sel::zRz, rz | u));
 
-    v | sel::Rx = loc.view() | tuple{vs::transform(loc_fn<0>{}),
-                                     vs::transform(loc_fn<1>{}),
-                                     vs::transform(loc_fn<2>{})};
+    v | sel::Rx = loc | sel::Rx |
+                  tuple{vs::transform(loc_fn<0>{}),
+                        vs::transform(loc_fn<1>{}),
+                        vs::transform(loc_fn<2>{})};
 
     REQUIRE(rs::equal(v | sel::xRx, rx | vs::transform(loc_fn<0>{})));
     REQUIRE(rs::equal(v | sel::yRx, rx | vs::transform(loc_fn<1>{})));

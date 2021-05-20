@@ -69,7 +69,7 @@ public:
     // When assigning from a container_tuple, make sure we don't copy anything and instead
     // just take news views
     template <OwningTuple C>
-        requires(!ViewClosures<C>)
+        requires(!ViewClosures<C> && SimilarTuples<view_tuple_base, C>)
     constexpr view_tuple_base& operator=(C&& c)
     {
         v = tuple_map(vs::all, FWD(c));
@@ -287,13 +287,15 @@ public:
     }
 
     // default copy/move assignment do not do the right thing w.r.t. single_view
-    constexpr view_tuple& operator=(const view_tuple& other) {
+    constexpr view_tuple& operator=(const view_tuple& other)
+    {
         base::operator=(static_cast<const base&>(other));
         view::operator=(*this);
         return *this;
     }
 
-    constexpr view_tuple& operator=(view_tuple&& other) {
+    constexpr view_tuple& operator=(view_tuple&& other)
+    {
         base::operator=(static_cast<base&&>(other));
         view::operator=(*this);
         return *this;

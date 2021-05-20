@@ -7,6 +7,8 @@
 #include <span>
 #include <vector>
 
+#include <range/v3/view/transform.hpp>
+
 namespace ccs
 {
 
@@ -65,7 +67,11 @@ public:
         }
     }
 
-    // auto Rxyz() const { return vector_range{Rx(), Ry(), Rz()}; }
+    auto domain() const
+    {
+        auto t = vs::transform(&mesh_object_info::position);
+        return tuple{Rx() | t, Ry() | t, Rz() | t};
+    }
 
     // details about points in solid
     std::span<const int3> Sx() const;

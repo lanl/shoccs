@@ -101,6 +101,21 @@ struct tuple<Args...> : view_tuple<Args...> {
         requires(std::constructible_from<view, T...>)
     constexpr tuple(T&&... t) : view{FWD(t)...} {}
 
+    template <TupleLike T>
+        requires(!std::is_assignable_v<view&, T> && !SimilarTuples<tuple, T>)
+    // template <typename T>
+    constexpr tuple& operator=(T&& t)
+    {
+        // const auto& v = get<0>(*this);
+        *this = [ this, &t ]<auto... Is>(std::index_sequence<Is...>)
+        {
+            return make_tuple<tuple>(get<Is>(*this).apply(t)...);
+        }
+        (sequence<tuple>);
+        //*this = make_tuple<tuple>(get<0>(*this).apply(FWD(t)));
+        return *this;
+    }
+
     template <typename T>
         requires std::is_assignable_v<view&, T>
     constexpr tuple& operator=(T&& t)

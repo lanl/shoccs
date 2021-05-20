@@ -4,6 +4,10 @@
 #include "indexing.hpp"
 #include "types.hpp"
 
+#include "fields/tuple.hpp"
+
+#include <range/v3/view/cartesian_product.hpp>
+
 #include <vector>
 
 #include <cassert>
@@ -63,6 +67,8 @@ public:
     constexpr std::span<const real> x() const { return x_; }
     constexpr std::span<const real> y() const { return y_; }
     constexpr std::span<const real> z() const { return z_; }
+
+    constexpr auto domain() const { return tuple{vs::cartesian_product(x(), y(), z())}; }
 
     constexpr real3 h() const { return h_; }
     constexpr real h(int i) const { return h_[i]; }

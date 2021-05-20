@@ -18,42 +18,6 @@
 
 using namespace ccs;
 
-// namespace t
-// {
-// using namespace ccs::field::tuple::traits;
-
-// namespace detail
-// {
-// template <typename, typename...>
-// struct is_nested_invocable_impl;
-// }
-// template <typename F, typename... T>
-// using is_nested_invocable = detail::is_nested_invocable_impl<F, T...>::type;
-
-// namespace detail
-// {
-// template <typename F, typename... Args>
-// struct is_nested_invocable_impl {
-//     using type = std::is_invocable<F, Args...>;
-// };
-
-// template <typename F, TupleLike... Args>
-// struct is_nested_invocable_impl<F, Args...> {
-//     // using get_types = mp_list<tuple_get_types<Args>...>;
-//     using type =
-//         mp_flatten<mp_transform_q<mp_bind_front<is_nested_invocable, F>,
-//                                   tuple_get_types<Args>...>>; // is_nested_invocable<F,
-//                                                               // std::false_type;
-// };
-// } // namespace detail
-
-// template <typename F, typename... T>
-// concept NestedInvocableOver =
-//     (NestedTuple<T> && ...) && mp_apply<mp_all, is_nested_invocable<F,
-//     T...>>::value;
-
-// } // namespace t
-
 TEST_CASE("test")
 {
 
@@ -565,4 +529,9 @@ TEST_CASE("make_tuple")
     static_assert(std::same_as<std::tuple<double, double>, decltype(s)>);
     REQUIRE(get<0>(s) == 5.1);
     REQUIRE(get<1>(s) == 4.2);
+
+    auto q = make_tuple<std::tuple<int>>(5.1, 4.2);
+    static_assert(std::same_as<std::tuple<double, double>, decltype(q)>);
+    REQUIRE(get<0>(q) == 5.1);
+    REQUIRE(get<1>(q) == 4.2);
 }

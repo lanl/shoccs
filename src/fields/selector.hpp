@@ -31,18 +31,23 @@ template <Vector T>
 struct selection_fn_index_impl<T> {
     using type = mp_size_t<1>;
 };
+
+template <ListIndex L, typename R>
+constexpr auto make_selection(R);
+
 } // namespace detail
 
 template <typename T>
 using selection_fn_index = detail::selection_fn_index_impl<T>::type;
 
-template <ListIndex I, Tuple R>
+template <ListIndex I, Tuple R, typename Fn>
 struct selection : R {
     using index = I;
+    rs::semiregular_box_t<Fn> f;
 
     selection() = default; // default construction needed for semi-regular concept
 
-    constexpr selection(R r) : R{MOVE(r)} {}
+    constexpr selection(R r, Fn f) : R{MOVE(r)}, f{MOVE(f)} {}
 
     selection(const selection&) = default;
     selection(selection&&) = default;
@@ -50,35 +55,22 @@ struct selection : R {
     selection& operator=(const selection&) = default;
     selection& operator=(selection&&) = default;
 
-    template <typename T>
-        requires(!ViewClosures<T>)
-    &&std::is_assignable_v<R&, T> selection& operator=(T&& t)
+    template <TupleLike T>
+    constexpr auto apply(T&& t) const
     {
-        R::operator=(FWD(t));
-        return *this;
-    }
-    // template <Selection S>
-    // selection& operator=(S&& s)
-    // {
-    //     R::operator=(FWD(s).as_Tuple());
-    //     return *this;
-    // }
-
-    template <ViewClosures F>
-    selection& operator=(F f)
-    {
-        auto rng = *this | f;
-        R::operator=(rng);
-        return *this;
+        return f(FWD(t));
     }
 };
 
 namespace detail
 {
+template <typename... Lists>
+struct selection_view_fn;
+
 template <ListIndex L, typename R>
 constexpr auto make_selection(R r)
 {
-    return selection<L, R>{MOVE(r)};
+    return selection<L, R, selection_view_fn<L>>{MOVE(r), selection_view_fn<L>{}};
 }
 
 //
@@ -90,7 +82,7 @@ struct selection_view_fn {
     using Indices = mp_list<Lists...>;
 
     template <TupleLike U>
-    constexpr auto operator()(U&& u) const
+    constexpr auto operator()(U&& u) const requires(sizeof...(Lists) > 1)
     {
 
         // for now just grab the first element of the list
@@ -101,13 +93,26 @@ struct selection_view_fn {
         return []<auto... Is>(std::index_sequence<Is...>, auto&& u)
         {
             if constexpr (sizeof...(Is) == 1)
-                return detail::make_selection<mp_at_c<List, 0>>(
-                    tuple{get<mp_at_c<List, 0>>(FWD(u))});
+                return tuple{detail::make_selection<mp_at_c<List, 0>>(
+                    tuple{get<mp_at_c<List, 0>>(FWD(u))})};
             else
                 return tuple{detail::make_selection<mp_at_c<List, Is>>(
                     tuple{get<mp_at_c<List, Is>>(FWD(u))})...};
         }
         (sequence<List>, FWD(u));
+    }
+
+    template <TupleLike U>
+    constexpr auto operator()(U&& u) const requires(sizeof...(Lists) == 1)
+    {
+
+        // for now just grab the first element of the list
+        using List = mp_at<Indices, mp_size_t<0>>;
+        static_assert(!mp_empty<List>::value, "selection operation not permitted");
+
+        // Note that we don't wrap this in a tuple, otherwise we end up with the
+        // wrong nesting levels in the tuple assignment operator
+        return detail::make_selection<List>(tuple{get<List>(FWD(u))});
     }
 };
 
@@ -158,17 +163,55 @@ inline constexpr auto zRz = selection_view<mp_list<>, mp_list<vi::zRz>>;
 namespace detail
 {
 
+template <int I, typename Rng, typename Fn>
+class plane_view;
+
+template <typename Rng>
+using x_plane_t =
+    decltype(std::declval<Rng>() | vs::drop_exactly(int{}) | vs::take_exactly(integer{}));
+
+template <typename Rng, typename Fn>
+class plane_view<0, Rng, Fn> : public x_plane_t<Rng>
+{
+    using base = x_plane_t<Rng>;
+
+    rs::semiregular_box_t<Fn> f;
+
+    template <Range U>
+    static constexpr auto apply_(U&& u, integer n, int i)
+    {
+        return FWD(u) | vs::drop_exactly(i * n) | vs::take_exactly(n);
+    }
+
+public:
+    plane_view() = default;
+    explicit constexpr plane_view(Rng&& rng, index_extents extents, int i, Fn f)
+        : base{apply_(FWD(rng), extents[1] * extents[2], i)}, f{MOVE(f)}
+    {
+    }
+
+    template <typename U>
+        requires std::invocable<Fn, U>
+    constexpr auto apply(U&& u) const
+    {
+        return f(FWD(u)); // plane_view<0, U>(FWD(u), extents, i);
+    }
+};
+
 // y-plane view do not result in output iterator when formulated in an intuitve fashion
 // using range-v3 building blocks: grid | vs::chunk(nz) | vs::stride(ny) | vs::join; To
 // workaround this limitiation, we define a custom y-plane view based on the v3
 // view_adapator.  This will need to be revisited if the layout changes
-template <typename Rng>
-class y_plane_view : public rs::view_adaptor<y_plane_view<Rng>, Rng>
+template <typename Rng, typename Fn>
+class plane_view<1, Rng, Fn> : public rs::view_adaptor<plane_view<1, Rng, Fn>, Rng>
 {
     using diff_t = rs::range_difference_t<Rng>;
-
     friend rs::range_access;
-    diff_t nx, ny, nz, j;
+
+    index_extents n;
+    diff_t j;
+
+    rs::semiregular_box_t<Fn> f;
 
     class adaptor : public rs::adaptor_base
     {
@@ -264,54 +307,69 @@ class y_plane_view : public rs::view_adaptor<y_plane_view<Rng>, Rng>
         }
     };
 
-    adaptor begin_adaptor() { return {nx, ny, nz, 0, j, 0}; }
+    adaptor begin_adaptor() { return {n[0], n[1], n[2], 0, j, 0}; }
 
-    adaptor end_adaptor() { return {nx, ny, nz, nx - 1, j, nz}; }
+    adaptor end_adaptor() { return {n[0], n[1], n[2], n[0] - 1, j, n[2]}; }
 
 public:
-    y_plane_view() = default;
-    explicit constexpr y_plane_view(Rng&& rng, index_extents extents, int j)
-        : y_plane_view::view_adaptor{FWD(rng)},
-          nx{extents[0]},
-          ny{extents[1]},
-          nz{extents[2]},
-          j{j}
+    plane_view() = default;
+    explicit constexpr plane_view(Rng&& rng, index_extents extents, int j, Fn f)
+        : plane_view::view_adaptor{FWD(rng)}, n{extents}, j{j}, f{MOVE(f)}
     {
+    }
+
+    template <typename U>
+        requires std::invocable<Fn, U>
+    constexpr auto apply(U&& u) const
+    {
+        return f(FWD(u)); // plane_view<1, U>(FWD(u), n, j);
     }
 };
 
 template <typename Rng>
-y_plane_view(Rng&&, index_extents, int) -> y_plane_view<Rng>;
+using z_plane_t =
+    decltype(std::declval<Rng>() | vs::drop_exactly(int{}) | vs::stride(integer{}));
 
+template <typename Rng, typename Fn>
+class plane_view<2, Rng, Fn> : public z_plane_t<Rng>
+{
+    using base = z_plane_t<Rng>;
+
+    rs::semiregular_box_t<Fn> f;
+
+public:
+    plane_view() = default;
+    explicit constexpr plane_view(Rng&& rng, index_extents extents, int k, Fn f)
+        : base{FWD(rng) | vs::drop_exactly(k) | vs::stride(extents[2])}, f{MOVE(f)}
+    {
+    }
+
+    template <typename U>
+        requires std::invocable<Fn, U>
+    constexpr auto apply(U&& u) const
+    {
+        return f(FWD(u)); // plane_view<2, U>(FWD(u), extents, k);
+    }
+};
+
+// template <int I, typename Rng>
+// plane_view(mp_int<I>, Rng&&, index_extents, int) -> plane_view<I, Rng>;
 template <auto I>
-struct plane_selection_base_fn;
+struct plane_selection_fn;
 
-template <>
-struct plane_selection_base_fn<0> {
+template <int I>
+struct plane_selection_base_fn {
     template <Range R>
-    constexpr auto operator()(R&& r, index_extents extents, int i) const
+    constexpr auto operator()(R&& r, index_extents extents, int plane_coord) const
     {
-        auto n = extents[1] * extents[2];
-        return FWD(r) | vs::drop_exactly(i * n) | vs::take_exactly(n);
-    }
-};
-
-template <>
-struct plane_selection_base_fn<1> {
-    template <Range R>
-    constexpr auto operator()(R&& r, index_extents extents, int j) const
-    {
-        return y_plane_view(FWD(r), MOVE(extents), j);
-    }
-};
-
-template <>
-struct plane_selection_base_fn<2> {
-    template <Range R>
-    constexpr auto operator()(R&& r, index_extents extents, int k) const
-    {
-        auto n = extents[2];
-        return FWD(r) | vs::drop_exactly(k) | vs::stride(n);
+        return plane_view<I,
+                          R,
+                          decltype(rs::bind_back(
+                              plane_selection_fn<I>{}, extents, plane_coord))>{
+            FWD(r),
+            extents,
+            plane_coord,
+            rs::bind_back(plane_selection_fn<I>{}, extents, plane_coord)};
     }
 };
 
@@ -377,14 +435,16 @@ namespace detail
 {
 // multi_slice view is used to select multiple slices of data and treat them as a single
 // range. Used to construct the `fluid` selector
-template <typename Rng>
-class multi_slice_view : public rs::view_adaptor<multi_slice_view<Rng>, Rng>
+template <typename Rng, typename Fn>
+class multi_slice_view : public rs::view_adaptor<multi_slice_view<Rng, Fn>, Rng>
 {
     using diff_t = rs::range_difference_t<Rng>;
 
     friend rs::range_access;
 
     std::span<const index_slice> slices;
+
+    rs::semiregular_box_t<Fn> f;
 
     class adaptor : public rs::adaptor_base
     {
@@ -520,21 +580,24 @@ class multi_slice_view : public rs::view_adaptor<multi_slice_view<Rng>, Rng>
 public:
     multi_slice_view() = default;
 
-    explicit constexpr multi_slice_view(Rng&& rng, std::span<const index_slice> slices)
-        : multi_slice_view::view_adaptor{FWD(rng)}, slices{MOVE(slices)}
+    explicit constexpr multi_slice_view(Rng&& rng,
+                                        std::span<const index_slice> slices,
+                                        Fn f)
+        : multi_slice_view::view_adaptor{FWD(rng)}, slices{MOVE(slices)}, f{MOVE(f)}
     {
     }
+
+    template <typename U>
+        requires std::invocable<Fn, U>
+    constexpr auto apply(U&& u) const { return f(FWD(u)); }
 };
 
-template <typename Rng>
-multi_slice_view(Rng&&, std::span<const index_slice>) -> multi_slice_view<Rng>;
+template <typename Rng, typename Fn>
+multi_slice_view(Rng&&, std::span<const index_slice>, Fn) -> multi_slice_view<Rng, Fn>;
 
 struct multi_slice_base_fn {
     template <typename Rng>
-    constexpr auto operator()(Rng&& rng, std::span<const index_slice> slices) const
-    {
-        return multi_slice_view(FWD(rng), MOVE(slices));
-    }
+    constexpr auto operator()(Rng&& rng, std::span<const index_slice> slices) const;
 };
 
 struct multi_slice_fn : multi_slice_base_fn {
@@ -555,6 +618,14 @@ struct multi_slice_fn : multi_slice_base_fn {
         return rs::make_view_closure(rs::bind_back(*this, MOVE(slices)));
     }
 };
+
+template <typename Rng>
+constexpr auto multi_slice_base_fn::operator()(Rng&& rng,
+                                               std::span<const index_slice> slices) const
+{
+    return multi_slice_view(FWD(rng), slices, rs::bind_back(multi_slice_fn{}, slices));
+}
+
 } // namespace detail
 
 namespace sel

@@ -3,11 +3,8 @@
 #include "boundaries.hpp"
 #include "cartesian.hpp"
 #include "fields/selector.hpp"
-#include "fields/tuple.hpp"
 #include "mesh_types.hpp"
 #include "object_geometry.hpp"
-
-#include "selections.hpp"
 
 namespace ccs
 {
@@ -48,19 +45,7 @@ public:
         return ijk[0] * n[1] * n[2] + ijk[1] * n[2] + ijk[2];
     }
 
-    constexpr auto location() const { return views::location(cart, geometry); }
-
-    auto F() const
-    {
-        auto ex = extents();
-        auto [nx, ny, nz] = ex;
-        if (nz > 1)
-            return views::F(ex, lines(2));
-        else if (ny > 1)
-            return views::F(ex, lines(1));
-        else
-            return views::F(ex, lines(0));
-    }
+    // constexpr auto location() const { return views::location(cart, geometry); }
 
     // Intersection of rays in x and all objects
     std::span<const mesh_object_info> Rx() const { return geometry.Rx(); }
@@ -71,6 +56,11 @@ public:
 
     auto R() const { return tuple{geometry.Rx(), geometry.Ry(), geometry.Rz()}; }
 
+    auto scalar_size() const
+    {
+        return tuple{tuple{size()}, tuple{Rx().size(), Ry().size(), Rz().size()}};
+    }
+
     sel::xmin_t xmin;
     sel::xmax_t xmax;
     sel::ymin_t ymin;
@@ -78,5 +68,8 @@ public:
     sel::zmin_t zmin;
     sel::zmax_t zmax;
     sel::multi_slice_t fluid;
+    tuple<decltype(std::declval<cartesian>().domain()),
+          decltype(std::declval<object_geometry>().domain())>
+        location;
 };
 } // namespace ccs

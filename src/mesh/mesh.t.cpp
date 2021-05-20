@@ -1,7 +1,6 @@
 #include "mesh.hpp"
 #include "fields/selector.hpp"
 #include "random/random.hpp"
-#include "selections.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -9,7 +8,7 @@
 
 #include "real3_operators.hpp"
 
-#include <range/v3/algorithm/count.hpp>
+#include <range/v3/all.hpp>
 
 using namespace ccs;
 
@@ -179,8 +178,8 @@ TEST_CASE("selections")
     auto m = mesh{index_extents{extents}, db};
 
     randomize();
-    scalar<T> u{};
-    u | sel::D = vs::generate_n(g, m.size());
+    scalar<T> u{m.scalar_size()};
+    u | sel::D = m.location | vs::transform([](auto&& xyz) { return get<0>(xyz); });
     // test whole field comparison
     REQUIRE(rs::equal(u | sel::D, u | m.fluid));
 }
@@ -196,8 +195,8 @@ TEST_CASE("selections with object")
                   db,
                   std::vector<shape>{make_sphere(0, real3{0.01, -0.01, 0.5}, 0.25)}};
 
-    scalar<T> u{};
-    u | sel::D = vs::repeat_n(-1, m.size());
+    scalar<T> u{m.scalar_size()};
+    u | sel::D = -1;
     u | m.fluid = 1;
 
     {
@@ -217,19 +216,19 @@ TEST_CASE("selections with object")
     REQUIRE(nfluid + nsolid == m.size());
     REQUIRE(nfluid == (integer)rs::size(u | m.fluid));
 
-    scalar<T> v{u};
+    scalar<T> v{m.scalar_size()};
 
     v | sel::D =
-        m.location() | vs::transform([center = real3{0.01, -0.01, 0.5}](auto&& loc) {
+        m.location | vs::transform([center = real3{0.01, -0.01, 0.5}](auto&& loc) {
             return length(loc - center) > 0.25 ? 1 : -1;
         });
 
     REQUIRE(u == v);
 
     // test assignment
-    scalar<T> w{};
-    w | sel::D = vs::repeat_n(-1, m.size());
+    scalar<T> w{m.scalar_size()};
+    w | sel::D = -1;
 
-    w | m.fluid = u | m.fluid;
+    w | m.fluid = u; // | m.fluid;
     REQUIRE(w == u);
 }

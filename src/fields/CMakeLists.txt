@@ -12,6 +12,7 @@ add_unit_test(view_tuple "fields" fields)
 add_unit_test(tuple "fields" fields)
 add_unit_test(tuple_math "fields" fields)
 add_unit_test(scalar "fields" fields)
+add_unit_test(vector "fields" fields)
 add_unit_test(selector "fields" fields)
 add_unit_test(single_view "fields" fields)
 

@@ -307,7 +307,7 @@ struct is_output_tuple_impl<Out, In> {
         mp_transform_q<mp_bind_back<is_output_tuple, In>, tuple_get_types<Out>>>;
 };
 
-template <TupleLike Out, TupleLike In>
+template <TupleLike Out, SimilarTuples<Out> In>
 struct is_output_tuple_impl<Out, In> {
     using type = mp_flatten<
         mp_transform<is_output_tuple, tuple_get_types<Out>, tuple_get_types<In>>>;
@@ -604,7 +604,7 @@ concept AssignableDirect = TupleLike<T> &&(!TupleLike<U>)&&mp_apply<
     mp_transform_q<mp_bind_back<std::is_assignable, U>, tuple_get_types<T>>>::value;
 
 template <typename T, typename U>
-concept AssignableDirectTuple = TupleLike<T> && TupleLike<U> && mp_apply<
+concept AssignableDirectTuple = TupleLike<T> && SimilarTuples<T, U> && mp_apply<
     mp_all,
     mp_transform<std::is_assignable, tuple_get_types<T>, tuple_get_types<U>>>::value;
 
