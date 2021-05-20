@@ -178,7 +178,7 @@ TEST_CASE("selections")
     auto m = mesh{index_extents{extents}, db};
 
     randomize();
-    scalar<T> u{m.scalar_size()};
+    scalar<T> u{m.ss()};
     u | sel::D = m.location | vs::transform([](auto&& xyz) { return get<0>(xyz); });
     // test whole field comparison
     REQUIRE(rs::equal(u | sel::D, u | m.fluid));
@@ -195,7 +195,7 @@ TEST_CASE("selections with object")
                   db,
                   std::vector<shape>{make_sphere(0, real3{0.01, -0.01, 0.5}, 0.25)}};
 
-    scalar<T> u{m.scalar_size()};
+    scalar<T> u{m.ss()};
     u | sel::D = -1;
     u | m.fluid = 1;
 
@@ -216,7 +216,7 @@ TEST_CASE("selections with object")
     REQUIRE(nfluid + nsolid == m.size());
     REQUIRE(nfluid == (integer)rs::size(u | m.fluid));
 
-    scalar<T> v{m.scalar_size()};
+    scalar<T> v{m.ss()};
 
     v | sel::D =
         m.location | vs::transform([center = real3{0.01, -0.01, 0.5}](auto&& loc) {
@@ -226,7 +226,7 @@ TEST_CASE("selections with object")
     REQUIRE(u == v);
 
     // test assignment
-    scalar<T> w{m.scalar_size()};
+    scalar<T> w{m.ss()};
     w | sel::D = -1;
 
     w | m.fluid = u; // | m.fluid;

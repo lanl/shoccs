@@ -17,41 +17,41 @@ using Catch::Matchers::Approx;
 constexpr auto g = []() { return pick(); };
 
 // 2nd order polynomial for use with E2
-constexpr auto f2 = [](auto&& loc) {
+constexpr auto f2 = vs::transform([](auto&& loc) {
     auto&& [x, y, z] = loc;
     return x * x * (y + z) + y * y * (x + z) + z * z * (x + y) + 3 * x * y * z + x + y +
            z;
-};
+});
 
-constexpr auto f2_dx = [](auto&& loc) {
+constexpr auto f2_dx = vs::transform([](auto&& loc) {
     auto&& [x, y, z] = loc;
     return 2. * x * (y + z) + y * y + z * z + 3. * y * z + 1;
-};
+});
 
-constexpr auto f2_dy = [](auto&& loc) {
+constexpr auto f2_dy = vs::transform([](auto&& loc) {
     auto&& [x, y, z] = loc;
     return x * x + 2. * y * (x + z) + z * z + 3. * x * z + 1;
-};
+});
 
-constexpr auto f2_dz = [](auto&& loc) {
+constexpr auto f2_dz = vs::transform([](auto&& loc) {
     auto&& [x, y, z] = loc;
     return x * x + y * y + 2. * z * (x + y) + 3. * x * y + 1;
-};
+});
 
-constexpr auto f2_ddx = [](auto&& loc) {
+constexpr auto f2_ddx = vs::transform([](auto&& loc) {
     auto&& [_, y, z] = loc;
     return 2. * (y + z);
-};
+});
 
-constexpr auto f2_ddy = [](auto&& loc) {
+constexpr auto f2_ddy = vs::transform([](auto&& loc) {
     auto&& [x, _, z] = loc;
     return 2. * (x + z);
-};
+});
 
-constexpr auto f2_ddz = [](auto&& loc) {
+constexpr auto f2_ddz = vs::transform([](auto&& loc) {
     auto&& [x, y, _] = loc;
     return 2. * (x + y);
-};
+});
 
 TEST_CASE("E2_2 Domain")
 {
@@ -63,21 +63,17 @@ TEST_CASE("E2_2 Domain")
                   domain_extents{.min = {0.1, 0.2, 0.3}, .max = {1, 2, 2.2}}};
 
     const auto objectBcs = bcs::Object{};
+    const auto loc = m.location;
 
     // initialize fields
-    scalar<T> u{};
-    u | sel::D = m.location() | vs::transform(f2);
+    scalar<T> u{loc | f2};
 
     SECTION("DDFFFD")
     {
 
         const auto gridBcs = bcs::Grid{bcs::dd, bcs::ff, bcs::fd};
         // set the exact du we expect based on zeros assigned to dirichlet locations
-        scalar<T> ddx{u}, ddy{u}, ddz{u};
-        ddx | sel::D = m.location() | vs::transform(f2_ddx);
-        ddy | sel::D = m.location() | vs::transform(f2_ddy);
-        ddz | sel::D = m.location() | vs::transform(f2_ddz);
-        scalar<T> ex = ddx + ddy + ddz;
+        scalar<T> ex = (loc | f2_ddx) + (loc | f2_ddy) + (loc | f2_ddz);
 
         // zero boundaries
         ex | m.xmin = 0;
@@ -98,11 +94,7 @@ TEST_CASE("E2_2 Domain")
 
         const auto gridBcs = bcs::Grid{bcs::dd, bcs::ff, bcs::nd};
         // set the exact du we expect based on zeros assigned to dirichlet locations
-        scalar<T> ddx{u}, ddy{u}, ddz{u};
-        ddx | sel::D = m.location() | vs::transform(f2_ddx);
-        ddy | sel::D = m.location() | vs::transform(f2_ddy);
-        ddz | sel::D = m.location() | vs::transform(f2_ddz);
-        scalar<T> ex = ddx + ddy + ddz;
+        scalar<T> ex = (loc | f2_ddx) + (loc | f2_ddy) + (loc | f2_ddz);
 
         // zero boundaries
         ex | m.xmin = 0;
@@ -110,10 +102,9 @@ TEST_CASE("E2_2 Domain")
         ex | m.zmax = 0;
 
         // neumann
-        scalar<T> nu{u};
-        nu | sel::D = m.location() | vs::transform(f2_dz);
+        scalar<T> nu{loc | f2_dz};
 
-        scalar<T> du{u};
+        scalar<T> du{m.ss()};
         REQUIRE((integer)rs::size(du | sel::D) == m.size());
 
         auto lap = laplacian{m, stencils::second::E2, gridBcs, objectBcs};
@@ -135,32 +126,25 @@ TEST_CASE("E2 with Objects")
 
     const auto gridBcs = bcs::Grid{bcs::df, bcs::nn, bcs::fd};
     const auto objectBcs = bcs::Object{bcs::Dirichlet};
+    const auto loc = m.location;
 
     // initialize fields
-    scalar<T> u{};
-    u | sel::D = m.location() | vs::transform(f2);
-    u | sel::R = m.location() | vs::transform(f2);
+    scalar<T> u{loc | f2};
     REQUIRE(rs::size(u | sel::Rx) == m.Rx().size());
 
     // set the exact du we expect based on zeros assigned to dirichlet locations
-    scalar<T> ddx{u}, ddy{u}, ddz{u};
-    ddx | sel::D = m.location() | vs::transform(f2_ddx);
-    ddy | sel::D = m.location() | vs::transform(f2_ddy);
-    ddz | sel::D = m.location() | vs::transform(f2_ddz);
-    scalar<T> ex{u};
-    ex | sel::D = 0;
+    scalar<T> ex{m.ss()};
 
-    ex | m.fluid = (ddx + ddy + ddz) | m.fluid;
+    ex | m.fluid = (loc | f2_ddx) + (loc | f2_ddy) + (loc | f2_ddz);
 
     // zero dirichlet boundaries
     ex | m.xmin = 0;
     ex | m.zmax = 0;
 
     // neumann conditions
-    scalar<T> nu{u};
-    nu | sel::D = m.location() | vs::transform(f2_dy);
+    scalar<T> nu{loc | f2_dy};
 
-    scalar<T> du{u};
+    scalar<T> du{m.ss()};
 
     auto lap = laplacian{m, stencils::second::E2, gridBcs, objectBcs};
     du = lap(u, nu);

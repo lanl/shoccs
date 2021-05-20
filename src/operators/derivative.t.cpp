@@ -66,18 +66,16 @@ TEST_CASE("E2_Neumann")
 
     // initialize fields
     scalar<T> u{};
-    u | sel::D = m.location() | vs::transform(f2);
-    scalar<T> nu{u};
-    nu | sel::D = m.location() | vs::transform(f2_dz);
-    scalar<T> ex{u};
-    ex | sel::D = m.location() | vs::transform(f2_ddz);
+    u = m.location | vs::transform(f2);
+    scalar<T> nu{};
+    nu = m.location | vs::transform(f2_dz);
+    scalar<T> ex{};
+    ex = m.location | vs::transform(f2_ddz);
 
     ex | m.xmin = 0;
     ex | m.xmax = 0;
 
-    scalar<T> du{u};
-    du = 0;
-
+    scalar<T> du{m.ss()};
     {
         const auto gridBcs = bcs::Grid{bcs::dd, bcs::ff, bcs::nn};
         auto d = derivative(2, m, stencils::second::E2, gridBcs, objectBcs);
@@ -104,15 +102,14 @@ TEST_CASE("Identity FFFFFF")
 
     // initialize fields
     randomize();
-    scalar<T> u{};
+    scalar<T> u{m.ss()};
     u | sel::D = vs::generate_n(g, m.size());
 
-    scalar<T> du{u};
+    scalar<T> du{m.ss()};
     REQUIRE((integer)rs::size(du | sel::D) == m.size());
 
     for (int i = 0; i < 3; i++) {
         auto d = derivative{i, m, stencils::identity, gridBcs, objectBcs};
-        du = 0;
         d(u, du);
 
         REQUIRE_THAT(get<si::D>(u), Approx(get<si::D>(du)));
@@ -133,25 +130,22 @@ TEST_CASE("E2_2 FFFFFF")
     const auto objectBcs = bcs::Object{};
 
     // initialize fields
-    scalar<T> u{};
-    u | sel::D = m.location() | vs::transform(f2);
+    scalar<T> u = m.location | vs::transform(f2);
+    //    u | sel::D = m.location() | vs::transform(f2);
 
-    scalar<T> du{u};
+    scalar<T> du{m.ss()};
     REQUIRE((integer)rs::size(du | sel::D) == m.size());
 
     // exact
-    scalar<T> dx{u}, dy{u}, dz{u};
-    dx | sel::D = m.location() | vs::transform(f2_ddx);
-    dy | sel::D = m.location() | vs::transform(f2_ddy);
-    dz | sel::D = m.location() | vs::transform(f2_ddz);
-    std::array<scalar<T>*, 3> dd{&dx, &dy, &dz};
+    std::array<scalar<T>, 3> dd{m.location | vs::transform(f2_ddx),
+                                m.location | vs::transform(f2_ddy),
+                                m.location | vs::transform(f2_ddz)};
 
     for (int i = 0; i < 3; i++) {
         auto d = derivative{i, m, stencils::second::E2, gridBcs, objectBcs};
-        du = 0;
         d(u, du);
 
-        REQUIRE_THAT(get<si::D>(*dd[i]), Approx(get<si::D>(du)));
+        REQUIRE_THAT(get<si::D>(dd[i]), Approx(get<si::D>(du)));
     }
 }
 
@@ -168,7 +162,7 @@ TEST_CASE("Identity Mixed")
 
     // initialize fields
     randomize();
-    scalar<T> u{};
+    scalar<T> u{m.ss()};
     u | sel::D = vs::generate_n(g, m.size());
 
     SECTION("DDFNFD")
@@ -232,21 +226,19 @@ TEST_CASE("E2 Mixed")
     const auto objectBcs = bcs::Object{};
 
     // initialize fields
-    scalar<T> u{};
-    u | sel::D = m.location() | vs::transform(f2);
+    scalar<T> u{m.location | vs::transform(f2)};
 
     SECTION("DDFFFD")
     {
 
         const auto gridBcs = bcs::Grid{bcs::dd, bcs::ff, bcs::fd};
         // set the exact du we expect based on zeros assigned to dirichlet locations
-        scalar<T> dx{u}, dy{u}, dz{u};
-        dx | sel::D = m.location() | vs::transform(f2_ddx);
-        dy | sel::D = m.location() | vs::transform(f2_ddy);
-        dz | sel::D = m.location() | vs::transform(f2_ddz);
-        std::array<scalar<T>*, 3> dd{&dx, &dy, &dz};
 
-        scalar<T> du{u};
+        std::array<scalar<T>, 3> dd{m.location | vs::transform(f2_ddx),
+                                    m.location | vs::transform(f2_ddy),
+                                    m.location | vs::transform(f2_ddz)};
+
+        scalar<T> du{m.ss()};
         REQUIRE((integer)rs::size(du | sel::D) == m.size());
 
         for (int i = 0; i < m.dims(); i++) {
@@ -254,7 +246,7 @@ TEST_CASE("E2 Mixed")
             du = 0;
             d(u, du);
 
-            auto& ex = *dd[i];
+            auto& ex = dd[i];
             // zero boundaries
             ex | m.xmin = 0;
             ex | m.xmax = 0;
@@ -269,12 +261,10 @@ TEST_CASE("E2 Mixed")
 
         const auto gridBcs = bcs::Grid{bcs::fn, bcs::dd, bcs::df};
         // set the exact du we expect based on zeros assigned to dirichlet locations
-        scalar<T> dx{u}, dy{u}, dz{u}, nu{u};
-        dx | sel::D = m.location() | vs::transform(f2_ddx);
-        dy | sel::D = m.location() | vs::transform(f2_ddy);
-        dz | sel::D = m.location() | vs::transform(f2_ddz);
-        nu | sel::D = m.location() | vs::transform(f2_dx);
-        std::array<scalar<T>*, 3> dd{&dx, &dy, &dz};
+        scalar<T> nu{m.location | vs::transform(f2_dx)};
+        std::array<scalar<T>, 3> dd{m.location | vs::transform(f2_ddx),
+                                    m.location | vs::transform(f2_ddy),
+                                    m.location | vs::transform(f2_ddz)};
 
         scalar<T> du{u};
         REQUIRE((integer)rs::size(du | sel::D) == m.size());
@@ -284,7 +274,7 @@ TEST_CASE("E2 Mixed")
             du = 0;
             d(u, nu, du);
 
-            auto& ex = *dd[i];
+            auto& ex = dd[i];
             // zero boundaries
             ex | m.ymin = 0;
             ex | m.ymax = 0;
@@ -310,21 +300,8 @@ TEST_CASE("Identity with Objects")
 
     // initialize fields
     randomize();
-    scalar<T> u{};
-    u | sel::D = vs::generate_n(g, m.size());
-    // note that the transform function doesn't do what we want if the simply do something
-    // like:
-    //
-    // return vs::generator_n(g, rs::size(s))
-    //
-    // There must be some kind of mismatch between the transform/resize_and_copy routines
-    // and the kind of view return by this lambda...
-    auto tt = transform(
-        [g = g](auto&& s) { return vs::generate_n(g, rs::size(s)) | rs::to<T>(); },
-        m.R());
-    REQUIRE(rs::size(get<0>(tt)) == rs::size(m.Rx()));
+    scalar<T> u{m.location | vs::transform([](auto&&) { return pick(); })};
 
-    u | sel::R = tt;
     REQUIRE(rs::size(u | sel::Rx) == m.Rx().size());
 
     scalar<T> du_x{u};
@@ -361,30 +338,24 @@ TEST_CASE("E2 with Objects")
     const auto objectBcs = bcs::Object{bcs::Dirichlet};
 
     // initialize fields
-    scalar<T> u{};
-    u | sel::D = m.location() | vs::transform(f2);
-    u | sel::R = m.location() | vs::transform(f2);
+    scalar<T> u = m.location | vs::transform(f2);
     REQUIRE(rs::size(u | sel::Rx) == m.Rx().size());
 
-    scalar<T> du_x{u}, du_y{u}, du_z{u}, dd{u}, nu{u};
-    nu | sel::D = m.location() | vs::transform(f2_dx);
-    dd | sel::D = m.location() | vs::transform(f2_ddx);
-    dd | m.ymin = 0;
-    dd | m.ymax = 0;
-    du_x | sel::D = 0;
-    du_x | m.fluid = dd | m.fluid;
+    scalar<T> nu = m.location | vs::transform(f2_dx);
 
-    dd | sel::D = m.location() | vs::transform(f2_ddy);
-    dd | m.ymin = 0;
-    dd | m.ymax = 0;
-    du_y | sel::D = 0;
-    du_y | m.fluid = dd | m.fluid;
+    scalar<T> du_x{m.ss()}, du_y{m.ss()}, du_z{m.ss()};
 
-    dd | sel::D = m.location() | vs::transform(f2_ddz);
-    dd | m.ymin = 0;
-    dd | m.ymax = 0;
-    du_z | sel::D = 0;
-    du_z | m.fluid = dd | m.fluid;
+    du_x | m.fluid = m.location | vs::transform(f2_ddx);
+    du_x | m.ymin = 0;
+    du_x | m.ymax = 0;
+
+    du_y | m.fluid = m.location | vs::transform(f2_ddy);
+    du_y | m.ymin = 0;
+    du_y | m.ymax = 0;
+
+    du_z | m.fluid = m.location | vs::transform(f2_ddz);
+    du_z | m.ymin = 0;
+    du_z | m.ymax = 0;
 
     REQUIRE((integer)rs::size(du_x | sel::D) == m.size());
 

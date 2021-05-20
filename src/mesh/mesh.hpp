@@ -56,7 +56,7 @@ public:
 
     auto R() const { return tuple{geometry.Rx(), geometry.Ry(), geometry.Rz()}; }
 
-    auto scalar_size() const
+    auto ss() const // scalar size
     {
         return tuple{tuple{size()}, tuple{Rx().size(), Ry().size(), Rz().size()}};
     }
