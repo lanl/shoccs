@@ -14,4 +14,4 @@ add_unit_test(derivative "operators" shoccs-operators shoccs-random shoccs-stenc
 #add_unit_test(divergence "operators" operators random)
 
 add_unit_test(gradient "operators" shoccs-operators shoccs-random)
-add_unit_test(laplacian "operators" shoccs-operators shoccs-stencils)
+add_unit_test(laplacian "operators" shoccs-operators shoccs-stencils shoccs-bcs)

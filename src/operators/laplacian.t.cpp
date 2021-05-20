@@ -4,6 +4,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
+#include <sol/sol.hpp>
+#include <spdlog/spdlog.h>
+
 #include "fields/selector.hpp"
 #include "identity_stencil.hpp"
 #include "random/random.hpp"
@@ -118,14 +121,52 @@ TEST_CASE("E2 with Objects")
 {
     using T = std::vector<real>;
 
-    const auto extents = int3{25, 26, 27};
+    sol::state lua;
+    lua.script(R"(
+        simulation = {
+            mesh = {
+                index_extents = {25, 26, 27},
+                domain_bounds = {
+                    min = {0.1, 0.2, 0.3},
+                    max = {1, 2, 2.2}
+                }
+            },
+            domain_boundaries = {
+                xmin = "dirichlet",
+                ymin = "neumann",
+                ymax = "neumann",
+                zmax = "dirichlet"
+            },
+            shapes = {
+                {
+                    type = "sphere",
+                    center = {0.45, 1.011, 1.31},
+                    radius = 0.25,
+                    boundary_condition = "dirichlet"
+                }
+            },
+            scheme = {
+                order = 2,
+                type = "E2"
+            }
+        }
+    )");
+    // mesh
+    auto m_opt = mesh::from_lua(lua["simulation"]);
+    REQUIRE(!!m_opt);
+    const mesh& m = *m_opt;
 
-    auto m = mesh{index_extents{extents},
-                  domain_extents{.min = {0.1, 0.2, 0.3}, .max = {1, 2, 2.2}},
-                  std::vector<shape>{make_sphere(0, real3{0.45, 1.011, 1.31}, 0.25)}};
+    // bcs
+    auto bc_opt = bcs::from_lua(lua["simulation"]);
+    REQUIRE(!!bc_opt);
+    auto&& [gridBcs, objectBcs] = *bc_opt;
 
-    const auto gridBcs = bcs::Grid{bcs::df, bcs::nn, bcs::fd};
-    const auto objectBcs = bcs::Object{bcs::Dirichlet};
+    // scheme
+    auto scheme_opt = stencil::from_lua(lua["simulation"]);
+    REQUIRE(!!scheme_opt);
+    stencil st = *scheme_opt;
+
+
     const auto loc = m.location;
 
     // initialize fields
@@ -146,7 +187,7 @@ TEST_CASE("E2 with Objects")
 
     scalar<T> du{m.ss()};
 
-    auto lap = laplacian{m, stencils::second::E2, gridBcs, objectBcs};
+    auto lap = laplacian{m, st, gridBcs, objectBcs};
     du = lap(u, nu);
 
     REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));
