@@ -2,6 +2,9 @@
 
 #include <range/v3/all.hpp>
 
+#include <sol/sol.hpp>
+#include <spdlog/spdlog.h>
+
 namespace ccs
 {
 
@@ -29,6 +32,51 @@ cartesian::cartesian(span<const int> n, span<const real> min, span<const real> m
     x_ = vs::linear_distribute(min_[0], max_[0], n_[0]) | rs::to<std::vector<real>>();
     y_ = vs::linear_distribute(min_[1], max_[1], n_[1]) | rs::to<std::vector<real>>();
     z_ = vs::linear_distribute(min_[2], max_[2], n_[2]) | rs::to<std::vector<real>>();
+}
+
+std::optional<std::pair<index_extents, domain_extents>>
+cartesian::from_lua(const sol::table& tbl)
+{
+    auto m = tbl["mesh"];
+    if (!m.valid()) {
+        spdlog::error("simulation.mesh is required");
+        return std::nullopt;
+    }
+
+    auto ie = m["index_extents"];
+    if (!ie.valid()) {
+        spdlog::error("simulation.mesh.index_extents is required");
+        return std::nullopt;
+    }
+
+    auto db = m["domain_bounds"];
+    if (!db.valid()) {
+        spdlog::error("simulation.mesh.domain_bounds is required");
+        return std::nullopt;
+    }
+
+    int3 n{ie[1].get_or(1), ie[2].get_or(1), ie[3].get_or(1)};
+
+    real3 lb{};
+    real3 ub{};
+
+    if (auto x = db["min"]; x.valid()) {
+        lb = real3{x[1].get_or(0.0), x[2].get_or(0.0), x[3].get_or(0.0)};
+    } else {
+        spdlog::info("No explicit domain lower bound set.  Assuming (0, 0, 0)");
+    }
+
+    if (auto x = db["max"]; x.valid()) {
+        ub = real3{x[1].get_or(lb[0]), x[2].get_or(lb[1]), x[3].get_or(lb[2])};
+    } else if (db[1].valid()) {
+        ub = real3{db[1].get_or(lb[0]), db[2].get_or(lb[1]), db[3].get_or(lb[2])};
+    } else {
+        spdlog::error(
+            "domain_bounds.max = {...} or domain_bounds = {...} must be specified");
+        return std::nullopt;
+    }
+
+    return std::pair{index_extents{n}, domain_extents{lb, ub}};
 }
 
 } // namespace ccs

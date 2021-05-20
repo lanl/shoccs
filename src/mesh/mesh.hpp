@@ -6,6 +6,8 @@
 #include "mesh_types.hpp"
 #include "object_geometry.hpp"
 
+#include <sol/forward.hpp>
+
 namespace ccs
 {
 
@@ -60,6 +62,8 @@ public:
     {
         return tuple{tuple{size()}, tuple{Rx().size(), Ry().size(), Rz().size()}};
     }
+
+    static std::optional<mesh> from_lua(const sol::table&);
 
     sel::xmin_t xmin;
     sel::xmax_t xmax;

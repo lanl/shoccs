@@ -5,6 +5,9 @@
 
 #include <range/v3/view/single.hpp>
 
+#include <sol/sol.hpp>
+#include <spdlog/spdlog.h>
+
 using namespace ccs;
 
 TEST_CASE("mesh api")
@@ -13,11 +16,26 @@ TEST_CASE("mesh api")
 
     SECTION("3d")
     {
-        real3 min{0.0, -1.0, -2.0};
-        real3 max{1.0, 2.0, 3.0};
-        int3 n{11, 31, 51};
+        sol::state lua;
+        lua.open_libraries(sol::lib::base, sol::lib::math);
+        lua.script(R"(
+            simulation = {
+                mesh = {
+                    index_extents = {11, 31, 51},
+                    domain_bounds = {
+                        min = {0, -1, -2},
+                        max = {1, 2, 3}
+                    }
+                }
+            }
+        )");
 
-        m = cartesian{n, min, max};
+        auto m_opt = cartesian::from_lua(lua["simulation"]);
+        REQUIRE(!!m_opt);
+        auto&& [n, domain] = *m_opt;
+        auto&& [min, max] = domain;
+
+        m = cartesian{n.extents, min, max};
 
         REQUIRE(m.dims() == 3);
 
@@ -60,11 +78,26 @@ TEST_CASE("mesh api")
 
     SECTION("2d")
     {
-        real3 min{0.0, -1.0};
-        real3 max{1.0, 2.0};
-        int3 n{11, 31};
+        sol::state lua;
+        lua.open_libraries(sol::lib::base, sol::lib::math);
+        lua.script(R"(
+            simulation = {
+                mesh = {
+                    index_extents = {11, 31},
+                    domain_bounds = {
+                        min = {0, -1},
+                        max = {1, 2}
+                    }
+                }
+            }
+        )");
 
-        m = cartesian{n, min, max};
+        auto m_opt = cartesian::from_lua(lua["simulation"]);
+        REQUIRE(!!m_opt);
+        auto&& [n, domain] = *m_opt;
+        auto&& [min, max] = domain;
+
+        m = cartesian{n.extents, min, max};
 
         REQUIRE(m.dims() == 2);
 
@@ -92,11 +125,23 @@ TEST_CASE("mesh api")
 
     SECTION("1d")
     {
-        std::vector<real> min{0};
-        std::vector<real> max{2.0};
-        std::vector<int> n{21};
+        sol::state lua;
+        lua.open_libraries(sol::lib::base, sol::lib::math);
+        lua.script(R"(
+            simulation = {
+                mesh = {
+                    index_extents = {21},
+                    domain_bounds = {2}
+                }
+            }
+        )");
 
-        m = cartesian{n, min, max};
+        auto m_opt = cartesian::from_lua(lua["simulation"]);
+        REQUIRE(!!m_opt);
+        auto&& [n, domain] = *m_opt;
+        auto&& [min, max] = domain;
+
+        m = cartesian{n.extents, min, max};
 
         REQUIRE(m.dims() == 1);
 

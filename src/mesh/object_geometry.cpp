@@ -4,6 +4,8 @@
 #include <cmath>
 #include <iostream>
 
+#include <sol/sol.hpp>
+#include <spdlog/spdlog.h>
 //
 // Somewhere in here is where we should form the vector of pairs of wall info
 // that will be used to characterize the domain and build discretization stencils
@@ -209,5 +211,45 @@ std::span<const mesh_object_info> object_geometry::Rz(int shape_id) const
 std::span<const int3> object_geometry::Sx() const { return sx_; }
 std::span<const int3> object_geometry::Sy() const { return sy_; }
 std::span<const int3> object_geometry::Sz() const { return sz_; }
+
+std::optional<std::vector<shape>> object_geometry::from_lua(const sol::table& tbl)
+{
+    auto t = tbl["shapes"];
+    if (!t.valid()) {
+        spdlog::info("No cut-cell shapes specified");
+        return std::vector<shape>{};
+    }
+
+    std::vector<shape> s{};
+    for (int i = 1; t[i].valid(); i++) {
+        auto type = t[i]["type"].get_or(std::string{});
+
+        if (type == "sphere") {
+
+            real3 center{t[i]["center"][1].get_or(0.0),
+                         t[i]["center"][2].get_or(0.0),
+                         t[i]["center"][3].get_or(0.0)};
+            real radius = t[i]["radius"].get_or(0.0);
+            s.push_back(make_sphere(i - 1, center, radius));
+
+        } else if (type == "yz_rect") {
+
+            real3 lc{t[i]["lower_corner"][1].get_or(0.0),
+                     t[i]["lower_corner"][2].get_or(0.0),
+                     t[i]["lower_corner"][3].get_or(0.0)};
+            real3 uc{t[i]["upper_corner"][1].get_or(0.0),
+                     t[i]["upper_corner"][2].get_or(0.0),
+                     t[i]["upper_corner"][3].get_or(0.0)};
+            real n = t[i]["normal"].get_or(1.0);
+            s.push_back(make_yz_rect(i - 1, lc, uc, n));
+
+        } else {
+            spdlog::error("shape type must be one of: sphere, yz_rect ...");
+            return std::nullopt;
+        }
+    }
+
+    return s;
+}
 
 } // namespace ccs

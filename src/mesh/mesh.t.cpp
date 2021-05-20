@@ -8,6 +8,9 @@
 
 #include "real3_operators.hpp"
 
+#include <sol/sol.hpp>
+#include <spdlog/spdlog.h>
+
 #include <range/v3/all.hpp>
 
 using namespace ccs;
@@ -188,12 +191,29 @@ TEST_CASE("selections with object")
 {
     using T = std::vector<int>;
 
-    const auto db = domain_extents{.min = {-1, -1, 0}, .max = {1, 2, 2.2}};
-    const auto extents = int3{21, 22, 23};
-
-    auto m = mesh{index_extents{extents},
-                  db,
-                  std::vector<shape>{make_sphere(0, real3{0.01, -0.01, 0.5}, 0.25)}};
+    sol::state lua;
+    lua.open_libraries(sol::lib::base, sol::lib::math);
+    lua.script(R"(           
+            simulation = {
+                mesh = {
+                    index_extents = {21, 22, 23},
+                    domain_bounds = {
+                        min = {-1, -1,   0},
+                        max = { 1,  2, 2.2}
+                    }
+                },
+                shapes = {
+                    {
+                        type = "sphere",
+                        center = {0.01, -0.01, 0.5},
+                        radius = 0.25
+                    }
+                }
+            }
+        )");
+    auto m_opt = mesh::from_lua(lua["simulation"]);
+    REQUIRE(!!m_opt);
+    const mesh& m = *m_opt;
 
     scalar<T> u{m.ss()};
     u | sel::D = -1;

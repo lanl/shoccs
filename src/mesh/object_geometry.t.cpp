@@ -3,17 +3,43 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <sol/sol.hpp>
+#include <spdlog/spdlog.h>
+
 using namespace ccs;
 
 TEST_CASE("sphere intersections")
 {
-    std::vector<shape> shapes;
-    shapes.push_back(make_sphere(0, std::array{0.01, -0.01, 0.5}, 0.25));
 
-    int3 n{21, 22, 23};
-    real3 min{-1, -1, 0};
-    real3 max{1, 2, 2.2};
-    object_geometry g{shapes, cartesian{n, min, max}};
+    sol::state lua;
+    lua.open_libraries(sol::lib::base, sol::lib::math);
+    lua.script(R"(
+            simulation = {
+                mesh = {
+                    index_extents = {21, 22, 23},
+                    domain_bounds = {
+                        min = {-1, -1, 0},
+                        max = {1, 2, 2.2}
+                    }
+                },
+                shapes = {
+                    {
+                        type = "sphere",
+                        center = {0.01, -0.01, 0.5},
+                        radius = 0.25
+                    }
+                }
+            }
+        )");
+    auto shapes_opt = object_geometry::from_lua(lua["simulation"]);
+    REQUIRE(!!shapes_opt);
+    const auto& shapes = *shapes_opt;
+
+    auto m_opt = cartesian::from_lua(lua["simulation"]);
+    REQUIRE(!!m_opt);
+    auto&& [n, domain] = *m_opt;
+
+    object_geometry g{shapes, cartesian{n.extents, domain.min, domain.max}};
 
     // intersections in x from Mathematica
     SECTION("X")
@@ -304,12 +330,37 @@ TEST_CASE("sphere intersections")
 
 TEST_CASE("rect_intersections")
 {
-    auto m = cartesian{int3{11, 2, 1}, real3{}, real3{1, 1, 1}};
+    sol::state lua;
+    lua.open_libraries(sol::lib::base, sol::lib::math);
+    lua.script(R"(
+            loc = 1.0 - 1e-6
+            simulation = {
+                mesh = {
+                    index_extents = {11, 2},
+                    domain_bounds = {1, 1, 1}
+                },
+                shapes = {
+                    {
+                        type = "yz_rect",
+                        lower_corner = {loc, -1, -1},
+                        upper_corner = {loc, 2, 2},
+                        normal = -1
+                    }
+                }
+            }
+        )");
+
+    auto shapes_opt = object_geometry::from_lua(lua["simulation"]);
+    REQUIRE(!!shapes_opt);
+    const auto& shapes = *shapes_opt;
+
+    auto m_opt = cartesian::from_lua(lua["simulation"]);
+    REQUIRE(!!m_opt);
+    auto&& [n, domain] = *m_opt;
+
+    auto m = cartesian(n.extents, domain.min, domain.max);
     REQUIRE(m.dims() == 2);
 
-    real loc = 1.0 - 1e-6;
-    auto shapes =
-        std::vector<shape>{make_yz_rect(0, real3{loc, -1, -1}, real3{loc, 2, 2}, -1)};
     auto g = object_geometry(shapes, m);
     REQUIRE(g.Rx().size() == 2u);
     REQUIRE(g.Sx().size() == 2u);

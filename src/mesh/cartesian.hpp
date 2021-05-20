@@ -2,11 +2,13 @@
 
 #include "index_extents.hpp"
 #include "indexing.hpp"
-#include "types.hpp"
+#include "mesh_types.hpp"
 
 #include "fields/tuple.hpp"
 
 #include <range/v3/view/cartesian_product.hpp>
+
+#include <sol/forward.hpp>
 
 #include <vector>
 
@@ -119,5 +121,8 @@ public:
     }
 
     constexpr int uc_dir(int dir, const int3& pt) { return ucf_dir(dir)(pt); }
+
+    static std::optional<std::pair<index_extents, domain_extents>>
+    from_lua(const sol::table&);
 };
 } // namespace ccs

@@ -1,5 +1,8 @@
 #include "mesh.hpp"
 
+#include <sol/sol.hpp>
+#include <spdlog/spdlog.h>
+
 namespace ccs
 {
 
@@ -158,6 +161,21 @@ bool mesh::dirichlet_line(const int3& start, int dir, const bcs::Grid& cart_bcs)
     for (int i = dir + 1; i < 3; i++) { result = result || f(i); }
 
     return result;
+}
+
+std::optional<mesh> mesh::from_lua(const sol::table& tbl)
+{
+    auto shapes_opt = object_geometry::from_lua(tbl);
+    if (!shapes_opt) return std::nullopt;
+
+    auto m_opt = cartesian::from_lua(tbl);
+    if (!m_opt) return std::nullopt;
+
+    const auto& shapes = *shapes_opt;
+    auto&& [n, domain] = *m_opt;
+
+    return mesh{n, domain, shapes};
+    //return std::nullopt;
 }
 
 } // namespace ccs
