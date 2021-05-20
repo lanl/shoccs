@@ -8,6 +8,9 @@
 
 #include <range/v3/view/zip.hpp>
 
+#include <sol/sol.hpp>
+#include <spdlog/spdlog.h>
+
 using Catch::Matchers::Approx;
 using namespace ccs;
 
@@ -42,7 +45,19 @@ TEST_CASE("dirichlet")
 
 TEST_CASE("floating")
 {
-    const auto& st = stencils::second::E2;
+    sol::state lua;
+    lua.open_libraries(sol::lib::base, sol::lib::math);
+    lua.script(R"(           
+            simulation = {
+                scheme = {
+                    order = 2,
+                    type = "E2"
+                }
+            }
+        )");
+    auto st_opt = stencil::from_lua(lua["simulation"]);
+    REQUIRE(!!st_opt);
+    const auto& st = *st_opt;
 
     auto [p, r, t, x] = st.query(bcs::Floating);
     REQUIRE(p == 1);

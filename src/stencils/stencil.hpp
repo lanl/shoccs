@@ -2,7 +2,11 @@
 
 #include "boundaries.hpp"
 #include "types.hpp"
+
 #include <concepts>
+#include <optional>
+
+#include <sol/forward.hpp>
 
 namespace ccs::stencils
 {
@@ -31,13 +35,11 @@ concept Stencil = requires(const T& st,
 {
     {
         st.query(b)
-    }
-    ->std::same_as<info>;
+        } -> std::same_as<info>;
 
     {
         st.query_max()
-    }
-    ->std::same_as<info>;
+        } -> std::same_as<info>;
 
     {st.nbs(h, b, psi, ray_outside, c, extra)};
 
@@ -108,45 +110,47 @@ public:
     // construction from anything with a hit method
     template <typename T>
         requires Stencil<T> &&
-        (!std::same_as<stencil, std::remove_cvref_t<T>>)stencil(T&& other)
-        : s{new any_stencil_impl{std::forward<T>(other)}}
-    {
-    }
+            (!std::same_as<stencil, std::remove_cvref_t<T>>)stencil(T&& other)
+            : s{new any_stencil_impl{std::forward<T>(other)}}
+        {
+        }
 
-    stencil& operator=(const stencil& other)
-    {
-        stencil tmp{other};
-        swap(*this, tmp);
-        return (*this);
-    }
+        stencil& operator=(const stencil& other)
+        {
+            stencil tmp{other};
+            swap(*this, tmp);
+            return (*this);
+        }
 
-    stencil& operator=(stencil&& other)
-    {
-        delete s;
-        s = std::exchange(other.s, nullptr);
-        return *this;
-    }
+        stencil& operator=(stencil&& other)
+        {
+            delete s;
+            s = std::exchange(other.s, nullptr);
+            return *this;
+        }
 
-    ~stencil() { delete s; }
+        ~stencil() { delete s; }
 
-    friend void swap(stencil& x, stencil& y) { std::swap(x.s, y.s); }
+        friend void swap(stencil& x, stencil& y) { std::swap(x.s, y.s); }
 
-    explicit operator bool() const { return s != nullptr; }
+        explicit operator bool() const { return s != nullptr; }
 
-    info query(bcs::type b) const { return s->query(b); }
-    info query_max() const { return s->query_max(); }
+        info query(bcs::type b) const { return s->query(b); }
+        info query_max() const { return s->query_max(); }
 
-    void nbs(real h,
-             bcs::type b,
-             real psi,
-             bool ray_outside,
-             std::span<real> c,
-             std::span<real> ex) const
-    {
-        return s->nbs(h, b, psi, ray_outside, c, ex);
-    }
+        void nbs(real h,
+                 bcs::type b,
+                 real psi,
+                 bool ray_outside,
+                 std::span<real> c,
+                 std::span<real> ex) const
+        {
+            return s->nbs(h, b, psi, ray_outside, c, ex);
+        }
 
-    void interior(real h, std::span<real> c) const { return s->interior(h, c); }
+        void interior(real h, std::span<real> c) const { return s->interior(h, c); }
+
+        static std::optional<stencil> from_lua(const sol::table&);
 };
 
 stencil make_E2_2();
