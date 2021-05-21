@@ -1,48 +1,63 @@
 #pragma once
 
-#include "lazy_field_math.hpp"
 #include "scalar.hpp"
+#include "selector.hpp"
 #include "vector.hpp"
 #include <utility>
 
 namespace ccs
 {
-namespace detail
-{
+
+struct system_size {
+    integer nscalars;
+    integer nvectors;
+    scalar<integer> scalar_size;
+};
 
 template <typename T>
-class field : lazy::view_math<field<T>>, lazy::container_math<field<T>>
+class system_field
+// : lazy::view_math<system_field<T>>, lazy::container_math<system_field<T>>
 {
-    friend class lazy::view_access;
-    friend class lazy::container_access;
+    //     friend class lazy::view_access;
+    //     friend class lazy::container_access;
 
     std::vector<ccs::scalar<T>> scalars_;
     std::vector<ccs::vector<T>> vectors_;
 
 public:
-    using type = field<T>;
+    using type = system_field<T>;
 
-    field() = default;
+    system_field() = default;
 
-    // SystemField(int nfields, int3 extents, solid_points);
+    system_field(system_size sz)
+    {
+        auto&& [ns, nv, ss] = sz;
+        scalars_.reserve(ns);
+        vectors_.reserve(nv);
+
+        for (integer i = 0; i < ns; i++) { scalars_.emplace_back(ss); }
+        for (integer i = 0; i < nv; i++) { vectors_.emplace_back(tuple{ss, ss, ss}); }
+    }
+
+    // Systemsystem_Field(int nsystem_fields, int3 extents, solid_points);
 
     // construction from an invocable
     template <std::invocable<type&> F>
-    field(F&& f)
+    system_field(F&& f)
     {
         std::invoke(FWD(f), *this);
     }
 
     // assignment from an invocable of the same type
     template <std::invocable<type&> F>
-    field& operator=(F&& f)
+    system_field& operator=(F&& f)
     {
         std::invoke(FWD(f), *this);
         return *this;
     }
 
     template <Numeric V>
-    field& operator=(V&&)
+    system_field& operator=(V&&)
     {
         return *this;
     }
@@ -50,12 +65,12 @@ public:
     // conversion operator
     template <typename U>
         requires std::convertible_to<T&, U>
-    operator field<U>() { return field<U>{}; }
+    operator system_field<U>() { return system_field<U>{}; }
 
     // api for resizing should only be available for true containers
     int nscalars() const { return scalars_.size(); }
 
-    field& nscalars(int n)
+    system_field& nscalars(int n)
     {
         scalars_.resize(n);
         return *this;
@@ -63,7 +78,7 @@ public:
 
     int nvectors() const { return vectors_.size(); }
 
-    field& nvectors(int n)
+    system_field& nvectors(int n)
     {
         vectors_.resize(n);
         return *this;
@@ -71,13 +86,13 @@ public:
 
     int3 extents() const { return {}; }
 
-    field& extents(int3) { return *this; }
+    system_field& extents(int3) { return *this; }
 
     const auto& solid() { return scalars_; }
 
-    field& solid(int) { return *this; }
+    system_field& solid(int) { return *this; }
 
-    field& object_boundaries(int3) { return *this; }
+    system_field& object_boundaries(int3) { return *this; }
 
     template <std::integral... Is>
     auto scalars(Is&&... i) const
@@ -108,20 +123,18 @@ public:
             static_cast<std::underlying_type_t<std::remove_cvref_t<Is>>>(FWD(i))...);
     }
 
-    constexpr void swap(field& other) noexcept
+    constexpr void swap(system_field& other) noexcept
     {
         using std::swap;
         swap(this->scalars_, other.scalars_);
         swap(this->vectors_, other.vectors_);
     }
 
-    friend constexpr void swap(field& a, field& b) noexcept { a.swap(b); }
+    friend constexpr void swap(system_field& a, system_field& b) noexcept { a.swap(b); }
 };
 
-} // namespace detail
-
-using field = detail::field<std::vector<real>>;
-using field_span = detail::field<std::span<real>>;
-using field_view = detail::field<std::span<const real>>;
+using field = system_field<std::vector<real>>;
+using field_span = system_field<std::span<real>>;
+using field_view = system_field<std::span<const real>>;
 
 } // namespace ccs

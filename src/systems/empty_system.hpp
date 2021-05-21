@@ -1,5 +1,6 @@
 #pragma once
 
+
 #include "fields/system_field.hpp"
 #include "step_controller.hpp"
 #include "types.hpp"
@@ -24,5 +25,7 @@ struct empty {
     void update_boundary(field_span, real time);
 
     void log(const system_stats& stats, const step_controller& controller);
+
+    system_size size() const;
 };
 } // namespace ccs::systems

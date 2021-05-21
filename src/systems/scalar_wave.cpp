@@ -147,4 +147,6 @@ void scalar_wave::log(const system_stats&, const step_controller&)
     if (auto logger = spdlog::get("system"); logger) { logger->info("ScalarWave"); }
 }
 
+system_size scalar_wave::size() const { return {}; }
+
 } // namespace ccs::systems

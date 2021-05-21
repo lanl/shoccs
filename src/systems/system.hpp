@@ -12,6 +12,8 @@
 namespace ccs
 {
 
+
+
 // Public API of a `system'
 //
 // timestep -> computes an acceptable timestep based on current solution state
@@ -80,6 +82,8 @@ public:
     void update_boundary(field_span, real time);
 
     static std::optional<system> from_lua(const sol::table&);
+
+    system_size size() const;
 };
 
 } // namespace ccs

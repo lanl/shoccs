@@ -282,6 +282,8 @@ void inviscid_vortex::log(const system_stats&, const step_controller&)
     if (auto logger = spdlog::get("system"); logger) { logger->info("InvisicdVortex"); }
 }
 
+system_size inviscid_vortex::size() const { return {}; }
+
 #if 0
 real euler_vortex::system_timestep_size(real cfl) const
 {

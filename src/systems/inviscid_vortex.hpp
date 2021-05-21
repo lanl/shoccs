@@ -55,6 +55,8 @@ public:
     void update_boundary(field_span, real time);
 
     void log(const system_stats&, const step_controller&);
+
+    system_size size() const;
 };
 
 } // namespace ccs::systems

@@ -3,6 +3,7 @@
 #include <functional>
 #include <sol/forward.hpp>
 #include <variant>
+#include <optional>
 
 #include "empty_integrator.hpp"
 #include "fields/system_field.hpp"

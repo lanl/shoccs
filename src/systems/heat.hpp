@@ -1,7 +1,11 @@
+#pragma once
+
 #include "fields/system_field.hpp"
+#include "mesh/mesh.hpp"
 #include "mms/manufactured_solutions.hpp"
 #include "operators/laplacian.hpp"
 #include "step_controller.hpp"
+#include <sol/forward.hpp>
 
 namespace ccs::systems
 {
@@ -10,17 +14,26 @@ namespace ccs::systems
 //
 class heat
 {
-    laplacian lap;
 
+    mesh m;
+    bcs::Grid grid_bcs;
+    bcs::Object object_bcs;
     manufactured_solution m_sol;
 
+    laplacian lap;
     real diffusivity;
 
 public:
     heat() = default;
 
-    // real constructor
-    // Heat();
+    heat(mesh&& m,
+         bcs::Grid&& grid_bcs,
+         bcs::Object&& object_bcs,
+         manufactured_solution&& m_sol,
+         stencil st,
+         real diffusivity);
+
+    static std::optional<heat> from_lua(const sol::table&);
 
     void operator()(field&, const step_controller&);
 
@@ -35,5 +48,7 @@ public:
     void update_boundary(field_span, real time);
 
     void log(const system_stats&, const step_controller&);
+
+    system_size size() const;
 };
 } // namespace ccs::systems

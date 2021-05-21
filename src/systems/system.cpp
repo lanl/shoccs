@@ -70,6 +70,11 @@ void system::log(const system_stats& stats, const step_controller& controller)
         v);
 }
 
+system_size system::size() const
+{
+    return std::visit([](auto&& current_system) { return current_system.size(); }, v);
+}
+
 std::optional<system> system::from_lua(const sol::table& tbl)
 {
     auto m = tbl["system"];
@@ -81,14 +86,14 @@ std::optional<system> system::from_lua(const sol::table& tbl)
     auto type = m["type"].get_or(std::string{});
 
     if (type == "heat") {
-        return system(systems::heat{});
+        if (auto opt = systems::heat::from_lua(tbl); opt) return system(MOVE(*opt));
     } else if (type == "scalar wave") {
         return system(systems::scalar_wave{});
     } else if (type == "inviscid vortex") {
         return system(systems::inviscid_vortex{});
     } else {
         spdlog::error("unrecognized system.type");
-        return std::nullopt;
     }
+    return std::nullopt;
 }
 } // namespace ccs
