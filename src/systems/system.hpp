@@ -6,6 +6,7 @@
 #include "scalar_wave.hpp"
 #include "step_controller.hpp"
 #include "types.hpp"
+#include <sol/forward.hpp>
 #include <variant>
 
 namespace ccs
@@ -52,9 +53,14 @@ class system
                  systems::inviscid_vortex,
                  systems::heat>
         v;
+    using v_t = decltype(v);
 
 public:
     system() = default;
+
+    template <typename T>
+        requires(std::constructible_from<v_t, T>)
+    system(T&& t) : v{FWD(t)} {}
 
     // call operator for solution evaluation
     std::function<void(field&)> operator()(const step_controller&);
@@ -72,6 +78,8 @@ public:
     std::function<void(field_span)> rhs(field_view, real);
 
     void update_boundary(field_span, real time);
+
+    static std::optional<system> from_lua(const sol::table&);
 };
 
 } // namespace ccs

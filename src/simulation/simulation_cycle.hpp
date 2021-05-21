@@ -17,7 +17,9 @@ class simulation_cycle
     FieldIO io;
 
 public:
-    simulation_cycle() = default;
+    simulation_cycle() = default
+
+    // static ::
 
 #if 0
     simulation_cycle()
@@ -34,6 +36,7 @@ public:
     {
     }
 #endif
-    real3 run();
+
+        real3 run();
 };
 } // namespace ccs

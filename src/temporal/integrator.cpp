@@ -1,5 +1,8 @@
 #include "integrator.hpp"
 
+#include <sol/sol.hpp>
+#include <spdlog/spdlog.h>
+
 namespace ccs
 {
 
@@ -16,5 +19,24 @@ std::function<void(field_span)> integrator::operator()(system& s,
                 }};
         },
         v);
+}
+
+std::optional<integrator> integrator::from_lua(const sol::table& tbl)
+{
+
+    auto m = tbl["integrator"];
+    if (!m.valid()) {
+        spdlog::error("simulation.integrator must be specified");
+        return std::nullopt;
+    }
+
+    auto type = m["type"].get_or(std::string{});
+
+    if (type == "rk4") {
+        return integrator{integrators::rk4{}};
+    } else {
+        spdlog::error("integrator.type must be one of: rk4");
+        return std::nullopt;
+    }
 }
 } // namespace ccs
