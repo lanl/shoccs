@@ -1,6 +1,9 @@
 #pragma once
 
+#include "field_fwd.hpp"
+#include "field_utils.hpp"
 #include "types.hpp"
+#include <concepts>
 #include <functional>
 
 namespace ccs::detail
@@ -19,59 +22,41 @@ class field_math_access
         requires std::derived_from<std::remove_cvref_t<U>, T>                            \
     friend constexpr auto op(U&& u, V) { return u; }                                     \
                                                                                          \
-    template <typename U, typename V>                                                    \
-        requires std::derived_from<std::remove_cvref_t<U>, T>                            \
-    friend constexpr auto op(U&& u, V&&) { return u; }
-
-template <typename T>
-struct container_math {
-
-private:
-    SHOCCS_GEN_OPERATORS(operator+=, +=)
-    SHOCCS_GEN_OPERATORS(operator-=, -=)
-    SHOCCS_GEN_OPERATORS(operator*=, *=)
-    SHOCCS_GEN_OPERATORS(operator/=, /=)
-};
-#undef SHOCCS_GEN_OPERATORS
-
-template <typename T>
-struct view_math;
-
-class view_access
-{
-    template <typename T>
-    friend class view_math;
-};
-
-#define SHOCCS_GEN_OPERATORS(op, f)                                                      \
-    template <typename U, Numeric V>                                                     \
-        requires std::derived_from<std::remove_cvref_t<U>, T>                            \
-    friend constexpr auto op(U&& u, V) { return u; }                                     \
-                                                                                         \
     template <typename U, Numeric V>                                                     \
         requires std::derived_from<std::remove_cvref_t<U>, T>                            \
     friend constexpr auto op(V, U&& u) { return u; }                                     \
     template <typename U, typename V>                                                    \
         requires std::derived_from<std::remove_cvref_t<U>, T>                            \
     friend constexpr auto op(U&& u, V&&) { return u; }
+#undef SHOCCS_GEN_OPERATORS
 
 template <typename T>
-struct view_math {
+struct field_math {
 
 private:
-    SHOCCS_GEN_OPERATORS(operator+, std::plus{})
-    SHOCCS_GEN_OPERATORS(operator-, std::minus{})
-    SHOCCS_GEN_OPERATORS(operator*, std::multiplies{})
-    SHOCCS_GEN_OPERATORS(operator/, std::divides{})
-
-#if 0
-    template <typename U, typename V>
-    requires std::derived_from<std::remove_cvref_t<U>, T> friend constexpr auto
-    operator+(U&& u, V&& v)
-    {
+#define SHOCCS_GEN_OPERATORS(op, f)                                                      \
+    template <std::derived_from<T> U, Numeric V>                                         \
+        requires OutputField<U, V>                                                       \
+    constexpr friend U& op(U& u, V v)                                                    \
+    {                                                                                    \
+        for_each([v](auto&& e) { e f v; }, u);                                           \
+        return u;                                                                        \
+    }                                                                                    \
+                                                                                         \
+    template <std::derived_from<T> U, Field V>                                           \
+        requires OutputField<U, V>                                                       \
+    constexpr friend U& op(U& u, V&& v)                                                  \
+    {                                                                                    \
+        for_each([](auto&& ui, auto&& vi) { ui f vi; }, u, FWD(v));                      \
+        return u;                                                                        \
     }
-#endif
-};
+
+    SHOCCS_GEN_OPERATORS(operator+=, +=)
+    SHOCCS_GEN_OPERATORS(operator*=, *=)
+    SHOCCS_GEN_OPERATORS(operator-=, -=)
+    SHOCCS_GEN_OPERATORS(operator/=, /=)
 
 #undef SHOCCS_GEN_OPERATORS
+};
+
 } // namespace ccs::detail

@@ -1,10 +1,24 @@
-#include "system_field.hpp"
+#include "field.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
 using namespace ccs;
+
+TEST_CASE("concepts") {
+    REQUIRE(Field<field>);
+    REQUIRE(Field<field_view>);
+    REQUIRE(Field<field_span>);
+    REQUIRE(!Field<scalar_span>);
+
+    REQUIRE(OutputField<field, real>);
+    REQUIRE(OutputField<field_span, int>);
+    REQUIRE(!OutputField<field_view, real>);
+
+    REQUIRE(OutputField<field, field_view>);
+    REQUIRE(!OutputField<field_view, field>);
+}
 
 TEST_CASE("construction")
 {
@@ -22,11 +36,5 @@ TEST_CASE("construction")
     REQUIRE(rs::size(v | sel::Ry) == 4u);
     REQUIRE(rs::size(u | sel::Rz) == 5u);
 
-    // boundary points in each direction
-
-    // solid points ordered per each direction
-
-    // auto q = field(3, int3{4, 5, 6}, boundary_points, solid_points);
-
-    // auto [u, v] = q(0, 1);
+   
 }

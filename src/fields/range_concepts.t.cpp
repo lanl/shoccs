@@ -279,3 +279,23 @@ TEST_CASE("z_plane_view")
     REQUIRE(rs::sized_range<T>);
     REQUIRE(rs::random_access_range<T>);
 }
+
+template <typename T>
+struct wrapper {
+    T t;
+    T& vals() { return t; }
+};
+
+template <typename... Ts>
+auto zip_wrap(Ts&&... ts)
+{
+    return vs::zip(ts.vals()...);
+}
+
+TEST_CASE("expansion")
+{
+    auto x = wrapper<std::vector<int>>{std::vector{1, 2, 3}};
+    auto y = wrapper<std::vector<int>>{std::vector{4, 5, 6}};
+    zip_wrap(x, y);
+
+}

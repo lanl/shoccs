@@ -535,3 +535,4 @@ TEST_CASE("make_tuple")
     REQUIRE(get<0>(q) == 5.1);
     REQUIRE(get<1>(q) == 4.2);
 }
+
