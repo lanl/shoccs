@@ -14,7 +14,7 @@ TEST_CASE("for_each")
 {
     auto x = field{system_size{1, 0, tuple{tuple{5}, tuple{1, 2, 3}}}};
 
-    for_each_scalar([](auto& v) { v += 1; }, x);
+    for_each([](auto& v) { v += 1; }, x);
 
     {
         auto&& [xs] = x.scalars(0);
@@ -26,7 +26,7 @@ TEST_CASE("for_each")
 
     auto y = field{system_size{1, 0, tuple{tuple{5}, tuple{1, 2, 3}}}};
 
-    for_each_scalar(
+    for_each(
         [](auto& u, auto& v) {
             v += 1;
             u += v;
@@ -40,5 +40,21 @@ TEST_CASE("for_each")
         REQUIRE(rs::equal(xs | sel::Rx, vs::repeat_n(2, 1)));
         REQUIRE(rs::equal(xs | sel::Ry, vs::repeat_n(2, 2)));
         REQUIRE(rs::equal(xs | sel::Rz, vs::repeat_n(2, 3)));
+    }
+}
+
+TEST_CASE("transform")
+{
+    auto x = field{system_size{1, 0, tuple{tuple{5}, tuple{1, 2, 3}}}};
+
+    auto y = transform([](auto&& v) { return v + 1; }, x);
+
+    {
+        auto&& [ys] = y.scalars(0);
+        // auto ys = y.scalars()[0];
+        REQUIRE(rs::equal(ys | sel::D, vs::repeat_n(1, 5)));
+        REQUIRE(rs::equal(ys | sel::Rx, vs::repeat_n(1, 1)));
+        REQUIRE(rs::equal(ys | sel::Ry, vs::repeat_n(1, 2)));
+        REQUIRE(rs::equal(ys | sel::Rz, vs::repeat_n(1, 3)));
     }
 }

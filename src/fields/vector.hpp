@@ -26,6 +26,7 @@ concept Vector = is_vector<std::remove_cvref_t<T>>::value;
 template <typename T>
 using vector = detail::vector<scalar<T>, scalar<T>, scalar<T>>;
 
+using vector_real = vector<std::vector<real>>;
 using vector_span = vector<std::span<real>>;
 using vector_view = vector<std::span<const real>>;
 

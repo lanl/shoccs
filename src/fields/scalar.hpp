@@ -25,6 +25,7 @@ concept Scalar = is_scalar<std::remove_cvref_t<T>>::value;
 template <typename T>
 using scalar = detail::scalar<tuple<T>, tuple<T, T, T>>;
 
+using scalar_real = scalar<std::vector<real>>;
 using scalar_span = scalar<std::span<real>>;
 using scalar_view = scalar<std::span<const real>>;
 

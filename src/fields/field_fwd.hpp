@@ -7,7 +7,7 @@ namespace ccs
 
 namespace detail
 {
-template <typename T>
+template <Range S, Range V>
 class field;
 }
 
@@ -15,8 +15,8 @@ template <typename>
 struct is_field : std::false_type {
 };
 
-template <typename T>
-struct is_field<detail::field<T>> : std::true_type {
+template <Range S, Range V>
+struct is_field<detail::field<S, V>> : std::true_type {
 };
 
 template <typename T>
@@ -39,4 +39,34 @@ concept OutputField = Field<Out> &&
     ((!Field<In> && OutputTuple<field_scalar<Out>, In>) ||
      (Field<In> && OutputTuple<field_scalar<Out>, field_scalar<In>>));
 
+namespace detail
+{
+template <typename>
+struct scalar_type_impl;
+
+template <typename S, typename V>
+struct scalar_type_impl<field<S, V>> {
+    using type = S;
+};
+
+template <typename>
+struct vector_type_impl;
+
+template <typename S, typename V>
+struct vector_type_impl<field<S, V>> {
+    using type = V;
+};
+} // namespace detail
+
+template <Field F>
+using scalar_type = detail::scalar_type_impl<std::remove_cvref_t<F>>::type;
+
+template <Field F>
+using vector_type = detail::vector_type_impl<std::remove_cvref_t<F>>::type;
+
+template <Field F>
+using scalar_value_t = rs::range_value_t<scalar_type<F>>;
+
+template <Field F>
+using vector_value_t = rs::range_value_t<vector_type<F>>;
 } // namespace ccs
