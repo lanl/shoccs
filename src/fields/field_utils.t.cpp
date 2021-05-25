@@ -17,7 +17,7 @@ TEST_CASE("for_each")
     for_each([](auto& v) { v += 1; }, x);
 
     {
-        auto&& [xs] = x.scalars(0);
+        auto&& xs = x.scalars(0);
         REQUIRE(rs::equal(xs | sel::D, vs::repeat_n(1, 5)));
         REQUIRE(rs::equal(xs | sel::Rx, vs::repeat_n(1, 1)));
         REQUIRE(rs::equal(xs | sel::Ry, vs::repeat_n(1, 2)));
@@ -35,7 +35,7 @@ TEST_CASE("for_each")
         y);
 
     {
-        auto&& [xs] = x.scalars(0);
+        auto&& xs = x.scalars(0);
         REQUIRE(rs::equal(xs | sel::D, vs::repeat_n(2, 5)));
         REQUIRE(rs::equal(xs | sel::Rx, vs::repeat_n(2, 1)));
         REQUIRE(rs::equal(xs | sel::Ry, vs::repeat_n(2, 2)));
@@ -50,7 +50,7 @@ TEST_CASE("transform")
     auto y = transform([](auto&& v) { return v + 1; }, x);
 
     {
-        auto&& [ys] = y.scalars(0);
+        auto&& ys = y.scalars(0);
         // auto ys = y.scalars()[0];
         REQUIRE(rs::equal(ys | sel::D, vs::repeat_n(1, 5)));
         REQUIRE(rs::equal(ys | sel::Rx, vs::repeat_n(1, 1)));

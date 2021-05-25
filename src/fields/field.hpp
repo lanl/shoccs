@@ -74,51 +74,36 @@ public:
         return *this;
     }
 
-    template <Numeric N>
-    field& operator=(N&&)
+    template <Field F>
+    requires std::is_assignable_v<rs::range_reference_t<S>, scalar_ref_t<F>> &&
+        std::is_assignable_v<rs::range_reference_t<V>, vector_ref_t<F>>
+            field& operator=(F&& f)
     {
+        for_each([](auto& u, auto&& v) { u = v; }, *this, FWD(f));
         return *this;
     }
 
-    // conversion operator
-    // template <typename U>
-    //     requires std::convertible_to<T&, U>
-    // operator field<U>() { return field<U>{}; }
+    template <typename F>
+        requires(!Field<F> && std::is_assignable_v<rs::range_reference_t<S>, F> &&
+                 std::is_assignable_v<rs::range_reference_t<V>, F>)
+    field& operator=(F&& f)
+    {
+        for_each([&f](auto& u) { u = f; }, *this);
+        return *this;
+    }
 
     // api for resizing should only be available for true containers
     constexpr int nscalars() const requires rs::sized_range<S> { return rs::size(s); }
 
-    // field& nscalars(int n)
-    // {
-    //     scalars_.resize(n);
-    //     return *this;
-    // }
-
     constexpr int nvectors() const requires rs::sized_range<V> { return rs::size(v); }
 
-    // field& nvectors(int n)
-    // {
-    //     vectors_.resize(n);
-    //     return *this;
-    // }
+    constexpr auto& scalars() { return s; }
 
-    // int3 extents() const { return {}; }
+    constexpr const auto& scalars() const { return s; }
 
-    // field& extents(int3) { return *this; }
+    constexpr auto& vectors() { return v; }
 
-    // const auto& solid() { return scalars_; }
-
-    // field& solid(int) { return *this; }
-
-    // field& object_boundaries(int3) { return *this; }
-
-    constexpr auto scalars() { return vs::all(s); }
-
-    constexpr auto scalars() const { return vs::all(s); }
-
-    constexpr auto vectors() { return vs::all(v); }
-
-    constexpr auto vectors() const { return vs::all(v); }
+    constexpr const auto& vectors() const { return v; }
 
     template <std::integral... Is>
     auto scalars(Is&&... i) const requires rs::random_access_range<S>
@@ -166,8 +151,7 @@ field(S&&, V&&) -> field<viewable_range_by_value<S>, viewable_range_by_value<V>>
 } // namespace detail
 
 using field = detail::field<std::vector<scalar_real>, std::vector<vector_real>>;
-using field_span = detail::field<std::span<scalar_real>, std::span<vector_real>>;
-using field_view =
-    detail::field<std::span<const scalar_real>, std::span<const vector_real>>;
+using field_span = detail::field<std::vector<scalar_span>, std::vector<vector_span>>;
+using field_view = detail::field<std::vector<scalar_view>, std::vector<vector_view>>;
 
 } // namespace ccs

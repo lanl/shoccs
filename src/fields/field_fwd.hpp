@@ -69,4 +69,10 @@ using scalar_value_t = rs::range_value_t<scalar_type<F>>;
 
 template <Field F>
 using vector_value_t = rs::range_value_t<vector_type<F>>;
+
+template <Field F>
+using scalar_ref_t = rs::range_reference_t<scalar_type<F>>;
+
+template <Field F>
+using vector_ref_t = rs::range_reference_t<vector_type<F>>;
 } // namespace ccs

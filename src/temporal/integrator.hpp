@@ -1,12 +1,12 @@
 #pragma once
 
 #include <functional>
+#include <optional>
 #include <sol/forward.hpp>
 #include <variant>
-#include <optional>
 
 #include "empty_integrator.hpp"
-#include "fields/system_field.hpp"
+#include "fields/field.hpp"
 #include "rk4.hpp"
 #include "types.hpp"
 

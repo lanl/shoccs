@@ -134,3 +134,38 @@ TEST_CASE("construction/conversion")
         REQUIRE(!(f == b));
     }
 }
+
+TEST_CASE("assignment")
+{
+    // default construction
+    auto x_size = system_size{2, 0, tuple{tuple{10}, tuple{2, 4, 5}}};
+    auto x = field{x_size};
+
+    auto integer_scalar = [](integer i) {
+        return tuple{tuple{vs::repeat_n(i, 10)},
+                     tuple{vs::repeat_n(i, 2), vs::repeat_n(i, 4), vs::repeat_n(i, 5)}};
+    };
+
+    x = 1;
+    auto&& [a, b] = x.scalars(0, 1);
+    REQUIRE(a == integer_scalar(1));
+    REQUIRE(a == b);
+
+    field y{x};
+    y = 2;
+
+    field_span z{x};
+    z = y;
+    REQUIRE(a == integer_scalar(2));
+    z = -1;
+    REQUIRE(b == integer_scalar(-1));
+
+    auto f = [](field_span fs) {
+        auto&& [u, v] = fs.scalars(1, 0);
+        u = 10;
+        v = 11;
+    };
+    x = f;
+    REQUIRE(a == integer_scalar(11));
+    REQUIRE(b == integer_scalar(10));
+}

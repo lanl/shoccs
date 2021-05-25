@@ -3,7 +3,6 @@
 #include <fstream>
 #include <iomanip>
 
-#include "fields/system_field.hpp"
 #include "step_controller.hpp"
 
 #include <range/v3/range/conversion.hpp>

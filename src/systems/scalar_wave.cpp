@@ -93,10 +93,10 @@ void scalar_wave::operator()(field& f, const step_controller& controller)
         // if (field.nfields() == 1 && field.extents() == int3{} && field.solid().size()
         // != 0) {
         // adjust the sizes
-        f.nscalars(1).nvectors(0).extents(int3{}).solid(0).object_boundaries(int3{});
+        // f.nscalars(1).nvectors(0).extents(int3{}).solid(0).object_boundaries(int3{});
     }
     // extract the field components to initialize
-    auto&& [u] = f.scalars(scalars::u);
+    auto&& u = f.scalars(scalars::u);
 
     const auto time = controller.simulation_time();
 
@@ -122,12 +122,12 @@ void scalar_wave::rhs(field_view f, real, field_span df)
 
     // for multivariate systems, will need to extract the variables and apply different
     // operators on them
-    auto&& [u] = f.scalars(scalars::u);
+    auto&& u = f.scalars(scalars::u);
     // grad should d/dx, d/dy, d/dz on F and Rx, Ry, Rz, respectively
     // du = gradient(u);
     grad(u);
     // compute grad_G . u_rhs and store in v_rhs
-    auto&& [u_rhs] = df.scalars(scalars::u);
+    auto&& u_rhs = df.scalars(scalars::u);
     u_rhs = dot(grad_G, du);
 }
 

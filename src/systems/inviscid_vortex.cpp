@@ -249,25 +249,25 @@ void inviscid_vortex::rhs(field_view field, real, field_span field_rhs)
 
     // rhs(rho) == - div(rho * vec(u))
     {
-        auto&& [rhs] = field_rhs.scalars(vars::rho);
+        auto&& rhs = field_rhs.scalars(vars::rho);
         // rhs = divergence(field::Vector{rhoU, rhoV});
     }
 
     // rhs(rhoU) == - dp/dx - div(rhoU * vec(U))
     {
-        auto&& [rhs] = field_rhs.scalars(vars::rhoU);
+        auto&& rhs = field_rhs.scalars(vars::rhoU);
         // rhs = divergence(field::Vector{P + rhoU * rhoU / rho, rhoU * rhoV / rho});
     }
 
     // rhs(rhoV) == -dp/dy - div(rhoV * vec(U))
     {
-        auto&& [rhs] = field_rhs.scalars(vars::rhoU);
+        auto&& rhs = field_rhs.scalars(vars::rhoU);
         // rhs = divergence(field::Vector{rhoV * rhoU / rho, P + rhoV * rhoV / rho});
     }
 
     // rhs(rhoE) == - div(vec(u) (rhoE + P))
     {
-        auto&& [rhs] = field_rhs.scalars(vars::rhoE);
+        auto&& rhs = field_rhs.scalars(vars::rhoE);
         // rhs = divergence(field::Vector{rhoU * (rhoE + P) / rho, rhoV * (rhoE + P) /
         // rho});
     }
