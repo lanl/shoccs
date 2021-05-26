@@ -121,7 +121,6 @@ TEST_CASE("planes scalar assignment")
     REQUIRE((s | sel::xmin(i)) == tuple{vs::iota(24, 36)});
     REQUIRE((s | sel::zmin(i)) == tuple{T{24, 28, 32, 12, 16, -3}});
 }
-#endif
 
 TEST_CASE("multi_slice construction")
 {
@@ -281,4 +280,87 @@ TEST_CASE("default operators for storing selections in mesh")
     // move assignable
 
     F = sel::multi_slice(v);
+}
+#endif
+
+TEST_CASE("optional tuple")
+{
+    using T = std::vector<int>;
+    T t{1, 2, 3};
+
+    REQUIRE(rs::size(t | sel::optional_view(false)) == 0);
+    REQUIRE(rs::size(t | sel::optional_view(true)) == 3);
+
+    index_extents i{.extents = int3{2, 3, 4}};
+    resize_and_copy(t, vs::iota(0, 2 * 3 * 4));
+
+    auto x = tuple{t};
+    REQUIRE(rs::size(x | sel::optional_view(false)) == 0);
+    REQUIRE(rs::size(x | sel::optional_view(true)) == rs::size(x));
+
+    REQUIRE(rs::size(x | sel::xmin(i) | sel::optional_view(false)) == 0);
+    REQUIRE(rs::size(x | sel::xmin(i) | sel::optional_view(true)) == 12u);
+
+    auto y = x | sel::xmin(i) | sel::optional_view(false);
+    y = 0;
+    REQUIRE(rs::equal(x, vs::iota(0, 24)));
+
+    auto z = x | sel::zmax(i) | sel::optional_view(true);
+    z = 0;
+    REQUIRE((x | sel::zmin(i)) == tuple{T{0, 4, 8, 12, 16, 20}});
+    REQUIRE((x | sel::zmax(i)) == tuple{T{0, 0, 0, 0, 0, 0}});
+}
+
+TEST_CASE("optional scalar")
+{
+    using T = std::vector<int>;
+    index_extents i{.extents = int3{2, 3, 4}};
+    scalar<T> s{tuple{vs::iota(0, 24)}, tuple{0, 0, 0}};
+
+    auto q = s | sel::xmin(i) | sel::optional_view(false);
+    REQUIRE(rs::size(q) == 0);
+    q = 0;
+    REQUIRE((s | sel::xmin(i)) == tuple{vs::iota(0, 12)});
+    q = vs::iota(-12, 0);
+    REQUIRE((s | sel::xmin(i)) == tuple{vs::iota(0, 12)});
+
+    auto r = s | tuple{sel::xmin(i) | sel::optional_view(false),
+                       sel::xmax(i) | sel::optional_view(true),
+                       sel::ymin(i) | sel::optional_view(false),
+                       sel::ymax(i) | sel::optional_view(false),
+                       sel::zmin(i) | sel::optional_view(false),
+                       sel::zmax(i) | sel::optional_view(false)};
+    // get<0>(r) = 0;
+    r = 0;
+    REQUIRE((s | sel::xmin(i)) == tuple{vs::iota(0, 12)});
+    REQUIRE((s | sel::xmax(i)) == tuple{vs::repeat_n(0, 12)});
+    //       |
+    // tuple{sel::optional_view(false),
+    //       sel::optional_view(true),
+    //       sel::optional_view(false),
+    //       sel::optional_view(false),
+    //       sel::optional_view(false),
+    //       sel::optional_view(false)};
+    // s | sel::xmin(i) = -1;
+
+    // REQUIRE((s | sel::xmin(i)) == tuple{vs::repeat_n(-1, 12)});
+    // REQUIRE((s | sel::xmax(i)) == tuple{vs::iota(12, 24)});
+
+    // s | sel::xmax(i) = -2;
+
+    // REQUIRE((s | sel::xmin(i)) == tuple{vs::repeat_n(-1, 12)});
+    // REQUIRE((s | sel::xmax(i)) == tuple{vs::repeat_n(-2, 12)});
+
+    // s | sel::zmin(i) = vs::iota(0) | vs::stride(4) | vs::take_exactly(6);
+    // REQUIRE((s | sel::zmin(i)) == tuple{T{0, 4, 8, 12, 16, 20}});
+
+    // s | sel::ymax(i) = -3;
+    // REQUIRE((s | sel::zmin(i)) == tuple{T{0, 4, -3, 12, 16, -3}});
+    // REQUIRE(rs::equal(s | sel::ymax(i), vs::repeat_n(-3, 8)));
+
+    // scalar<T> v{tuple{vs::iota(24, 48)}, tuple{0, 0, 0}};
+    // s | sel::xmin(i) = v;
+
+    // REQUIRE((s | sel::xmin(i)) == tuple{vs::iota(24, 36)});
+    // REQUIRE((s | sel::zmin(i)) == tuple{T{24, 28, 32, 12, 16, -3}});
 }

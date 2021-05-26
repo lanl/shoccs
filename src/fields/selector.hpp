@@ -634,4 +634,76 @@ constexpr inline auto multi_slice = ::ccs::detail::multi_slice_fn{};
 using multi_slice_t = decltype(multi_slice(std::span<const index_slice>{}));
 } // namespace sel
 
+namespace detail
+{
+// optional_view is used to make a range appear as zero sized
+template <typename Rng, typename Fn>
+class optional_view : public rs::view_adaptor<optional_view<Rng, Fn>, Rng>
+{
+    friend rs::range_access;
+
+    bool keep_bounds;
+
+    rs::semiregular_box_t<Fn> f;
+
+    class adaptor : public rs::adaptor_base
+    {
+        bool keep_bounds;
+
+    public:
+        adaptor() = default;
+        adaptor(bool keep_bounds) : keep_bounds{keep_bounds} {}
+
+        template <typename R>
+        constexpr auto begin(R& rng)
+        {
+            return keep_bounds ? rs::begin(rng.base()) : rs::end(rng.base());
+        }
+    };
+
+    adaptor begin_adaptor() { return {keep_bounds}; }
+
+    adaptor end_adaptor() { return {}; }
+
+public:
+    optional_view() = default;
+
+    explicit constexpr optional_view(Rng&& rng, bool keep_bounds, Fn f)
+        : optional_view::view_adaptor{FWD(rng)}, keep_bounds{keep_bounds}, f{MOVE(f)}
+    {
+    }
+
+    template <typename U>
+        requires std::invocable<Fn, U>
+    constexpr auto apply(U&& u) const { return f(FWD(u)); }
+
+    template <typename U>
+        requires(std::invocable<decltype(std::declval<optional_view>().base().apply), U>)
+    constexpr auto apply(U&& u) const { return f(this->base().apply(FWD(u))); }
+};
+
+template <typename Rng, typename Fn>
+optional_view(Rng&&, bool, Fn) -> optional_view<Rng, Fn>;
+
+struct optional_view_fn {
+    template <Range U>
+    constexpr auto operator()(U&& u, bool keep_bounds) const
+    {
+        return tuple{
+            optional_view(FWD(u), keep_bounds, rs::bind_back(*this, keep_bounds))};
+    }
+
+    constexpr auto operator()(bool keep_bounds) const
+    {
+        return rs::make_view_closure(rs::bind_back(*this, keep_bounds));
+    }
+};
+} // namespace detail
+
+namespace sel
+{
+constexpr inline auto optional_view = ::ccs::detail::optional_view_fn{};
+// using multi_slice_t = decltype(multi_slice(std::span<const index_slice>{}));
+} // namespace sel
+
 } // namespace ccs

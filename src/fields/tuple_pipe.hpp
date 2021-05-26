@@ -54,13 +54,20 @@ private:
         return f(FWD(u));
     }
 
+    template <TupleLike U, TupleLike F>
+        requires(std::derived_from<std::remove_cvref_t<U>, Type> && !SimilarTuples<U, F>)
+    friend constexpr auto operator|(U&& u, F&& f)
+    {
+        return transform([&u](auto fn) { return fn(u); }, FWD(f));
+    }
+
     // provide hooks for some non-tuple like entities if they define certain memeber
     // properties
     //
 
     //
-    // as_tuple is a defined on Tuples so this method will always pull out the tuple base
-    // class
+    // as_tuple is a defined on Tuples so this method will always pull out the tuple
+    // base class
     //
     // template <typename U, typename F>
     //     requires std::derived_from<std::remove_cvref_t<U>, Type> &&
@@ -68,12 +75,13 @@ private:
     // {
     //     u.as_Tuple() | f;
     // }
-    // friend constexpr auto operator|(U&& u, F&& f) { return FWD(u).as_Tuple() | FWD(f);
+    // friend constexpr auto operator|(U&& u, F&& f) { return FWD(u).as_Tuple() |
+    // FWD(f);
     // }
 
     //
-    // to_tuple allows for a class to customize its tuple representation if as_tuple is
-    // not sufficient
+    // to_tuple allows for a class to customize its tuple representation if as_tuple
+    // is not sufficient
     //
     template <typename U, typename F>
         requires std::derived_from<std::remove_cvref_t<U>, Type> &&

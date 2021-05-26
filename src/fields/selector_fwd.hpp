@@ -38,55 +38,6 @@ namespace ccs
 template <ListIndex, Tuple, typename>
 struct selection;
 
-// namespace detail
-// {
-// template <typename>
-// struct is_selection_impl : std::false_type {
-// };
-
-// template <ListIndex I, Tuple R>
-// struct is_selection_impl<selection<I, R>> : std::true_type {
-// };
-// } // namespace detail
-
-// template <typename S>
-// using is_selection = detail::is_selection_impl<std::remove_cvref_t<S>>::type;
-
-// template <typename S>
-// concept Selection = is_selection<S>::value;
-
-// // // traits for extracting the selection indicies
-// template <Selection S>
-// using selection_index = std::remove_cvref_t<S>::index;
-
-// template <Selection S>
-// using is_domain_selection =
-//     mp_set_contains<mp_list<si::D, vi::Dx, vi::Dy, vi::Dz>, selection_index<S>>;
-
-// template <Selection S>
-// using is_Rx_selection =
-//     mp_set_contains<mp_list<si::Rx, vi::xRx, vi::yRx, vi::zRx>, selection_index<S>>;
-
-// template <Selection S>
-// using is_Ry_selection =
-//     mp_set_contains<mp_list<si::Ry, vi::xRy, vi::yRy, vi::zRy>, selection_index<S>>;
-
-// template <Selection S>
-// using is_Rz_selection =
-//     mp_set_contains<mp_list<si::Rz, vi::xRz, vi::yRz, vi::zRz>, selection_index<S>>;
-
-// template <typename T>
-// constexpr auto is_domain_selection_v = is_domain_selection<T>::value;
-// template <typename T>
-// constexpr auto is_Rx_selection_v = is_Rx_selection<T>::value;
-// template <typename T>
-// constexpr auto is_Ry_selection_v = is_Ry_selection<T>::value;
-// template <typename T>
-// constexpr auto is_Rz_selection_v = is_Rz_selection<T>::value;
-
-// template <typename T>
-// concept DomainSelection = Selection<T> && is_domain_selection_v<T>;
-
 } // namespace ccs
 
 namespace ranges
