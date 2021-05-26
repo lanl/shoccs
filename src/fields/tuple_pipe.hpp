@@ -24,7 +24,7 @@ private:
     using Type = T<Ts...>;
 
     template <TupleLike U, PipeableOver<U> F>
-        requires std::derived_from<std::remove_cvref_t<U>, Type>
+        requires(std::derived_from<std::remove_cvref_t<U>, Type> && !TupleLike<F>)
     friend constexpr auto operator|(U&& u, F f)
     {
         return transform([f](auto&& e) { return FWD(e) | f; }, FWD(u));

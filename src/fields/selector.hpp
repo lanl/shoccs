@@ -678,7 +678,8 @@ public:
     constexpr auto apply(U&& u) const { return f(FWD(u)); }
 
     template <typename U>
-        requires(std::invocable<decltype(std::declval<optional_view>().base().apply), U>)
+        requires requires(optional_view o, U u) { o.base().apply(u); }
+    // std::invocable<decltype(std::declval<optional_view>().base().apply), U>)
     constexpr auto apply(U&& u) const { return f(this->base().apply(FWD(u))); }
 };
 
