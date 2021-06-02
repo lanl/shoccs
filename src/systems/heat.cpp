@@ -11,6 +11,8 @@
 #include "operators/discrete_operator.hpp"
 
 #include <range/v3/algorithm/max.hpp>
+#include <range/v3/algorithm/min.hpp>
+#include <range/v3/algorithm/minmax.hpp>
 
 namespace ccs::systems
 {
@@ -52,8 +54,9 @@ system_stats heat::stats(const field&, const field& f, const step_controller& st
 {
     auto&& u = f.scalars(scalars::u);
     auto sol = m.location | m_sol(step.simulation_time());
+    auto [min, max] = rs::minmax(u | m.fluid);
     real error = rs::max(abs(u - sol) | m.fluid);
-    return system_stats{.stats = {error}};
+    return system_stats{.stats = {error, min, max}};
 }
 
 bool heat::valid(const system_stats& stats) const
@@ -62,7 +65,11 @@ bool heat::valid(const system_stats& stats) const
     return std::isfinite(v) && std::abs(v) <= 1e6;
 }
 
-real heat::timestep_size(const field&, const step_controller&) const { return {}; };
+real heat::timestep_size(const field&, const step_controller& step) const
+{
+    const auto h_min = rs::min(m.h());
+    return step.parabolic_cfl * h_min * h_min / (4 * diffusivity);
+};
 
 void heat::rhs(field_view f, real time, field_span rhs) const
 {

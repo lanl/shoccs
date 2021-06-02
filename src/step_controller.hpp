@@ -22,5 +22,7 @@ struct step_controller {
         // time += *dt;
         // step += 1;
     }
+
+    real parabolic_cfl() const { return 1.0; }
 };
 } // namespace ccs
