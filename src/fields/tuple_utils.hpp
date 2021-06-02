@@ -271,6 +271,17 @@ constexpr R to(Arg&& arg)
     (sequence<R>, FWD(arg));
 }
 
+template <NumericTuple R, NumericTuple Arg>
+    requires(!std::constructible_from<R, Arg> && ArrayFromTuple<R, Arg>)
+constexpr R to(Arg&& arg)
+{
+    return []<auto... Is>(std::index_sequence<Is...>, auto&& x)
+    {
+        return R{get<Is>(FWD(x))...};
+    }
+    (sequence<Arg>, FWD(arg));
+}
+
 //
 // lifting a function allows us to more easily call the function on each element
 // of the ranges of the tuple

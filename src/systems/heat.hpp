@@ -23,6 +23,8 @@ class heat
     laplacian lap;
     real diffusivity;
 
+    scalar_real neumann_u;
+
 public:
     heat() = default;
 
@@ -43,7 +45,7 @@ public:
 
     real timestep_size(const field&, const step_controller&) const;
 
-    void rhs(field_view, real, field_span);
+    void rhs(field_view, real, field_span) const;
 
     void update_boundary(field_span, real time);
 

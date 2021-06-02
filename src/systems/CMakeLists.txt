@@ -10,3 +10,5 @@ target_link_libraries(shoccs-system
     shoccs-stencils 
     mms
     sol2::sol2 lua spdlog::spdlog)
+
+  add_unit_test(heat "systems" shoccs-system)

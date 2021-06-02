@@ -10,8 +10,12 @@
 
 #include "operators/discrete_operator.hpp"
 
+#include <range/v3/algorithm/max.hpp>
+
 namespace ccs::systems
 {
+
+constexpr auto abs = lift([](auto&& x) { return std::abs(x); });
 enum class scalars : int { u };
 
 heat::heat(mesh&& m,
@@ -25,8 +29,10 @@ heat::heat(mesh&& m,
       object_bcs{MOVE(object_bcs)},
       m_sol{MOVE(m_sol)},
       lap{laplacian(this->m, st, this->grid_bcs, this->object_bcs)},
-      diffusivity{diffusivity}
+      diffusivity{diffusivity},
+      neumann_u{m.ss()}
 {
+    assert(!!(this->m_sol));
 }
 
 void heat::operator()(field& f, const step_controller& c)
@@ -35,54 +41,61 @@ void heat::operator()(field& f, const step_controller& c)
     if (!m_sol) return;
 
     auto&& u = f.scalars(scalars::u);
-    auto t = vs::transform([this, time = c.simulation_time()](auto&& loc) {
-        return m_sol(time, real3{get<0>(loc), get<1>(loc), get<2>(loc)});
-    });
-    u | m.fluid = m.location | t;
-    u | sel::R = m.location | t;
+    auto sol = m.location | m_sol(c.simulation_time());
+
+    u | sel::D = 0;
+    u | m.fluid = sol;
+    u | sel::R = sol;
 }
 
-system_stats heat::stats(const field&, const field&, const step_controller&) const
+system_stats heat::stats(const field&, const field& f, const step_controller& step) const
 {
-    return {};
+    auto&& u = f.scalars(scalars::u);
+    auto sol = m.location | m_sol(step.simulation_time());
+    real error = rs::max(abs(u - sol) | m.fluid);
+    return system_stats{.stats = {error}};
 }
 
-bool heat::valid(const system_stats&) const { return {}; }
+bool heat::valid(const system_stats& stats) const
+{
+    const auto& v = stats.stats[0];
+    return std::isfinite(v) && std::abs(v) <= 1e6;
+}
 
 real heat::timestep_size(const field&, const step_controller&) const { return {}; };
 
-void heat::rhs(field_view, real, field_span) {}
+void heat::rhs(field_view f, real time, field_span rhs) const
+{
+    auto&& u_rhs = rhs.scalars(scalars::u);
+    auto&& u = f.scalars(scalars::u);
+
+    // rhs = diffusivity * lap(u) + (dS/dt - diffusivity * lap(S))
+    u_rhs = lap(u, neumann_u);
+    u_rhs *= diffusivity;
+
+    if (m_sol) {
+        const auto& l = m.location;
+        // this does not currently account for non-dirichlet bcs on R
+        u_rhs | m.fluid +=
+            (l | m_sol.ddt(time)) - (diffusivity * (l | m_sol.laplacian(time)));
+        // need to zero the mms contribution on dirichlet boundaries
+        u_rhs | m.dirichlet(grid_bcs) = 0;
+    }
+}
 
 void heat::update_boundary(field_span f, real time)
 {
     auto&& u = f.scalars(scalars::u);
-    auto bvals = m.location | vs::transform([this, time](auto&& loc) {
-                     return m_sol(time, real3{get<0>(loc), get<1>(loc), get<2>(loc)});
-                 });
-    if (grid_bcs[0].left == bcs::Dirichlet) u | m.xmin = bvals;
-    if (grid_bcs[0].right == bcs::Dirichlet) u | m.xmax = bvals;
-    if (grid_bcs[1].left == bcs::Dirichlet) u | m.ymin = bvals;
-    if (grid_bcs[1].right == bcs::Dirichlet) u | m.ymax = bvals;
-    if (grid_bcs[2].left == bcs::Dirichlet) u | m.zmin = bvals;
-    if (grid_bcs[2].right == bcs::Dirichlet) u | m.zmax = bvals;
+    auto l = m.location;
 
-    // what if we could write as:
-    // u | m.dirichlet(grid_bcs) = bvals
-    // u | m.dirichelt(object_bcs) = bvals
-    // or
-    // u | m.dirichlet(grid_bcs, object_bcs) = bvals ?
-    // u | m.neumann(grid_bcs, object_bcs) = nvals ?
-    // would this work if this became something like tuple{u | m.xmin, u | m.ymin } =
-    // bvals...? no. because the size of the tuple is compile time choice but the
-    // predicate is a run-time choice. we could add a "boolean component selector":
-    // tuple{u | m.xmin, ..., u | m.zmax} | tuple{selector(true), selector(false))} such
-    // that the assignment to a selector(false) is a noop while assignment to a
-    // selector(true) is passed through...
-    // would need something similar for selecting objects within R that match object id's
-    // or bc's
+    u | m.dirichlet(grid_bcs) = l | m_sol(time);
+    // assumes dirichlet right how
+    u | sel::R = l | m_sol(time);
 
-    // only works for dirichlet right how
-    u | sel::R = bvals;
+    // set possible neumann bcs;
+    neumann_u | m.neumann<0>(grid_bcs) = l | m_sol.gradient(0, time);
+    neumann_u | m.neumann<1>(grid_bcs) = l | m_sol.gradient(1, time);
+    neumann_u | m.neumann<2>(grid_bcs) = l | m_sol.gradient(2, time);
 }
 
 void heat::log(const system_stats&, const step_controller&)
@@ -94,7 +107,7 @@ std::optional<heat> heat::from_lua(const sol::table& tbl)
 {
     // assume we can only get here if simulation.system.type == "heat" so check
     // for the rest
-    real diff = tbl["simulation"]["system"]["diffusivity"].get_or(1.0);
+    real diff = tbl["system"]["diffusivity"].get_or(1.0);
 
     auto mesh_opt = mesh::from_lua(tbl);
     auto bc_opt = bcs::from_lua(tbl);

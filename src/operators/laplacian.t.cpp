@@ -79,9 +79,7 @@ TEST_CASE("E2_2 Domain")
         scalar<T> ex = (loc | f2_ddx) + (loc | f2_ddy) + (loc | f2_ddz);
 
         // zero boundaries
-        ex | m.xmin = 0;
-        ex | m.xmax = 0;
-        ex | m.zmax = 0;
+        ex | m.dirichlet(gridBcs) = 0;
 
         scalar<T> du{u};
         REQUIRE((integer)rs::size(du | sel::D) == m.size());
@@ -100,9 +98,7 @@ TEST_CASE("E2_2 Domain")
         scalar<T> ex = (loc | f2_ddx) + (loc | f2_ddy) + (loc | f2_ddz);
 
         // zero boundaries
-        ex | m.xmin = 0;
-        ex | m.xmax = 0;
-        ex | m.zmax = 0;
+        ex | m.dirichlet(gridBcs) = 0;
 
         // neumann
         scalar<T> nu{loc | f2_dz};
@@ -166,7 +162,6 @@ TEST_CASE("E2 with Objects")
     REQUIRE(!!scheme_opt);
     stencil st = *scheme_opt;
 
-
     const auto loc = m.location;
 
     // initialize fields
@@ -179,8 +174,7 @@ TEST_CASE("E2 with Objects")
     ex | m.fluid = (loc | f2_ddx) + (loc | f2_ddy) + (loc | f2_ddz);
 
     // zero dirichlet boundaries
-    ex | m.xmin = 0;
-    ex | m.zmax = 0;
+    ex | m.dirichlet(gridBcs) = 0;
 
     // neumann conditions
     scalar<T> nu{loc | f2_dy};

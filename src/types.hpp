@@ -5,6 +5,7 @@
 #include <limits>
 #include <span>
 #include <tuple>
+#include <vector>
 
 #define FWD(x) static_cast<decltype(x)&&>(x)
 #define MOVE(x) static_cast<std::remove_reference_t<decltype(x)>&&>(x)
@@ -36,6 +37,7 @@ template <int N>
 using lit = std::integral_constant<int, N>;
 
 struct system_stats {
+    std::vector<real> stats;
 };
 
 template <typename T = real>

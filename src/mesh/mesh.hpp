@@ -1,10 +1,10 @@
 #pragma once
 
-#include "operators/boundaries.hpp"
 #include "cartesian.hpp"
 #include "fields/selector.hpp"
 #include "mesh_types.hpp"
 #include "object_geometry.hpp"
+#include "operators/boundaries.hpp"
 
 #include <sol/forward.hpp>
 
@@ -17,6 +17,28 @@ class mesh
     object_geometry geometry;
     std::array<std::vector<line>, 3> lines_;
     std::vector<index_slice> fluid_slices;
+
+    template <bcs::type B, int I>
+    auto grid_boundaries(const bcs::Grid& g) const
+    {
+        if constexpr (I == -1) {
+            return tuple{xmin, xmax, ymin, ymax, zmin, zmax} |
+                   tuple{sel::optional_view(g[0].left == B),
+                         sel::optional_view(g[0].right == B),
+                         sel::optional_view(g[1].left == B),
+                         sel::optional_view(g[1].right == B),
+                         sel::optional_view(g[2].left == B),
+                         sel::optional_view(g[2].right == B)};
+        } else {
+            return tuple{xmin, xmax, ymin, ymax, zmin, zmax} |
+                   tuple{sel::optional_view(I == 0 && g[0].left == B),
+                         sel::optional_view(I == 0 && g[0].right == B),
+                         sel::optional_view(I == 1 && g[1].left == B),
+                         sel::optional_view(I == 1 && g[1].right == B),
+                         sel::optional_view(I == 2 && g[2].left == B),
+                         sel::optional_view(I == 2 && g[2].right == B)};
+        }
+    }
 
 public:
     mesh() = default;
@@ -61,6 +83,18 @@ public:
     auto ss() const // scalar size
     {
         return tuple{tuple{size()}, tuple{Rx().size(), Ry().size(), Rz().size()}};
+    }
+
+    template <int I = -1>
+    auto dirichlet(const bcs::Grid& g) const
+    {
+        return grid_boundaries<bcs::Dirichlet, I>(g);
+    }
+
+    template <int I = -1>
+    auto neumann(const bcs::Grid& g) const
+    {
+        return grid_boundaries<bcs::Neumann, I>(g);
     }
 
     static std::optional<mesh> from_lua(const sol::table&);

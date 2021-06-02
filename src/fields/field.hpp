@@ -106,28 +106,34 @@ public:
     constexpr const auto& vectors() const { return v; }
 
     template <std::integral... Is>
-    auto scalars(Is&&... i) const requires rs::random_access_range<S>
+    decltype(auto) scalars(Is&&... i) const requires rs::random_access_range<S>
     {
-        return tuple(s[i]...);
+        if constexpr (sizeof...(Is) > 1)
+            return tuple(s[i]...);
+        else
+            return (s[i], ...);
     }
 
     template <typename... Is>
         requires(std::is_enum_v<Is>&&...)
-    auto scalars(Is&&... i) const
+    decltype(auto) scalars(Is&&... i) const
     {
         return scalars(
             static_cast<std::underlying_type_t<std::remove_cvref_t<Is>>>(FWD(i))...);
     }
 
     template <std::integral... Is>
-    auto scalars(Is&&... i) requires rs::random_access_range<S>
+    decltype(auto) scalars(Is&&... i) requires rs::random_access_range<S>
     {
-        return tuple{s[i]...};
+        if constexpr (sizeof...(Is) > 1)
+            return tuple{s[i]...};
+        else
+            return (s[i], ...);
     }
 
     template <typename... Is>
         requires(std::is_enum_v<Is>&&...)
-    auto scalars(Is&&... i)
+    decltype(auto) scalars(Is&&... i)
     {
         return scalars(
             static_cast<std::underlying_type_t<std::remove_cvref_t<Is>>>(FWD(i))...);

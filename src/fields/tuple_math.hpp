@@ -25,9 +25,9 @@ struct tuple_math {
 
 private:
 #define SHOCCS_GEN_OPERATORS(op, f)                                                      \
-    template <std::derived_from<T> U, Numeric V>                                         \
-        requires OutputTuple<U, V>                                                       \
-    constexpr friend U& op(U& u, V v)                                                    \
+    template <typename U, Numeric V>                                                     \
+        requires(std::derived_from<std::remove_cvref_t<U>, T> && OutputTuple<U, V>)      \
+    constexpr friend U&& op(U&& u, V v)                                                  \
     {                                                                                    \
         for_each(                                                                        \
             [v](auto&& rng) {                                                            \
@@ -35,7 +35,7 @@ private:
             },                                                                           \
             u);                                                                          \
                                                                                          \
-        return u;                                                                        \
+        return FWD(u);                                                                   \
     }                                                                                    \
                                                                                          \
     template <std::derived_from<T> U, TupleLike V>                                       \
@@ -50,6 +50,20 @@ private:
             FWD(v));                                                                     \
                                                                                          \
         return u;                                                                        \
+    }                                                                                    \
+                                                                                         \
+    template <typename U, TupleLike V>                                                   \
+        requires(std::derived_from<std::remove_cvref_t<U>, T> && !OutputTuple<U, V> &&   \
+                 !SimilarTuples<U, V>)                                                   \
+    constexpr friend U& op(U&& u, V&& v)                                                 \
+    {                                                                                    \
+        auto tp = [&]<auto... Is>(std::index_sequence<Is...>)                            \
+        {                                                                                \
+            return make_tuple<U>(get<Is>(u).apply(v)...);                                \
+        }                                                                                \
+        (sequence<U>);                                                                   \
+        static_assert(OutputTuple<U, decltype(tp)>);                                     \
+        return u f tp;                                                                   \
     }
 
     SHOCCS_GEN_OPERATORS(operator+=, +=)

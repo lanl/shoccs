@@ -521,6 +521,11 @@ TEST_CASE("to_tuple")
         REQUIRE(rs::equal(get<0>(get<1>(t)), j));
         REQUIRE(rs::equal(get<1>(get<1>(t)), k));
     }
+
+    {
+        auto t = to<real3>(std::tuple{1.0, 2., 3.});
+        REQUIRE(t == real3{1, 2, 3});
+    }
 }
 
 TEST_CASE("make_tuple")
@@ -535,4 +540,3 @@ TEST_CASE("make_tuple")
     REQUIRE(get<0>(q) == 5.1);
     REQUIRE(get<1>(q) == 4.2);
 }
-

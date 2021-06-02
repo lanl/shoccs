@@ -12,8 +12,6 @@
 namespace ccs
 {
 
-
-
 // Public API of a `system'
 //
 // timestep -> computes an acceptable timestep based on current solution state

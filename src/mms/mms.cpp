@@ -1,4 +1,5 @@
 #include "gauss.hpp"
+#include "lua_mms.hpp"
 #include "manufactured_solutions.hpp"
 
 #include <sol/sol.hpp>
@@ -64,10 +65,30 @@ manufactured_solution::from_lua(const sol::table& tbl, int dims)
         if (center.size() > 0)
             return build_ms_gauss(dims, center, variance, amplitude, frequency);
 
+    } else if (ms_t == "lua") {
+        sol::optional<std::function<real(real, const real3&)>> call;
+        sol::optional<std::function<real(real, const real3&)>> ddt;
+        sol::optional<std::function<real3(real, const real3&)>> grad;
+        sol::optional<std::function<real(real, const real3&)>> div;
+        sol::optional<std::function<real(real, const real3&)>> lap;
+
+        call = ms["call"];
+        ddt = ms["ddt"];
+        grad = ms["grad"];
+        div = ms["div"];
+        lap = ms["lap"];
+
+        if (call && ddt && grad && div && lap) {
+            return lua_mms::from_lua(ms);
+        } else {
+            spdlog::error("`lua` manufactured solution requires call, ddt, grad, div, "
+                          "lap functions");
+        }
+
     } else {
         spdlog::error("Got manufactured_solution.type = `{}`.  Expected one of: `{}`",
                       ms_t,
-                      "gaussian");
+                      "gaussian, lua");
     }
 
     return std::nullopt;

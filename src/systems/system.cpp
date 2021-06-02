@@ -6,14 +6,11 @@
 namespace ccs
 {
 
-std::function<void(field&)> system::operator()(const step_controller& controller)
+std::function<void(field&)> system::operator()(const step_controller& step)
 {
     return std::visit(
-        [&controller](auto&& current_system) {
-            return std::function<void(field&)>{
-                [&controller, &current_system](field& field) {
-                    current_system(field, controller);
-                }};
+        [&step](auto&& sys) {
+            return std::function<void(field&)>{[&step, &sys](field& f) { sys(f, step); }};
         },
         v);
 }

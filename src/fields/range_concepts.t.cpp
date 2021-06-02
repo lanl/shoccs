@@ -178,17 +178,24 @@ TEST_CASE("NumericTuple")
     using T = rs::common_tuple<const int&, const int&, const int&>;
     REQUIRE(TupleLike<T>);
     REQUIRE(NumericTuple<rs::common_tuple<const int&, const int&, const int&>>);
+
+    REQUIRE(ArrayFromTuple<real3, std::tuple<int, int, int>>);
 }
 
 struct a {
     int x, y;
+
+    auto f(int q) { return q ? y : x; }
 };
+
 TEST_CASE("projection")
 {
     std::vector<a> v{{1, 0}, {2, 3}, {6, 2}};
     auto u = v | vs::transform(&a::x);
 
     REQUIRE(rs::equal(u, std::vector{1, 2, 6}));
+
+    // auto q = v | vs::transform(&a::f(3));
 }
 
 TEST_CASE("generate_n")

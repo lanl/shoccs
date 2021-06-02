@@ -1,12 +1,16 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "fields/tuple_utils.hpp"
 #include "manufactured_solutions.hpp"
 #include "std_matchers.hpp"
 
 #include <sol/sol.hpp>
 #include <spdlog/spdlog.h>
 #include <string>
+
+#include <range/v3/range/conversion.hpp>
+#include <range/v3/view/single.hpp>
 
 using namespace ccs;
 using Catch::Matchers::Approx;
@@ -44,6 +48,9 @@ TEST_CASE("gauss1d")
     const real time = 8.0;
 
     REQUIRE(ms(time, loc) == Catch::Approx(0.0003319785015967778));
+
+    auto t = vs::single(loc) | ms(time) | rs::to<std::vector<real>>();
+    REQUIRE(t[0] == Catch::Approx(0.0003319785015967778));
 
     REQUIRE(ms.ddt(time, loc) == Catch::Approx(-0.000975554445371058));
 
@@ -135,4 +142,62 @@ TEST_CASE("gauss3d")
     // const auto ms_grad = ms->gradient(time, loc);
     REQUIRE_THAT(ms.gradient(time, loc), Approx(grad));
     REQUIRE(ms.laplacian(time, loc) == Catch::Approx(0.002412644784681726));
+}
+
+TEST_CASE("lua")
+{
+
+    sol::state lua;
+    lua.open_libraries(sol::lib::base, sol::lib::math);
+    lua.script(R"(
+            simulation = {
+                manufactured_solution = {
+                        type = "lua",
+                        
+                        call = function (time, loc)
+                                return loc[3] * time + math.sin(loc[1]) * math.cos(loc[2])
+                        end,
+
+                        ddt = function (time, loc)
+                                return loc[3]
+                        end,
+
+                        grad = function (time, loc)
+                                return  math.sin(loc[1]*loc[2]),
+                                        math.cos(loc[1]*loc[3]),
+                                        math.sin(loc[2]*loc[3])
+                                
+                        end,
+
+                        div = function (time, loc)
+                                return loc[1] * loc[2] * loc[3]
+                        end,
+
+                        lap = function (time, loc)
+                                return loc[1] + loc[2] + loc[3]
+                        end                       
+                }
+            }
+        )");
+    auto ms_opt = manufactured_solution::from_lua(lua["simulation"]);
+    REQUIRE(!!ms_opt);
+    auto& ms = *ms_opt;
+    REQUIRE(ms);
+
+    const real3 loc{3.0, -0.5, -2.0};
+    const real time = 8.0;
+
+    sol::table t = lua["simulation"]["manufactured_solution"];
+    sol::protected_function call = t["call"];
+
+    REQUIRE(ms(time, loc) == Catch::Approx(call(time, loc)));
+
+    sol::protected_function ddt = t["ddt"];
+    REQUIRE(ms.ddt(time, loc) == Catch::Approx(ddt(time, loc)));
+
+    sol::protected_function grad = t["grad"];
+    std::tuple<real, real, real> res = grad(time, loc);
+    real3 g = to<real3>(res);
+    REQUIRE_THAT(ms.gradient(time, loc), Approx(g));
+    REQUIRE(ms.laplacian(time, loc) == Catch::Approx(t["lap"](time, loc)));
 }

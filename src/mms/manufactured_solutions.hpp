@@ -1,10 +1,11 @@
 #pragma once
 
-#include "types.hpp"
+#include "fields/tuple_utils.hpp"
 #include <array>
 #include <cassert>
 #include <concepts>
 #include <optional>
+#include <range/v3/view/transform.hpp>
 
 #include <sol/forward.hpp>
 
@@ -128,7 +129,8 @@ public:
 
         explicit operator bool() const { return s != nullptr; }
 
-        static std::optional<manufactured_solution> from_lua(const sol::table&, int dims);
+        static std::optional<manufactured_solution> from_lua(const sol::table&,
+                                                             int dims = 3);
 
         real operator()(real time, const real3& loc) const
         {
@@ -158,6 +160,87 @@ public:
         {
             assert(s);
             return s->laplacian(time, loc);
+        }
+
+        template <TupleLike L>
+        requires ArrayFromTuple<real3, L> real operator()(real time, L&& loc) const
+        {
+            assert(s);
+            return (*s)(time, to<real3>(FWD(loc)));
+        }
+
+        template <TupleLike L>
+            requires ArrayFromTuple<real3, L> real ddt(real time, L&& loc)
+        const
+        {
+            assert(s);
+            return s->ddt(time, to<real3>(FWD(loc)));
+        }
+
+        template <TupleLike L>
+            requires ArrayFromTuple<real3, L> real3 gradient(real time, L&& loc)
+        const
+        {
+            assert(s);
+            return s->gradient(time, to<real3>(FWD(loc)));
+        }
+
+        template <TupleLike L>
+            requires ArrayFromTuple<real3, L> real divergence(real time, L&& loc)
+        const
+        {
+            assert(s);
+            return s->divergence(time, to<real3>(FWD(loc)));
+        }
+
+        template <TupleLike L>
+            requires ArrayFromTuple<real3, L> real laplacian(real time, L&& loc)
+        const
+        {
+            assert(s);
+            return s->laplacian(time, to<real3>(FWD(loc)));
+        }
+
+        auto operator()(real time) const
+        {
+            assert(s);
+            return vs::transform(
+                [this, time](auto&& loc) { return (*this)(time, FWD(loc)); });
+        }
+
+        auto ddt(real time) const
+        {
+            assert(s);
+            return vs::transform(
+                [this, time](auto&& loc) { return ddt(time, FWD(loc)); });
+        }
+
+        auto gradient(real time) const
+        {
+            assert(s);
+            return vs::transform(
+                [this, time](auto&& loc) { return gradient(time, FWD(loc)); });
+        }
+
+        auto gradient(int i, real time) const
+        {
+            assert(s);
+            return vs::transform(
+                [this, i, time](auto&& loc) { return gradient(time, FWD(loc))[i]; });
+        }
+
+        auto divergence(real time) const
+        {
+            assert(s);
+            return vs::transform(
+                [this, time](auto&& loc) { return divergence(time, FWD(loc)); });
+        }
+
+        auto laplacian(real time) const
+        {
+            assert(s);
+            return vs::transform(
+                [this, time](auto&& loc) { return laplacian(time, FWD(loc)); });
         }
 };
 

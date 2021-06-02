@@ -394,6 +394,12 @@ concept TupleFromTuple =
 template <typename Arg, typename T>
 concept TupleToTuple = TupleFromTuple<T, Arg>;
 
+template <typename T, typename Arg>
+concept ArrayFromTuple = is_stdarray<T>::value && TupleLike<Arg> &&
+    mp_apply<mp_all,
+             mp_transform_q<mp_bind_front<std::is_constructible, typename T::value_type>,
+                            tuple_get_types<Arg>>>::value;
+
 //
 // traits for invoking functions over tuples
 //
@@ -668,7 +674,6 @@ struct viewable_range_by_value_impl<T&> {
 
 template <typename T>
 using viewable_range_by_value = detail::viewable_range_by_value_impl<T>::type;
-
 } // namespace ccs
 
 // need to specialize this bool inorder for r_tuples to have the correct behavior.

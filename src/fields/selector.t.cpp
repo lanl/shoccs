@@ -8,6 +8,9 @@
 
 using namespace ccs;
 
+constexpr auto plus = lift(std::plus{});
+constexpr auto dble = [](auto&& v) { return plus(v, v); };
+
 TEST_CASE("planes construction")
 {
     index_extents t{};
@@ -365,4 +368,42 @@ TEST_CASE("optional scalar")
                sel::optional_view(false)}) = v;
     REQUIRE((s | sel::xmin(i)) == tuple{vs::iota(0, 12)});
     REQUIRE((s | sel::xmax(i)) == tuple{vs::iota(36, 48)});
+}
+
+TEST_CASE("multi_slice math")
+{
+    using T = std::vector<int>;
+    using U = std::vector<index_slice>;
+
+    scalar<T> s{tuple{vs::iota(0, 24)}, tuple{0, 0, 0}};
+
+    U a{{0, 24}};
+    auto whole = sel::multi_slice(a);
+
+    s | whole += 1;
+
+    REQUIRE(get<0>(s) == tuple{vs::iota(1, 25)});
+
+    U b{{1, 3}, {6, 12}, {22, 24}};
+    auto sparse = sel::multi_slice(b);
+    s | sparse -= 1; // vs::iota(0, 24)
+
+    REQUIRE(get<0>(s) == tuple{vs::concat(vs::iota(1, 2),   /* whole */
+                                          vs::iota(1, 3),   /* sparse */
+                                          vs::iota(4, 7),   /* whole */
+                                          vs::iota(6, 12),  /* sparse */
+                                          vs::iota(13, 23), /* whole */
+                                          vs::iota(22, 24)  /* sparse */
+                                          )});
+
+    s | sparse += tuple{tuple{vs::iota(0, 24)},
+                        tuple{vs::iota(0, 0), vs::iota(0, 0), vs::iota(0, 0)}};
+
+    REQUIRE(get<0>(s) == tuple{vs::concat(vs::iota(1, 2),        /* whole */
+                                          dble(vs::iota(1, 3)),  /* sparse */
+                                          vs::iota(4, 7),        /* whole */
+                                          dble(vs::iota(6, 12)), /* sparse */
+                                          vs::iota(13, 23),      /* whole */
+                                          dble(vs::iota(22, 24)) /* sparse */
+                                          )});
 }
