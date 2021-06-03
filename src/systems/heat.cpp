@@ -68,7 +68,7 @@ bool heat::valid(const system_stats& stats) const
 real heat::timestep_size(const field&, const step_controller& step) const
 {
     const auto h_min = rs::min(m.h());
-    return step.parabolic_cfl * h_min * h_min / (4 * diffusivity);
+    return step.parabolic_cfl() * h_min * h_min / (4 * diffusivity);
 };
 
 void heat::rhs(field_view f, real time, field_span rhs) const

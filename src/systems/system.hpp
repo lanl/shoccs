@@ -4,7 +4,7 @@
 #include "heat.hpp"
 #include "inviscid_vortex.hpp"
 #include "scalar_wave.hpp"
-#include "step_controller.hpp"
+#include "temporal/step_controller.hpp"
 #include "types.hpp"
 #include <sol/forward.hpp>
 #include <variant>
