@@ -153,7 +153,7 @@ TEST_CASE("E2 with Objects")
     const mesh& m = *m_opt;
 
     // bcs
-    auto bc_opt = bcs::from_lua(lua["simulation"]);
+    auto bc_opt = bcs::from_lua(lua["simulation"], m.extents());
     REQUIRE(!!bc_opt);
     auto&& [gridBcs, objectBcs] = *bc_opt;
 

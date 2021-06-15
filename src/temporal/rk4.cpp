@@ -25,6 +25,7 @@ void rk4::operator()(system& system,
     rk_rhs = 0;
     system_rhs = 0;
     const real time = controller;
+    u = u0;
 
     for (int i = 0; i < 4; ++i) {
         if (i > 0) {

@@ -117,10 +117,12 @@ std::optional<heat> heat::from_lua(const sol::table& tbl)
     real diff = tbl["system"]["diffusivity"].get_or(1.0);
 
     auto mesh_opt = mesh::from_lua(tbl);
-    auto bc_opt = bcs::from_lua(tbl);
+    if (!mesh_opt) return std::nullopt;
+
+    auto bc_opt = bcs::from_lua(tbl, mesh_opt->extents());
     auto st_opt = stencil::from_lua(tbl);
 
-    if (mesh_opt && bc_opt && st_opt) {
+    if (bc_opt && st_opt) {
         auto ms_opt = manufactured_solution::from_lua(tbl, mesh_opt->dims());
         auto t = ms_opt ? MOVE(*ms_opt) : manufactured_solution{};
 

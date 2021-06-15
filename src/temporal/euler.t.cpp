@@ -12,7 +12,7 @@
 
 using namespace ccs;
 
-TEST_CASE("integrator - rk4")
+TEST_CASE("integrator - euler")
 {
     sol::state lua;
     lua.open_libraries(sol::lib::base, sol::lib::math);
@@ -26,7 +26,7 @@ TEST_CASE("integrator - rk4")
                 }
             },
             domain_boundaries = {
-                xmin = "dirichlet",
+                xmin = "dirichlet",              
                 ymin = "neumann",
                 ymax = "neumann",
                 zmax = "dirichlet"
@@ -48,7 +48,7 @@ TEST_CASE("integrator - rk4")
                 diffusivity = 1.0
             },
             integrator = {
-                type = "rk4",                
+                type = "euler",                
             },
             step_controller = {
                 max_step = 1,
@@ -57,6 +57,7 @@ TEST_CASE("integrator - rk4")
                 type = "lua",
                 call = function(time, loc)
                     local x, y, z = loc[1], loc[2], loc[3]
+                    -- return time + x * x * (y + z) + x - 1
                     return (time + 
                         x * x * (y + z) + y * y * (x + z) + z * z * (x + y) + 
                         3 * x * y * z + x + y + z)                     
@@ -69,6 +70,7 @@ TEST_CASE("integrator - rk4")
                     return 2. * x * (y + z) + y * y + z * z + 3. * y * z + 1,
                             x * x + 2. * y * (x + z) + z * z + 3. * x * z + 1,
                             x * x + y * y + 2. * z * (x + y) + 3. * x * y + 1
+                    
                 end,
                 lap = function(time, loc)
                     local x, y, z = loc[1], loc[2], loc[3]
@@ -80,6 +82,7 @@ TEST_CASE("integrator - rk4")
             }
         }
     )");
+    using namespace si;
 
     auto sys_opt = system::from_lua(lua["simulation"]);
     REQUIRE(!!sys_opt);
@@ -93,14 +96,12 @@ TEST_CASE("integrator - rk4")
     REQUIRE(!!st_opt);
     auto& step = *st_opt;
 
-    // // Initialize array with system and ensure zero error
     field f{sys(step)};
     sys.update_boundary(f, step);
 
-    field g{sys.size()};
-
     const real dt = *sys.timestep_size(f, step);
 
+    field g{sys.size()};
     g = it(sys, f, step, dt);
 
     step.advance(dt);

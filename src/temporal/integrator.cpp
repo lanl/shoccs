@@ -35,6 +35,8 @@ std::optional<integrator> integrator::from_lua(const sol::table& tbl)
 
     if (type == "rk4") {
         return integrator{integrators::rk4{}};
+    } else if (type == "euler") {
+        return integrator{integrators::euler{}};
     } else {
         spdlog::error("integrator.type must be one of: rk4");
         return std::nullopt;

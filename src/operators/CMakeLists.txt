@@ -1,4 +1,5 @@
 add_library(shoccs-bcs boundaries.cpp)
+target_include_directories(shoccs-bcs PUBLIC ..)
 target_link_libraries(shoccs-bcs PUBLIC sol2::sol2 lua spdlog::spdlog)
 add_unit_test(boundaries "bcs" shoccs-bcs)
 

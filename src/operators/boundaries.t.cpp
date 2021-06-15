@@ -30,7 +30,7 @@ TEST_CASE("from_lua")
         }
     )");
 
-    auto bc_opt = bcs::from_lua(lua["simulation"]);
+    auto bc_opt = bcs::from_lua(lua["simulation"], index_extents{.extents = {2, 2, 2}});
     REQUIRE(!!bc_opt);
 
     auto&& [grid_bcs, object_bcs] = *bc_opt;

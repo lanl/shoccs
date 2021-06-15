@@ -1,17 +1,26 @@
 #pragma once
-#include "integrate.hpp"
 
-namespace pdg
+#include "fields/field.hpp"
+
+namespace ccs
 {
-class euler : public integrate
+// Forward decls
+class system;
+class step_controller;
+
+namespace integrators
 {
-        std::vector<double> system_rhs;
 
-    public:
-        euler() = default;
+class euler
+{
+    field system_rhs;
 
-        euler(int_t rhs_sz);
+public:
+    euler() = default;
 
-        void step(system& sys, double time, double dt) override;
+    void ensure_size(system_size);
+
+    void operator()(system&, const field&, field_span, const step_controller&, real);
 };
-} // namespace pdg
+} // namespace integrators
+} // namespace ccs

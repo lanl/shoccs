@@ -9,6 +9,7 @@ class laplacian
     derivative dx;
     derivative dy;
     derivative dz;
+    index_extents ex;
 
 public:
     laplacian() = default;

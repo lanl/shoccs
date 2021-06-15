@@ -6,6 +6,7 @@
 #include <variant>
 
 #include "empty_integrator.hpp"
+#include "euler.hpp"
 #include "fields/field.hpp"
 #include "rk4.hpp"
 #include "types.hpp"
@@ -17,7 +18,7 @@ class system;
 
 class integrator
 {
-    std::variant<integrators::empty, integrators::rk4> v;
+    std::variant<integrators::empty, integrators::rk4, integrators::euler> v;
     using v_t = decltype(v);
 
 public:

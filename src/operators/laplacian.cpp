@@ -9,7 +9,8 @@ laplacian::laplacian(const mesh& m,
                      const bcs::Object& obj_bcs)
     : dx{0, m, st, grid_bcs, obj_bcs},
       dy{1, m, st, grid_bcs, obj_bcs},
-      dz{2, m, st, grid_bcs, obj_bcs}
+      dz{2, m, st, grid_bcs, obj_bcs},
+      ex{m.extents()}
 {
 }
 
@@ -19,9 +20,9 @@ std::function<void(scalar_span)> laplacian::operator()(scalar_view u) const
     return [this, u](scalar_span du) {
         du = 0;
         // accumulate results into du * WRONG * The block matrix does not accumulate
-        dx(u, du, plus_eq);
-        dy(u, du, plus_eq);
-        dz(u, du, plus_eq);
+        if (ex[0] > 1) dx(u, du, plus_eq);
+        if (ex[1] > 1) dy(u, du, plus_eq);
+        if (ex[2] > 1) dz(u, du, plus_eq);
     };
 }
 
@@ -31,9 +32,9 @@ std::function<void(scalar_span)> laplacian::operator()(scalar_view u,
     return [this, u, nu](scalar_span du) {
         du = 0;
         // accumulate results into du
-        dx(u, nu, du, plus_eq);
-        dy(u, nu, du, plus_eq);
-        dz(u, nu, du, plus_eq);
+        if (ex[0] > 1) dx(u, nu, du, plus_eq);
+        if (ex[1] > 1) dy(u, nu, du, plus_eq);
+        if (ex[2] > 1) dz(u, nu, du, plus_eq);
     };
 }
 } // namespace ccs
