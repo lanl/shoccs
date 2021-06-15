@@ -134,7 +134,7 @@ mesh::mesh(const index_extents& extents,
       ymax{sel::ymax(extents)},
       zmin{sel::zmin(extents)},
       zmax{sel::zmax(extents)},
-      location{cart.domain(), geometry.domain()}
+      xyz{cart.domain(), geometry.domain()}
 
 {
     init_line<0>(lines_[0], cart.extents(), geometry.R(0));
@@ -175,7 +175,7 @@ std::optional<mesh> mesh::from_lua(const sol::table& tbl)
     auto&& [n, domain] = *m_opt;
 
     return mesh{n, domain, shapes};
-    //return std::nullopt;
+    // return std::nullopt;
 }
 
 } // namespace ccs

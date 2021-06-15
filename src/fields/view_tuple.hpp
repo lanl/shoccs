@@ -188,6 +188,10 @@ struct single_view<A> : vs::all_t<A> {
 private:
     using view = vs::all_t<A>;
 
+    view& as_view() & { return static_cast<view&>(*this); }
+    const view& as_view() const& { return static_cast<const view&>(*this); }
+    view&& as_view() && { return static_cast<view&&>(*this); }
+
 public:
     single_view() = default;
     single_view(const single_view&) = default;

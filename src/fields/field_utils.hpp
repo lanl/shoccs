@@ -41,4 +41,14 @@ constexpr auto transform(F&& f, T&&... t)
 {
     return detail::field{transform_scalar(f, t...), transform_vector(f, t...)};
 }
+
+template <Field F>
+auto ssize(F&& f)
+{
+    if (f.nscalars() > 0) {
+        return system_size{f.nscalars(), f.nvectors(), ssize(f.scalars(0))};
+    } else {
+        return system_size{};
+    }
+}
 } // namespace ccs

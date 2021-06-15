@@ -66,7 +66,7 @@ TEST_CASE("E2_2 Domain")
                   domain_extents{.min = {0.1, 0.2, 0.3}, .max = {1, 2, 2.2}}};
 
     const auto objectBcs = bcs::Object{};
-    const auto loc = m.location;
+    const auto loc = m.xyz;
 
     // initialize fields
     scalar<T> u{loc | f2};
@@ -162,7 +162,7 @@ TEST_CASE("E2 with Objects")
     REQUIRE(!!scheme_opt);
     stencil st = *scheme_opt;
 
-    const auto loc = m.location;
+    const auto loc = m.xyz;
 
     // initialize fields
     scalar<T> u{loc | f2};

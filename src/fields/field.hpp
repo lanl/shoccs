@@ -8,12 +8,6 @@
 namespace ccs
 {
 
-struct system_size {
-    integer nscalars;
-    integer nvectors;
-    scalar<integer> scalar_size;
-};
-
 namespace detail
 {
 

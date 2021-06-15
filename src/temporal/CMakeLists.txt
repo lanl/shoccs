@@ -6,3 +6,4 @@ target_link_libraries(shoccs-integrate
     fields shoccs-system sol2::sol2 lua spdlog::spdlog)
 
 add_unit_test(step_controller "temporal" shoccs-integrate)
+add_unit_test(rk4 "temporal" shoccs-integrate)

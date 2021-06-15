@@ -5,6 +5,14 @@
 namespace ccs
 {
 
+struct system_size {
+    integer nscalars;
+    integer nvectors;
+    scalar<integer> scalar_size;
+
+    constexpr friend auto operator<=>(const system_size&, const system_size&) = default;
+};
+
 namespace detail
 {
 template <Range S, Range V>

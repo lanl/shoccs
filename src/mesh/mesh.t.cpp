@@ -182,7 +182,7 @@ TEST_CASE("selections")
 
     randomize();
     scalar<T> u{m.ss()};
-    u | sel::D = m.location | vs::transform([](auto&& xyz) { return get<0>(xyz); });
+    u | sel::D = m.xyz | vs::transform([](auto&& xyz) { return get<0>(xyz); });
     // test whole field comparison
     REQUIRE(rs::equal(u | sel::D, u | m.fluid));
 }
@@ -238,10 +238,9 @@ TEST_CASE("selections with object")
 
     scalar<T> v{m.ss()};
 
-    v | sel::D =
-        m.location | vs::transform([center = real3{0.01, -0.01, 0.5}](auto&& loc) {
-            return length(loc - center) > 0.25 ? 1 : -1;
-        });
+    v | sel::D = m.xyz | vs::transform([center = real3{0.01, -0.01, 0.5}](auto&& loc) {
+                     return length(loc - center) > 0.25 ? 1 : -1;
+                 });
 
     REQUIRE(u == v);
 

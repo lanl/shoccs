@@ -9,6 +9,15 @@
 namespace ccs
 {
 
+template <std::size_t I, Tuple C>
+constexpr decltype(auto) get(C&& c);
+
+template <std::size_t I, std::size_t J, std::size_t... Rest, Tuple C>
+constexpr decltype(auto) get(C&& c);
+
+template <ListIndex L, Tuple C>
+constexpr decltype(auto) get(C&& c);
+
 // r_tuple for viewable ref components
 template <typename... Args>
 struct tuple : container_tuple<Args...>, view_tuple<Args&...> {
@@ -72,7 +81,8 @@ struct tuple : container_tuple<Args...>, view_tuple<Args&...> {
 
     template <SimilarTuples<tuple> T>
     friend constexpr bool operator==(const tuple& x,
-                                     const T& y) requires NestedTuple<tuple>
+                                     const T& y) requires(NestedTuple<tuple> ||
+                                                          (Numeric<Args> && ...))
     {
         return [&]<auto... Is>(std::index_sequence<Is...>)
         {

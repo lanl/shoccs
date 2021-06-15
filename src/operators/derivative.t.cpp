@@ -66,11 +66,11 @@ TEST_CASE("E2_Neumann")
 
     // initialize fields
     scalar<T> u{};
-    u = m.location | f2;
+    u = m.xyz | f2;
     scalar<T> nu{};
-    nu = m.location | f2_dz;
+    nu = m.xyz | f2_dz;
     scalar<T> ex{};
-    ex = m.location | f2_ddz;
+    ex = m.xyz | f2_ddz;
 
     scalar<T> du{m.ss()};
 
@@ -129,15 +129,14 @@ TEST_CASE("E2_2 FFFFFF")
     const auto objectBcs = bcs::Object{};
 
     // initialize fields
-    scalar<T> u = m.location | f2;
+    scalar<T> u = m.xyz | f2;
     //    u | sel::D = m.location() | f2);
 
     scalar<T> du{m.ss()};
     REQUIRE((integer)rs::size(du | sel::D) == m.size());
 
     // exact
-    std::array<scalar<T>, 3> dd{
-        m.location | f2_ddx, m.location | f2_ddy, m.location | f2_ddz};
+    std::array<scalar<T>, 3> dd{m.xyz | f2_ddx, m.xyz | f2_ddy, m.xyz | f2_ddz};
 
     for (int i = 0; i < 3; i++) {
         auto d = derivative{i, m, stencils::second::E2, gridBcs, objectBcs};
@@ -220,7 +219,7 @@ TEST_CASE("E2 Mixed")
     const auto objectBcs = bcs::Object{};
 
     // initialize fields
-    scalar<T> u{m.location | f2};
+    scalar<T> u{m.xyz | f2};
 
     SECTION("DDFFFD")
     {
@@ -228,9 +227,7 @@ TEST_CASE("E2 Mixed")
         const auto gridBcs = bcs::Grid{bcs::dd, bcs::ff, bcs::fd};
         // set the exact du we expect based on zeros assigned to dirichlet locations
 
-        std::array<scalar<T>, 3> dd{
-            m.location | f2_ddx, m.location | f2_ddy, m.location | f2_ddz};
-
+        std::array<scalar<T>, 3> dd{m.xyz | f2_ddx, m.xyz | f2_ddy, m.xyz | f2_ddz};
         scalar<T> du{m.ss()};
         REQUIRE((integer)rs::size(du | sel::D) == m.size());
 
@@ -251,10 +248,9 @@ TEST_CASE("E2 Mixed")
     {
 
         const auto gridBcs = bcs::Grid{bcs::fn, bcs::dd, bcs::df};
-        // set the exact du we expect based on zeros assigned to dirichlet locations
-        scalar<T> nu{m.location | f2_dx};
-        std::array<scalar<T>, 3> dd{
-            m.location | f2_ddx, m.location | f2_ddy, m.location | f2_ddz};
+        // set the exact du we expect based on zeros assigned to dirichlet xyzs
+        scalar<T> nu{m.xyz | f2_dx};
+        std::array<scalar<T>, 3> dd{m.xyz | f2_ddx, m.xyz | f2_ddy, m.xyz | f2_ddz};
 
         scalar<T> du{u};
         REQUIRE((integer)rs::size(du | sel::D) == m.size());
@@ -288,7 +284,7 @@ TEST_CASE("Identity with Objects")
 
     // initialize fields
     randomize();
-    scalar<T> u{m.location | vs::transform([](auto&&) { return pick(); })};
+    scalar<T> u{m.xyz | vs::transform([](auto&&) { return pick(); })};
 
     REQUIRE(rs::size(u | sel::Rx) == m.Rx().size());
 
@@ -326,20 +322,20 @@ TEST_CASE("E2 with Objects")
     const auto objectBcs = bcs::Object{bcs::Dirichlet};
 
     // initialize fields
-    scalar<T> u = m.location | f2;
+    scalar<T> u = m.xyz | f2;
     REQUIRE(rs::size(u | sel::Rx) == m.Rx().size());
 
-    scalar<T> nu = m.location | f2_dx;
+    scalar<T> nu = m.xyz | f2_dx;
 
     scalar<T> du_x{m.ss()}, du_y{m.ss()}, du_z{m.ss()};
 
-    du_x | m.fluid = m.location | f2_ddx;
+    du_x | m.fluid = m.xyz | f2_ddx;
     du_x | m.dirichlet(gridBcs) = 0;
 
-    du_y | m.fluid = m.location | f2_ddy;
+    du_y | m.fluid = m.xyz | f2_ddy;
     du_y | m.dirichlet(gridBcs) = 0;
 
-    du_z | m.fluid = m.location | f2_ddz;
+    du_z | m.fluid = m.xyz | f2_ddz;
     du_z | m.dirichlet(gridBcs) = 0;
 
     REQUIRE((integer)rs::size(du_x | sel::D) == m.size());

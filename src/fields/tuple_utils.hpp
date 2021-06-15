@@ -302,4 +302,11 @@ constexpr auto lift(Fn fn)
     };
 }
 
+template <TupleLike T>
+constexpr auto ssize(T&& t)
+{
+    return transform([]<rs::sized_range X>(X&& x) -> ssize_t { return rs::size(FWD(x)); },
+                     FWD(t));
+}
+
 } // namespace ccs

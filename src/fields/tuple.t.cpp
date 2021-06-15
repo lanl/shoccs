@@ -59,6 +59,7 @@ TEST_CASE("concepts")
 TEST_CASE("Default construction")
 {
     using T = std::vector<real>;
+    using U = ssize_t;
 
     {
         T t{};
@@ -74,11 +75,13 @@ TEST_CASE("Default construction")
         tuple<T, T> t{};
         REQUIRE(rs::size(get<0>(t)) == 0);
         REQUIRE(rs::size(get<1>(t)) == 0);
+        REQUIRE(ssize(t) == tuple<U, U>{0, 0});
     }
 
     {
         tuple<tuple<T>, tuple<T, T>> t{};
-        REQUIRE(rs::size(get<0>(t)) == 0);
+        tuple<tuple<U>, tuple<U, U>> u{};
+        REQUIRE(ssize(t) == u);
         REQUIRE(rs::size(get<1, 0>(t)) == 0);
         REQUIRE(rs::size(get<1, 1>(t)) == 0);
     }
@@ -102,6 +105,7 @@ TEST_CASE("construction from subrange")
 
 TEST_CASE("construction")
 {
+    using I = ssize_t;
     auto x = std::vector<real>{0, 1, 2};
     auto y = std::vector<real>{3, 4, 5};
     auto z = std::vector<real>{6, 7, 8};
@@ -119,12 +123,11 @@ TEST_CASE("construction")
     {
         using T = std::vector<real>;
         auto q = tuple<T>{4};
-        REQUIRE(q.size() == 4u);
+        REQUIRE(rs::size(q) == 4u);
 
         auto qq = tuple<T, T, T>{4, 5, 6};
-        REQUIRE(rs::size(get<0>(qq)) == 4u);
-        REQUIRE(rs::size(get<1>(qq)) == 5u);
-        REQUIRE(get<2>(qq).size() == 6u);
+        auto qq_sz = tuple<I, I, I>{4, 5, 6};
+        REQUIRE(ssize(qq) == qq_sz);
     }
 
     SECTION("owning from input range")
@@ -215,13 +218,13 @@ TEST_CASE("Copy and Move Owning Onetuple")
     {
         tuple<T> y{i};
         tuple<T> x{y};
-        REQUIRE(x.size() == y.size());
+        REQUIRE(rs::size(x) == rs::size(y));
         REQUIRE(x == i);
         REQUIRE(x == y);
 
         auto z = tuple{j};
         tuple<T> u{z};
-        REQUIRE(u.size() == z.size());
+        REQUIRE(rs::size(u) == rs::size(z));
         REQUIRE(u == z);
         REQUIRE(z == j);
     }
@@ -231,7 +234,7 @@ TEST_CASE("Copy and Move Owning Onetuple")
         tuple<T> x{};
         tuple<T> y{i};
         x = MOVE(y);
-        REQUIRE(x.size() == 10u);
+        REQUIRE(rs::size(x) == 10u);
         REQUIRE(x == i);
     }
 
@@ -239,7 +242,7 @@ TEST_CASE("Copy and Move Owning Onetuple")
     {
         tuple<T> y{i};
         tuple<T> x{MOVE(y)};
-        REQUIRE(x.size() == 10u);
+        REQUIRE(rs::size(x) == 10u);
         REQUIRE(x == i);
     }
 }
@@ -248,9 +251,11 @@ TEST_CASE("Copy and Move Owning TwoTuple")
 {
     using T = std::vector<real>;
     using U = tuple<T, T>;
+    using I = tuple<ssize_t, ssize_t>;
 
     const auto i = vs::iota(0, 10);
     const auto j = vs::iota(4, 7);
+    const auto ij_sz = I(rs::size(i), rs::size(j));
 
     SECTION("copy assignment")
     {
@@ -299,11 +304,9 @@ TEST_CASE("Copy and Move Owning TwoTuple")
         const auto tt = transform(
             [g = g](auto&& s) { return vs::generate_n(g, rs::size(s)) | rs::to<T>(); },
             tuple{i, j});
-        REQUIRE(rs::size(get<0>(tt)) == rs::size(i));
-        REQUIRE(rs::size(get<1>(tt)) == rs::size(j));
+        REQUIRE(ssize(tt) == ij_sz);
         x = tt;
-        REQUIRE(rs::size(get<0>(x)) == rs::size(get<0>(tt)));
-        REQUIRE(rs::size(get<1>(x)) == rs::size(get<1>(tt)));
+        REQUIRE(ssize(x) == ij_sz);
         REQUIRE(x == tt);
     }
 }
@@ -370,21 +373,21 @@ TEST_CASE("Conversion OneTuples")
     REQUIRE(x == yy);
 
     tuple<std::span<const int>> z = x;
-    REQUIRE(x.size() == z.size());
+    REQUIRE(rs::size(x) == rs::size(z));
     REQUIRE(x == z);
 
     tuple<std::span<const int>> zz = y;
-    REQUIRE(x.size() == zz.size());
+    REQUIRE(ssize(x) == ssize(zz));
     REQUIRE(x == zz);
 
     tuple<std::vector<int>> q = y;
-    REQUIRE(q.size() == y.size());
+    REQUIRE(ssize(q) == ssize(y));
     REQUIRE(q == y);
 
-    auto f = [](tuple<std::span<int>> x) { x = vs::iota(0, (int)x.size()); };
+    auto f = [](tuple<std::span<int>> x) { x = vs::iota(0, (int)rs::size(x)); };
     y = f;
     REQUIRE(x == std::vector{0, 1, 2});
-    auto g = [](tuple<std::span<int>> x) { x = vs::iota(1, 1 + (int)x.size()); };
+    auto g = [](tuple<std::span<int>> x) { x = vs::iota(1, 1 + (int)rs::size(x)); };
     x = g;
     REQUIRE(y == std::vector{1, 2, 3});
 }
@@ -468,7 +471,7 @@ TEST_CASE("numeric assignment with owning tuple")
     const auto zeros = vs::repeat_n(0, 3);
     auto x = tuple{std::vector{1, 2, 3}};
     x = 0;
-    REQUIRE(rs::size(x) == 3u);
+    REQUIRE(ssize(x) == 3);
     REQUIRE(x == zeros);
 
     auto y = tuple{std::vector{1, 2, 3}, std::vector{4, 5, 6}};
@@ -484,7 +487,7 @@ TEST_CASE("numeric assignment with non-owning tuple")
 
     auto x = tuple{v};
     x = 0;
-    REQUIRE(rs::size(x) == 3u);
+    REQUIRE(rs::size(x) == 3);
     REQUIRE(x == zeros);
     REQUIRE(x == v);
 

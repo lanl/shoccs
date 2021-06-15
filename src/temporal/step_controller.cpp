@@ -13,8 +13,8 @@ std::optional<step_controller> step_controller::from_lua(const sol::table& tbl)
     }
 
     auto c = tbl["step_controller"];
-    int max_step = c["max_step"].get_or(0);
-    real max_time = c["max_time"].get_or(0.0);
+    int max_step = c["max_step"].get_or(std::numeric_limits<int>::max());
+    real max_time = c["max_time"].get_or(std::numeric_limits<real>::max());
     real min_dt = c["min_dt"].get_or(1e-6);
     real h_cfl = c["cfl"]["hyperbolic"].get_or(1.0);
     real p_cfl = c["cfl"]["parabolic"].get_or(1.0);

@@ -10,7 +10,11 @@ std::function<void(field&)> system::operator()(const step_controller& step)
 {
     return std::visit(
         [&step](auto&& sys) {
-            return std::function<void(field&)>{[&step, &sys](field& f) { sys(f, step); }};
+            return std::function<void(field&)>{[&step, &sys](field& f) {
+                // ensure the proper size for f
+                if (ssize(f) != sys.size()) { f = field{sys.size()}; }
+                sys(f, step);
+            }};
         },
         v);
 }

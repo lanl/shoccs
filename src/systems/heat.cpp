@@ -39,11 +39,11 @@ heat::heat(mesh&& m,
 
 void heat::operator()(field& f, const step_controller& c)
 {
-    if (f.nscalars() == 0) { f = field{size()}; }
+    // if (f.nscalars() == 0) { f = field{size()}; }
     if (!m_sol) return;
 
     auto&& u = f.scalars(scalars::u);
-    auto sol = m.location | m_sol(c.simulation_time());
+    auto sol = m.xyz | m_sol(c.simulation_time());
 
     u | sel::D = 0;
     u | m.fluid = sol;
@@ -53,7 +53,7 @@ void heat::operator()(field& f, const step_controller& c)
 system_stats heat::stats(const field&, const field& f, const step_controller& step) const
 {
     auto&& u = f.scalars(scalars::u);
-    auto sol = m.location | m_sol(step.simulation_time());
+    auto sol = m.xyz | m_sol(step.simulation_time());
     auto [min, max] = rs::minmax(u | m.fluid);
     real error = rs::max(abs(u - sol) | m.fluid);
     return system_stats{.stats = {error, min, max}};
@@ -81,7 +81,7 @@ void heat::rhs(field_view f, real time, field_span rhs) const
     u_rhs *= diffusivity;
 
     if (m_sol) {
-        const auto& l = m.location;
+        const auto& l = m.xyz;
         // this does not currently account for non-dirichlet bcs on R
         u_rhs | m.fluid +=
             (l | m_sol.ddt(time)) - (diffusivity * (l | m_sol.laplacian(time)));
@@ -93,7 +93,7 @@ void heat::rhs(field_view f, real time, field_span rhs) const
 void heat::update_boundary(field_span f, real time)
 {
     auto&& u = f.scalars(scalars::u);
-    auto l = m.location;
+    auto l = m.xyz;
 
     u | m.dirichlet(grid_bcs) = l | m_sol(time);
     // assumes dirichlet right how

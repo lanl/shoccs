@@ -56,17 +56,15 @@ TEST_CASE("construction")
     // default construction
     auto x = field{};
 
+    using I = ssize_t;
+    constexpr auto scalar_size = tuple{tuple<I>{10}, tuple<I, I, I>{2, 4, 5}};
     // sized construction
-    auto y_size = system_size{2, 0, tuple{tuple{10}, tuple{2, 4, 5}}};
+    auto y_size = system_size{2, 0, scalar_size};
     auto y = field{y_size};
 
     auto&& [u, v] = y.scalars(0, 1);
-
-    REQUIRE(rs::size(u | sel::D) == 10u);
-    REQUIRE(rs::size(v | sel::D) == 10u);
-    REQUIRE(rs::size(u | sel::Rx) == 2u);
-    REQUIRE(rs::size(v | sel::Ry) == 4u);
-    REQUIRE(rs::size(u | sel::Rz) == 5u);
+    REQUIRE(ssize(u) == ssize(v));
+    REQUIRE(ssize(u) == scalar_size);
 }
 
 TEST_CASE("construction/conversion")

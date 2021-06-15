@@ -108,6 +108,6 @@ public:
     sel::multi_slice_t fluid;
     tuple<decltype(std::declval<cartesian>().domain()),
           decltype(std::declval<object_geometry>().domain())>
-        location;
+        xyz;
 };
 } // namespace ccs
