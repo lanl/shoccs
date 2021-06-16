@@ -277,6 +277,8 @@ void inviscid_vortex::rhs(field_view field, real, field_span field_rhs)
 
 void inviscid_vortex::update_boundary(field_span, real) {}
 
+real3 inviscid_vortex::summary(const system_stats&) const { return {}; }
+
 void inviscid_vortex::log(const system_stats&, const step_controller&)
 {
     if (auto logger = spdlog::get("system"); logger) { logger->info("InvisicdVortex"); }

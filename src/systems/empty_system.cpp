@@ -29,8 +29,8 @@ void empty::log(const system_stats&, const step_controller&)
     if (auto logger = spdlog::get("system"); logger) { logger->info("EmptySystem"); }
 }
 
-system_size empty::size() const {
-    return {};
-}
+real3 empty::summary(const system_stats&) const { return {}; }
+
+system_size empty::size() const { return {}; }
 
 } // namespace ccs::systems

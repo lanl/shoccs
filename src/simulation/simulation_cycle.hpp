@@ -7,6 +7,8 @@
 #include "temporal/integrator.hpp"
 #include "temporal/step_controller.hpp"
 
+#include <sol/forward.hpp>
+
 namespace ccs
 {
 class simulation_cycle
@@ -19,23 +21,9 @@ class simulation_cycle
 public:
     simulation_cycle() = default;
 
-    // static ::
+    simulation_cycle(system&&, step_controller&&, integrator&&);
 
-#if 0
-    simulation_cycle()
-    simulation_cycle(std::unique_ptr<integrate>&& integrator,
-                             std::unique_ptr<system>&& sys,
-                             field_io&& io,
-                             timestep_controls&& tc,
-                             loggers&& logs)
-        : integrator{std::move(integrator)},
-          sys{std::move(sys)},
-          io{std::move(io)},
-          tc{std::move(tc)},
-          logs{std::move(logs)}
-    {
-    }
-#endif
+    static std::optional<simulation_cycle> from_lua(const sol::table&);
 
     real3 run();
 };

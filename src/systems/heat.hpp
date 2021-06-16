@@ -51,6 +51,8 @@ public:
 
     void log(const system_stats&, const step_controller&);
 
+    real3 summary(const system_stats&) const;
+
     system_size size() const;
 };
 } // namespace ccs::systems

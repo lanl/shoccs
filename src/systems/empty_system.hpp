@@ -25,6 +25,8 @@ struct empty {
 
     void log(const system_stats& stats, const step_controller& controller);
 
+    real3 summary(const system_stats&) const;
+
     system_size size() const;
 };
 } // namespace ccs::systems

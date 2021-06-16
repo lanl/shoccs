@@ -71,6 +71,11 @@ void system::log(const system_stats& stats, const step_controller& controller)
         v);
 }
 
+real3 system::summary(const system_stats& stats) const
+{
+    return std::visit([&stats](auto&& s) { return s.summary(stats); }, v);
+}
+
 system_size system::size() const
 {
     return std::visit([](auto&& current_system) { return current_system.size(); }, v);

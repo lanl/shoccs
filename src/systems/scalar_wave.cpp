@@ -131,6 +131,8 @@ void scalar_wave::rhs(field_view f, real, field_span df)
     u_rhs = dot(grad_G, du);
 }
 
+real3 scalar_wave::summary(const system_stats&) const { return {}; }
+
 void scalar_wave::update_boundary(field_span f, real time)
 {
     // update object boundaries

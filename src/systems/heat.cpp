@@ -37,9 +37,11 @@ heat::heat(mesh&& m,
     assert(!!(this->m_sol));
 }
 
+//
+// sets the field f to the solution
+//
 void heat::operator()(field& f, const step_controller& c)
 {
-    // if (f.nscalars() == 0) { f = field{size()}; }
     if (!m_sol) return;
 
     auto&& u = f.scalars(scalars::u);
@@ -50,6 +52,9 @@ void heat::operator()(field& f, const step_controller& c)
     u | sel::R = sol;
 }
 
+//
+// Compute the linf error as well as the min/max of the field
+//
 system_stats heat::stats(const field&, const field& f, const step_controller& step) const
 {
     auto&& u = f.scalars(scalars::u);
@@ -59,18 +64,29 @@ system_stats heat::stats(const field&, const field& f, const step_controller& st
     return system_stats{.stats = {error, min, max}};
 }
 
+//
+// Determine if the computed field is valid by checking the linf error
+//
 bool heat::valid(const system_stats& stats) const
 {
     const auto& v = stats.stats[0];
     return std::isfinite(v) && std::abs(v) <= 1e6;
 }
 
+//
+// parabolic timestep constraint
+//
 real heat::timestep_size(const field&, const step_controller& step) const
 {
     const auto h_min = rs::min(m.h());
     return step.parabolic_cfl() * h_min * h_min / (4 * diffusivity);
 };
 
+//
+// rhs = diffusivity * lap(f) + (dQ/dt - diffusivity * lap(Q))
+//
+// Q is the manufactured solution
+//
 void heat::rhs(field_view f, real time, field_span rhs) const
 {
     auto&& u_rhs = rhs.scalars(scalars::u);
@@ -90,6 +106,11 @@ void heat::rhs(field_view f, real time, field_span rhs) const
     }
 }
 
+//
+// Sets the dirichlet boundary values on f at given time.
+// Also updates the internal neumann_u to apply neumann boundary conditions.
+// This routine MUST be called before evaluating the rhs of the system
+//
 void heat::update_boundary(field_span f, real time)
 {
     auto&& u = f.scalars(scalars::u);
@@ -108,6 +129,14 @@ void heat::update_boundary(field_span f, real time)
 void heat::log(const system_stats&, const step_controller&)
 {
     if (auto logger = spdlog::get("system"); logger) { logger->info("Heat"); }
+}
+
+//
+// Convert the system statistics into a real3 summary
+//
+real3 heat::summary(const system_stats& stats) const
+{
+    return {stats.stats[0], stats.stats[1], stats.stats[2]};
 }
 
 std::optional<heat> heat::from_lua(const sol::table& tbl)

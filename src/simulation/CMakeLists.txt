@@ -6,3 +6,5 @@ target_link_libraries(shoccs-simulation
     sol2::sol2 
     shoccs-system
     shoccs-integrate)
+
+add_unit_test(simulation_cycle "simulation" shoccs-simulation)

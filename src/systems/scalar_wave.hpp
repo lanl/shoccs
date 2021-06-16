@@ -46,6 +46,8 @@ public:
 
     void update_boundary(field_span, real time);
 
+    real3 summary(const system_stats&) const;
+
     void log(const system_stats&, const step_controller&);
 
     system_size size() const;

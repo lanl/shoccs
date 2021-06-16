@@ -79,6 +79,8 @@ public:
 
     void update_boundary(field_span, real time);
 
+    real3 summary(const system_stats&) const;
+
     static std::optional<system> from_lua(const sol::table&);
 
     system_size size() const;

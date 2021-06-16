@@ -1,9 +1,19 @@
 #include "simulation_cycle.hpp"
 
+#include <sol/sol.hpp>
+#include <spdlog/spdlog.h>
+
 #include <iostream>
 
 namespace ccs
 {
+
+simulation_cycle::simulation_cycle(system&& sys,
+                                   step_controller&& controller,
+                                   integrator&& integrate)
+    : sys{MOVE(sys)}, controller{MOVE(controller)}, integrate{MOVE(integrate)}, io{}
+{
+}
 
 real3 simulation_cycle::run()
 {
@@ -45,7 +55,20 @@ real3 simulation_cycle::run()
     if (!controller.done()) {
         return {null_v<real>}; //, time};
     } else {
-        return {}; // stats.Linf_acc, std::sqrt(stats.L2_acc / stats.n_acc)};
+        return sys.summary(stats);
+    }
+}
+
+std::optional<simulation_cycle> simulation_cycle::from_lua(const sol::table& tbl)
+{
+    auto sys_opt = system::from_lua(tbl);
+    auto it_opt = integrator::from_lua(tbl);
+    auto st_opt = step_controller::from_lua(tbl);
+
+    if (sys_opt && it_opt && st_opt) {
+        return simulation_cycle{MOVE(*sys_opt), MOVE(*st_opt), MOVE(*it_opt)};
+    } else {
+        return std::nullopt;
     }
 }
 } // namespace ccs
