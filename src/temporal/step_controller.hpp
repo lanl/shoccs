@@ -24,8 +24,6 @@ public:
     {
     }
 
-    bool done() const { return !(step || time); }
-
     std::optional<real> check_timestep_size(real dt) const
     {
         return dt >= min_dt ? std::optional<real>{dt} : std::nullopt;

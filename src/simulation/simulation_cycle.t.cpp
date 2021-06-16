@@ -83,22 +83,7 @@ TEST_CASE("cycle")
 
     auto cycle_opt = simulation_cycle::from_lua(lua["simulation"]);
     REQUIRE(!!cycle_opt);
-    // auto& step = *st_opt;
 
-    // // // Initialize array with system and ensure zero error
-    // field f{sys(step)};
-    // sys.update_boundary(f, step);
-
-    // field g{sys.size()};
-
-    // const real dt = *sys.timestep_size(f, step);
-
-    // g = it(sys, f, step, dt);
-
-    // step.advance(dt);
-    // sys.update_boundary(g, step);
-
-    // // at this point, all fluid points in g should have a value of m_sol(time, loc)
-    // auto stats = sys.stats(f, g, step);
-    // REQUIRE_THAT(stats.stats[0], Catch::Matchers::WithinAbs(0.0, 1e-13));
+    auto res = cycle_opt->run();
+    REQUIRE_THAT(res[0], Catch::Matchers::WithinAbs(0.0, 1e-13));
 }

@@ -104,7 +104,6 @@ TEST_CASE("integrator - rk4")
     g = it(sys, f, step, dt);
 
     step.advance(dt);
-    sys.update_boundary(g, step);
 
     // at this point, all fluid points in g should have a value of m_sol(time, loc)
     auto stats = sys.stats(f, g, step);
