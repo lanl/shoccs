@@ -2,7 +2,7 @@
 
 #include "types.hpp"
 
-#include "io/FieldIO.hpp"
+#include "io/field_io.hpp"
 #include "systems/system.hpp"
 #include "temporal/integrator.hpp"
 #include "temporal/step_controller.hpp"
@@ -16,7 +16,7 @@ class simulation_cycle
     system sys;
     step_controller controller;
     integrator integrate;
-    FieldIO io;
+    field_io io;
 
 public:
     simulation_cycle() = default;
