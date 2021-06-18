@@ -3,8 +3,8 @@
 
 #include "xdmf.hpp"
 #include <filesystem>
-#include <string>
 #include <fstream>
+#include <string>
 
 namespace fs = std::filesystem;
 
@@ -13,12 +13,16 @@ using namespace ccs;
 TEST_CASE("header")
 {
 
-    std::vector<std::string> var_names{"U, V"};
-    std::vector<std::string> file_names{"U.00000", "V.0000"};
+    std::vector<std::string> var_names{"U", "V"};
+    std::vector<std::string> file_names{"U.00000", "V.00000"};
     auto ix = index_extents{.extents = {3, 4, 5}};
-    auto dom = domain_extents{};
+    auto dom = domain_extents{.min = {0.1, 0.2, 0.3}, .max = {1.1, 1.2, 1.3}};
     auto tmp = fs::temp_directory_path() / "headertest.xmf";
-    auto st = std::fstream{tmp};
 
-    auto ms = xdmf::write(st, ix, dom, 0, 0.0, var_names, file_names);
+    auto writer = xdmf{tmp, ix, dom};
+    writer.write(0, 0.0, var_names, file_names);
+
+    file_names[0] = "U.00001";
+    file_names[1] = "V.00001";
+    writer.write(1, 0.1, var_names, file_names);
 }

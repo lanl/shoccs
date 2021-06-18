@@ -5,24 +5,24 @@
 
 #include <fmt/core.h>
 #include <fmt/ranges.h>
+#include <spdlog/spdlog.h>
 
 #include "xdmf.hpp"
 
 #include <range/v3/view/zip.hpp>
 
-namespace ccs::xdmf
+namespace ccs
 {
 
 namespace
 {
 
-void
-append_xdmf(pugi::xml_document& doc,
-            int step,
-            real time,
-            std::span<const std::string> var_names,
-            std::span<const std::string> file_names,
-            const std::string& dimensions)
+void append_xdmf(pugi::xml_document& doc,
+                 int step,
+                 real time,
+                 std::span<const std::string> var_names,
+                 std::span<const std::string> file_names,
+                 const std::string& dimensions)
 {
     // Get first grid node
     auto time_series = doc.root().first_element_by_path("Xdmf/Domain/Grid");
@@ -64,12 +64,8 @@ std::string header(const int3& i, const domain_extents& d)
 <Domain>
 <Topology TopologyType="3DCoRectMesh" Dimensions="{}"/>
 <Geometry GeometryType="Origin_DxDyDz">
-    <DataItem Format="XML" NumberType="Float" Dimensions="3">
-        {}
-    </DataItem>
-    <DataItem Format="XML" NumberType="Float" Dimensions="3">
-        {}
-    </DataItem>
+<DataItem Format="XML" NumberType="Float" Dimensions="3">{}</DataItem>
+<DataItem Format="XML" NumberType="Float" Dimensions="3">{}</DataItem>
 </Geometry>
 <Grid Name="TimeSeries" GridType="Collection" CollectionType="Temporal">
 </Grid>
@@ -79,73 +75,36 @@ std::string header(const int3& i, const domain_extents& d)
                        fmt::join(i, " "),
                        fmt::join(min, " "),
                        fmt::join(max, " "));
-
-    // // capture dimensions for later use
-    // std::ostringstream dims{};
-    // dims << bounds[0] << " " << bounds[1];
-    // if (bounds[2] > 1) dims << " " << bounds[2];
-    // dimensions = dims.str();
-
-    // std::ostringstream ss{};
-    // ss << R"(<?xml version="1.0" encoding="utf-8"?>
-    //              <!DOCTYPE Xdmf SYSTEM "Xdmf.dtd" []>
-    //              <Xdmf Version="3.0">
-    //              <Domain>
-    //             )";
-    // if (bounds[2] == 1) {
-    //     ss << R"(<Topology TopologyType="2DCoRectMesh" Dimensions=")" << dimensions
-    //        << R"("/>
-    //                      <Geometry GeometryType="Origin_DxDy">
-    //                      <DataItem Format="XML" NumberType="Float" Dimensions="2">)"
-    //        << 0.0 << " " << 0.0 << R"(</DataItem>
-    //                      <DataItem Format="XML" NumberType="Float" Dimensions="2">)"
-    //        << length[0] << " " << length[1] << "</DataItem></Geometry>";
-    // } else {
-    //     ss << R"(<Topology TopologyType="3DCoRectMesh" Dimensions=")" << dimensions
-    //        << R"("/>
-    //                     <Geometry GeometryType="Origin_DxDyDz">
-    //                     <DataItem Format="XML" NumberType="Float" Dimensions="3">)"
-    //        << 0.0 << " " << 0.0 << " " << 0.0 << R"(</DataItem>
-    //                     <DataItem Format="XML" NumberType="Float" Dimensions="3">)"
-    //        << length[0] << " " << length[1] << " " << length[2]
-    //        << "</DataItem></Geometry>";
-    // }
-    // ss << R"(<Grid Name="TimeSeries" GridType="Collection" CollectionType="Temporal"/>
-    //             </Domain></Xdmf>)";
-    // header = ss.str();
 }
 } // namespace
 
 //
 // Main interface to writing xmf file
 //
-std::iostream& write(std::iostream& stream,
-                     index_extents i,
-                     const domain_extents& d,
-                     int grid_number,
-                     real time,
-                     std::span<const std::string> var_names,
-                     std::span<const std::string> file_names)
+void xdmf::write(int grid_number,
+                 real time,
+                 std::span<const std::string> var_names,
+                 std::span<const std::string> file_names)
 {
-    pugi::xml_document doc{};
 
-    auto p = stream.tellp();
-
-    // if initial write then we need to generate the header
+    // if initial write then we need to generate the file with an outline
     if (grid_number == 0) {
-        std::string h = header(i, d);
+        std::string h = header(ix, bounds);
 
-        // build file from scratch
+        // build file from scratch and overwrite whatever is there
+        pugi::xml_document doc{};
         if (!doc.load_string(h.c_str(), pugi::parse_full)) {
             std::cerr << "Failed to load initial xdmf string\n";
             std::terminate();
         }
-    } else {
-        // load file
-        if (!doc.load(stream, pugi::parse_full)) {
-            std::cerr << "Failed to reload xdmf file\n";
-            std::terminate();
-        }
+        doc.save_file(xmf_filename.c_str());
+    }
+
+    // process existing document
+    pugi::xml_document doc{};
+    if (!doc.load_file(xmf_filename.c_str(), pugi::parse_full)) {
+        std::cerr << "Failed to reload xdmf file\n";
+        std::terminate();
     }
 
     append_xdmf(doc,
@@ -153,14 +112,14 @@ std::iostream& write(std::iostream& stream,
                 time,
                 var_names,
                 file_names,
-                fmt::format("{}", fmt::join(i.extents, " ")));
+                fmt::format("{}", fmt::join(ix.extents, " ")));
 
-    // reset stream to begining so we can save it to file
-    stream.seekp(p);
+    doc.save_file(xmf_filename.c_str());
 
-    doc.save(stream);
-
-    return stream;
+    spdlog::info("Update xdmf file: {}, with grid {} at time {}\n",
+                 xmf_filename,
+                 grid_number,
+                 time);
 }
 
 // std::iostream&
@@ -188,4 +147,4 @@ std::iostream& write(std::iostream& stream,
 //     return stream;
 // }
 
-} // namespace ccs::xdmf
+} // namespace ccs
