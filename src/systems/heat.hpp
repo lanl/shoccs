@@ -25,6 +25,8 @@ class heat
 
     scalar_real neumann_u;
 
+    std::vector<std::string> io_names = {"U"};
+
 public:
     heat() = default;
 
@@ -50,6 +52,8 @@ public:
     void update_boundary(field_span, real time);
 
     void log(const system_stats&, const step_controller&);
+
+    std::span<const std::string> names() const;
 
     real3 summary(const system_stats&) const;
 

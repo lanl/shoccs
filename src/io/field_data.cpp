@@ -1,16 +1,19 @@
-#include "field_io.hpp"
+#include "field_data.hpp"
+#include <fstream>
 
 namespace ccs
 {
 
-field_data::field_data(const std::array<int, 3>& bounds)
-    : sz{bounds[0] * bounds[1] * bounds[2]}
+void field_data::write(const field& f, std::span<const std::string> filenames) const
 {
-}
+    unsigned long sz = ix[0] * ix[1] * ix[2] * sizeof(real);
 
-std::ostream& field_data::write(std::ostream& o, const double* data)
-{
-    return o.write(reinterpret_cast<const char*>(data), sizeof(*data) * sz);
+    for (auto&& [fname, sc] : vs::zip(filenames, f.scalars())) {
+        std::ofstream o(fname);
+        const real* d = get<si::D>(sc).data();
+
+        o.write(reinterpret_cast<const char*>(d), sz);
+    }
 }
 
 } // namespace ccs

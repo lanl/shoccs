@@ -84,7 +84,7 @@ std::string header(const int3& i, const domain_extents& d)
 void xdmf::write(int grid_number,
                  real time,
                  std::span<const std::string> var_names,
-                 std::span<const std::string> file_names)
+                 std::span<const std::string> file_names) const
 {
 
     // if initial write then we need to generate the file with an outline

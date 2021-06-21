@@ -48,6 +48,8 @@ public:
 
     real3 summary(const system_stats&) const;
 
+    std::span<const std::string> names() const;
+
     void log(const system_stats&, const step_controller&);
 
     system_size size() const;

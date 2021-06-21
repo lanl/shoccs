@@ -131,6 +131,8 @@ void heat::log(const system_stats&, const step_controller&)
     if (auto logger = spdlog::get("system"); logger) { logger->info("Heat"); }
 }
 
+std::span<const std::string> heat::names() const { return io_names; }
+
 //
 // Convert the system statistics into a real3 summary
 //

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "temporal/step_controller.hpp"
 #include <optional>
 
 namespace ccs
@@ -48,6 +49,48 @@ public:
     {
         interval old{*this};
         --*this;
+        return old;
+    }
+};
+
+class d_interval
+{
+    interval<int> step_interval;
+    interval<real> time_interval;
+    int ndumps;
+    bool step_ready;
+    bool time_ready;
+
+public:
+    d_interval() = default;
+    d_interval(interval<int> step_interval, interval<real> time_interval)
+        : step_interval{MOVE(step_interval)}, time_interval{MOVE(time_interval)}, ndumps{}
+    {
+    }
+
+    bool operator()(const step_controller& step, real dt)
+    {
+        if (!(step_interval || time_interval)) return false;
+
+        step_ready = step_interval(step);
+        time_ready = time_interval(step, dt);
+
+        return step_ready || time_ready || (int)step == 0;
+    }
+
+    int current_dump() const { return ndumps; }
+
+    d_interval& operator++()
+    {
+        if (step_ready) ++step_interval;
+        if (time_ready) ++time_interval;
+        return *this;
+    }
+
+    d_interval operator++(int)
+    {
+        d_interval old{*this};
+        ++*this;
         return old;
     }
 };

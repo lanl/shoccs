@@ -144,6 +144,8 @@ void scalar_wave::update_boundary(field_span f, real time)
     // update domain boundaries
 }
 
+std::span<const std::string> scalar_wave::names() const { return {}; }
+
 void scalar_wave::log(const system_stats&, const step_controller&)
 {
     if (auto logger = spdlog::get("system"); logger) { logger->info("ScalarWave"); }

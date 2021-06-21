@@ -57,4 +57,10 @@ int main()
                     fmt::join(extents, " "),
                     fmt::join(vs::iota(0, extents[0] * extents[1] * extents[2]), " "));
     fmt::print(msg);
+
+    int suffix_length = 6;
+    grid_num++;
+
+    // msg = fmt::format("U.{:06d}", grid_num);
+    fmt::print("U.{:0{}d}\n", grid_num, suffix_length);
 }

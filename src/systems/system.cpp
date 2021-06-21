@@ -76,6 +76,11 @@ real3 system::summary(const system_stats& stats) const
     return std::visit([&stats](auto&& s) { return s.summary(stats); }, v);
 }
 
+std::span<const std::string> system::names() const
+{
+    return std::visit([](auto&& s) { return s.names(); }, v);
+}
+
 system_size system::size() const
 {
     return std::visit([](auto&& current_system) { return current_system.size(); }, v);

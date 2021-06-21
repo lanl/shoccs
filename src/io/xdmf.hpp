@@ -1,7 +1,7 @@
+#pragma once
+
 #include "index_extents.hpp"
 #include "mesh/mesh_types.hpp"
-
-#include <iostream>
 
 namespace ccs
 {
@@ -22,7 +22,7 @@ public:
     void write(int grid_number,
                real time,
                std::span<const std::string> var_names,
-               std::span<const std::string> file_names);
+               std::span<const std::string> file_names) const;
 };
 
 } // namespace ccs

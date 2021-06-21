@@ -279,6 +279,8 @@ void inviscid_vortex::update_boundary(field_span, real) {}
 
 real3 inviscid_vortex::summary(const system_stats&) const { return {}; }
 
+std::span<const std::string> inviscid_vortex::names() const { return {}; }
+
 void inviscid_vortex::log(const system_stats&, const step_controller&)
 {
     if (auto logger = spdlog::get("system"); logger) { logger->info("InvisicdVortex"); }
