@@ -1,5 +1,5 @@
 add_library(shoccs-io field_io.cpp xdmf.cpp field_data.cpp)
-target_link_libraries(shoccs-io PUBLIC pugixml::pugixml fields fmt::fmt sol2::sol2 lua)
+target_link_libraries(shoccs-io PUBLIC pugixml::pugixml fields fmt::fmt sol2::sol2 lua spdlog::spdlog)
 target_include_directories(shoccs-io PUBLIC ..)
 
 add_unit_test(interval "shoccs-io" shoccs-io)
