@@ -6,6 +6,8 @@
 #include <numbers>
 
 #include <sol/sol.hpp>
+
+#include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 
 #include "operators/discrete_operator.hpp"
@@ -35,6 +37,10 @@ heat::heat(mesh&& m,
       neumann_u{m.ss()}
 {
     assert(!!(this->m_sol));
+    logger = spdlog::basic_logger_st("system", "logs/system.csv", true);
+    logger->set_pattern("%v");
+    logger->info("Date,Time,Step,Linf,Min,Max");
+    logger->set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
 }
 
 //
@@ -126,9 +132,12 @@ void heat::update_boundary(field_span f, real time)
     neumann_u | m.neumann<2>(grid_bcs) = l | m_sol.gradient(2, time);
 }
 
-void heat::log(const system_stats&, const step_controller&)
+void heat::log(const system_stats& stats, const step_controller& step)
 {
-    if (auto logger = spdlog::get("system"); logger) { logger->info("Heat"); }
+    if (!logger) return;
+
+    logger->info(
+        fmt::format("{},{},{}", (real)step, (int)step, fmt::join(stats.stats, ",")));
 }
 
 std::span<const std::string> heat::names() const { return io_names; }

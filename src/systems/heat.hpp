@@ -7,6 +7,8 @@
 #include "temporal/step_controller.hpp"
 #include <sol/forward.hpp>
 
+#include <spdlog/spdlog.h>
+
 namespace ccs::systems
 {
 //
@@ -26,6 +28,8 @@ class heat
     scalar_real neumann_u;
 
     std::vector<std::string> io_names = {"U"};
+
+    std::shared_ptr<spdlog::logger> logger;
 
 public:
     heat() = default;

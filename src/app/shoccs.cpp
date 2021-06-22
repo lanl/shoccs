@@ -5,8 +5,8 @@
 
 #include "lib/run_from_sol.hpp"
 
-#include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog.h>
 
 int main(int argc, char* argv[])
 {
@@ -41,20 +41,14 @@ int main(int argc, char* argv[])
     }
 
     // run any extra setup associated with user script
-    if (result.count("script")) {
-        lua.script(result["script"].as<std::string>());
-    }
+    if (result.count("script")) { lua.script(result["script"].as<std::string>()); }
 
     // We alway check the input but exit early if --check has been specified
-    
-    if (result.count("check")) {
-        return 0;
-    }
+
+    if (result.count("check")) { return 0; }
     // do some registry and activate loggers for now
     spdlog::info("Hello, {}!", "world");
-    auto console = spdlog::stdout_color_st("system");
+    // auto console = spdlog::stdout_color_st("system");
 
     ccs::simulation_run(lua["simulation"]);
-
-
 }
