@@ -3,11 +3,14 @@
 #include <fstream>
 #include <iomanip>
 
+#include "mesh/cartesian.hpp"
 #include "temporal/step_controller.hpp"
 
 #include <fmt/core.h>
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/transform.hpp>
+
+#include <spdlog/spdlog.h>
 
 #include <sol/sol.hpp>
 
@@ -59,21 +62,33 @@ bool field_io::write(std::span<const std::string> names,
     return true;
 }
 
-std::optional<field_io>
-field_io::from_lua(const sol::table& tbl, index_extents ix, const domain_extents& dx)
+std::optional<field_io> field_io::from_lua(const sol::table& tbl)
 {
+    auto cart_opt = cartesian::from_lua(tbl);
+    if (!cart_opt) return std::nullopt;
+
     auto io = tbl["io"];
     if (!io.valid()) return field_io{};
 
     sol::optional<int> write_every_step = io["write_every_step"];
-    sol::optional<real> write_every_time = io["write_every_step"];
+    sol::optional<real> write_every_time = io["write_every_time"];
     std::string dir = io["dir"].get_or("io"s);
     int len = io["suffix_length"].get_or(6);
     std::string xmf_base = io["xdmf_filename"].get_or("view.xmf"s);
 
+    if (write_every_step) {
+        spdlog::info("field io will write every {} steps", *write_every_step);
+    } else if (write_every_time) {
+        spdlog::info("field io will write every {} time interval", *write_every_time);
+    } else {
+        spdlog::info("field io will not output data");
+    }
+
     auto d = fs::path{dir};
 
-    auto xdmf_w = xdmf{d / xmf_base, ix, dx};
+    auto&& [ix, dom] = *cart_opt;
+
+    auto xdmf_w = xdmf{d / xmf_base, ix, dom};
     auto data_w = field_data{ix};
     auto step = write_every_step ? interval<int>{*write_every_step} : interval<int>{};
     auto time = write_every_time ? interval<real>{*write_every_time} : interval<real>{};

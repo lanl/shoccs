@@ -232,6 +232,10 @@ std::optional<std::vector<shape>> object_geometry::from_lua(const sol::table& tb
             real radius = t[i]["radius"].get_or(0.0);
             s.push_back(make_sphere(i - 1, center, radius));
 
+            spdlog::info("found sphere of radius {} and center {}",
+                         radius,
+                         fmt::join(center, ", "));
+
         } else if (type == "yz_rect") {
 
             real3 lc{t[i]["lower_corner"][1].get_or(0.0),

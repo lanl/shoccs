@@ -45,6 +45,7 @@ manufactured_solution::from_lua(const sol::table& tbl, int dims)
                        rs::action::transform([](auto c) { return std::tolower(c); });
 
     if (ms_t == "gaussian") {
+        spdlog::info("building gaussian manufactured solution");
         std::vector<real3> center{};
         std::vector<real3> variance{};
         std::vector<real> amplitude{};
@@ -66,6 +67,7 @@ manufactured_solution::from_lua(const sol::table& tbl, int dims)
             return build_ms_gauss(dims, center, variance, amplitude, frequency);
 
     } else if (ms_t == "lua") {
+        spdlog::info("building lua manufactured solution");
         sol::optional<std::function<real(real, const real3&)>> call;
         sol::optional<std::function<real(real, const real3&)>> ddt;
         sol::optional<std::function<real3(real, const real3&)>> grad;

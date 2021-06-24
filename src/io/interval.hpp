@@ -84,6 +84,7 @@ public:
     {
         if (step_ready) ++step_interval;
         if (time_ready) ++time_interval;
+        ++ndumps;
         return *this;
     }
 

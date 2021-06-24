@@ -1,74 +1,98 @@
-#include "discrete_operator.hpp"
 #include "gradient.hpp"
 
-#include "identity_stencil.hpp"
-
-#include "mesh/mesh.hpp"
-
 #include "fields/selector.hpp"
+#include "stencils/stencil.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_vector.hpp>
 
-#include "random/random.hpp"
-
-#include <range/v3/algorithm/count.hpp>
-#include <range/v3/algorithm/equal.hpp>
-#include <range/v3/range/conversion.hpp>
-#include <range/v3/view/filter.hpp>
-#include <range/v3/view/transform.hpp>
+#include <range/v3/all.hpp>
 
 using namespace ccs;
+using Catch::Matchers::Approx;
 
-TEST_CASE("domain")
+const std::vector<real> alpha{
+    -1.47956280234494, 0.261900367793859, -0.145072532538541, -0.224665713988644};
+
+// 2nd order polynomial for use with E2
+constexpr auto f2 = vs::transform([](auto&& loc) {
+    auto&& [x, y, z] = loc;
+    return x * (y + z) + y * (x + z) + z * (x + y) + 3 * x * y * z;
+});
+
+constexpr auto f2_dx = vs::transform([](auto&& loc) {
+    auto&& [x, y, z] = loc;
+    return 2. * (y + z) + 3. * y * z;
+});
+
+constexpr auto f2_dy = vs::transform([](auto&& loc) {
+    auto&& [x, y, z] = loc;
+    return 2. * (x + z) + 3. * x * z;
+});
+
+constexpr auto f2_dz = vs::transform([](auto&& loc) {
+    auto&& [x, y, z] = loc;
+    return 2. * (x + y) + 3. * x * y;
+});
+
+TEST_CASE("E2_1 Domain")
 {
-    // const int3 extents{31, 33, 32};
-    // auto m = mesh::cartesian{real3{-1, -1, -1}, real3{1, 1, 1}, extents};
-    // auto g = mesh::object_geometry{};
+    using T = std::vector<real>;
 
-    auto m = mesh{index_extents{int3{31, 33, 32}},
-                  domain_extents{real3{-1, -1, -1}, real3{1, 1, 1}}};
+    const auto extents = int3{15, 12, 13};
 
-    auto op = discrete_operator(stencils::identity, m)
-                  .to<gradient>(bcs::Grid{bcs::dd, bcs::ff, bcs::dd});
+    auto m = mesh{index_extents{extents},
+                  domain_extents{.min = {0.1, 0.2, 0.3}, .max = {1, 2, 2.2}}};
 
-    randomize();
+    const auto objectBcs = bcs::Object{};
+    const auto loc = m.xyz;
+    const auto st = stencils::make_E2_1(alpha);
 
+    // initialize fields
+    scalar_real u{loc | f2};
+
+    SECTION("DDFFFD")
+    {
+
+        const auto gridBcs = bcs::Grid{bcs::dd, bcs::ff, bcs::fd};
+        // set the exact du we expect based on zeros assigned to dirichlet locations
+        vector_real ex{loc | f2_dx, loc | f2_dy, loc | f2_dz};
+
+        // zero boundaries
+        ex | m.dirichlet(gridBcs) = 0;
+
+        vector_real du{u, u, u};
+        REQUIRE((integer)rs::size(du | sel::Dx) == m.size());
+
+        auto grad = gradient{m, st, gridBcs, objectBcs};
+        du = grad(u);
+
+        REQUIRE_THAT(get<vi::Dx>(ex), Approx(get<vi::Dx>(du)));
+        REQUIRE_THAT(get<vi::Dy>(ex), Approx(get<vi::Dy>(du)));
+        REQUIRE_THAT(get<vi::Dz>(ex), Approx(get<vi::Dz>(du)));
+    }
 #if 0
-    auto u = field::Scalar<std::vector<real>>{m};
-    u | selector::D = mesh::location | vs::transform([](auto&&...) { return pick(); });
-    u | selector::Rxyz = 0;
+    SECTION("DDFFND")
+    {
 
-    auto du = field::Vector<std::vector<real>>{m};
+        const auto gridBcs = bcs::Grid{bcs::dd, bcs::ff, bcs::nd};
+        // set the exact du we expect based on zeros assigned to dirichlet locations
+        scalar<T> ex = (loc | f2_ddx) + (loc | f2_ddy) + (loc | f2_ddz);
 
-    du = gradient(u);
+        // zero boundaries
+        ex | m.dirichlet(gridBcs) = 0;
 
+        // neumann
+        scalar<T> nu{loc | f2_dz};
 
-    auto dd = domain_boundaries{boundary::dirichlet, boundary::dirichlet};
-    auto nn = domain_boundaries{boundary::neumann, boundary::neumann};
-    grid_boundaries grid_b{dd, nn, dd};
-    object_boundaries obj_b{};
+        scalar<T> du{m.ss()};
+        REQUIRE((integer)rs::size(du | sel::D) == m.size());
 
+        auto lap = laplacian{m, stencils::second::E2, gridBcs, objectBcs};
+        du = lap(u, nu);
 
-    auto grad = op::gradient{st, m, g, grid_b, obj_b};
-
-    randomize();
-
-    auto solution =
-        vs::generate_n([]() { return pick(); }, m.size()) | rs::to<std::vector<real>>();
-
-    const x_field f{solution, extents};
-    const x_field df{solution, extents};
-
-    // no objects in domain
-    vector_range<std::vector<real>> f_bvals{};
-    vector_range<std::vector<real>> df_bvals{};
-
-    vector_field<real> dxyz{extents};
-
-    grad(f, df, f_bvals, df_bvals, dxyz);
-
-    vector_field<real> vf{f};
-    REQUIRE_THAT(vf, Approx(dxyz));
+        REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));
+    }
 #endif
 }

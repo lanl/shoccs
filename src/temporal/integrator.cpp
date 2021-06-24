@@ -34,8 +34,10 @@ std::optional<integrator> integrator::from_lua(const sol::table& tbl)
     auto type = m["type"].get_or(std::string{});
 
     if (type == "rk4") {
+        spdlog::info("building rk4 integrator");
         return integrator{integrators::rk4{}};
     } else if (type == "euler") {
+        spdlog::info("building euler integrator");
         return integrator{integrators::euler{}};
     } else {
         spdlog::error("integrator.type must be one of: rk4");

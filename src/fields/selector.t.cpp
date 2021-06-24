@@ -124,6 +124,60 @@ TEST_CASE("planes scalar assignment")
     REQUIRE((s | sel::zmin(i)) == tuple{T{24, 28, 32, 12, 16, -3}});
 }
 
+TEST_CASE("planes vector extraction")
+{
+    using T = std::vector<int>;
+    index_extents i{.extents = int3{2, 3, 4}};
+    vector<T> v{tuple{tuple{vs::iota(0, 24)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(24, 48)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(48, 72)}, tuple{0, 0, 0}}};
+
+    REQUIRE(get<0>(v | sel::xmin(i)) == tuple{vs::iota(0, 12)});
+    REQUIRE(get<1>(v | sel::xmax(i)) == tuple{vs::iota(36, 48)});
+    REQUIRE(rs::equal(get<2>(v | sel::ymin(i)), T{48, 49, 50, 51, 60, 61, 62, 63}));
+    REQUIRE(rs::equal(get<0>(v | sel::ymax(i)), T{8, 9, 10, 11, 20, 21, 22, 23}));
+    REQUIRE((get<1>(v | sel::zmin(i)) == tuple{T{24, 28, 32, 36, 40, 44}}));
+    REQUIRE((get<2>(v | sel::zmax(i)) == tuple{T{51, 55, 59, 63, 67, 71}}));
+
+    vector<T> u{tuple{tuple{vs::iota(48, 72)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(0, 24)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(24, 48)}, tuple{0, 0, 0}}};
+
+    REQUIRE(rs::equal(get<0>(v | sel::xmin(i)).apply(u), get<0>(u | sel::xmin(i))));
+    REQUIRE(rs::equal(get<1>(v | sel::ymax(i)).apply(u), get<1>(u | sel::ymax(i))));
+    REQUIRE(rs::equal(get<2>(v | sel::zmin(i)).apply(u), get<2>(u | sel::zmin(i))));
+}
+
+TEST_CASE("planes vector assignment")
+{
+    using T = std::vector<int>;
+    index_extents i{.extents = int3{2, 3, 4}};
+    vector<T> v{tuple{tuple{vs::iota(0, 24)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(24, 48)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(48, 72)}, tuple{0, 0, 0}}};
+
+    v | sel::xmin(i) = -1;
+
+    REQUIRE(get<0>(v | sel::xmin(i)) == tuple{vs::repeat_n(-1, 12)});
+    REQUIRE(get<1>(v | sel::xmax(i)) == tuple{vs::iota(36, 48)});
+    REQUIRE(get<2>(v | sel::xmin(i)) == tuple{vs::repeat_n(-1, 12)});
+
+    vector<T> u{tuple{tuple{vs::iota(48, 72)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(0, 24)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(24, 48)}, tuple{0, 0, 0}}};
+
+    auto w = v | sel::ymin(i);
+    static_assert(!SimilarTuples<decltype(w), vector<T>>);
+
+    v | sel::ymin(i) = u;
+
+    REQUIRE(rs::equal(get<0>(v | sel::ymin(i)), get<0>(u | sel::ymin(i))));
+    REQUIRE(rs::equal(get<1>(v | sel::ymin(i)), get<1>(u | sel::ymin(i))));
+    REQUIRE(rs::equal(get<2>(v | sel::ymin(i)), get<2>(u | sel::ymin(i))));
+
+    REQUIRE(get<1>(v | sel::zmin(i)) == tuple{T{0, -1, -1, 12, 40, 44}});
+}
+
 TEST_CASE("multi_slice construction")
 {
     std::vector<index_slice> slices{};
@@ -272,6 +326,7 @@ TEST_CASE("multi_slice scalar assignment")
                                           vs::iota(23, 25))});
 }
 
+#if 0
 TEST_CASE("default operators for storing selections in mesh")
 {
 
@@ -407,3 +462,4 @@ TEST_CASE("multi_slice math")
                                           dble(vs::iota(22, 24)) /* sparse */
                                           )});
 }
+#endif

@@ -154,6 +154,7 @@ public:
 };
 
 stencil make_E2_2();
+stencil make_E2_1(std::span<const real>);
 
 namespace second
 {

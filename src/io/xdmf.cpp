@@ -116,10 +116,8 @@ void xdmf::write(int grid_number,
 
     doc.save_file(xmf_filename.c_str());
 
-    spdlog::info("Update xdmf file: {}, with grid {} at time {}\n",
-                 xmf_filename,
-                 grid_number,
-                 time);
+    spdlog::info(
+        "Update xdmf file: {}, with grid {} at time {}", xmf_filename, grid_number, time);
 }
 
 // std::iostream&

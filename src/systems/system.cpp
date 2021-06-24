@@ -97,10 +97,13 @@ std::optional<system> system::from_lua(const sol::table& tbl)
     auto type = m["type"].get_or(std::string{});
 
     if (type == "heat") {
+        spdlog::info("building heat system");
         if (auto opt = systems::heat::from_lua(tbl); opt) return system(MOVE(*opt));
     } else if (type == "scalar wave") {
+        spdlog::info("building scalar_wave system");
         return system(systems::scalar_wave{});
     } else if (type == "inviscid vortex") {
+        spdlog::info("building inviscid_vortex system");
         return system(systems::inviscid_vortex{});
     } else {
         spdlog::error("unrecognized system.type");

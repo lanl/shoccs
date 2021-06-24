@@ -352,9 +352,15 @@ public:
     }
 };
 
+template <int I, typename R, typename F>
+constexpr auto make_plane_view(R&& r, index_extents extents, int plane_coord, F f)
+{
+    return plane_view<I, R, F>{FWD(r), extents, plane_coord, MOVE(f)};
+}
+
 // template <int I, typename Rng>
 // plane_view(mp_int<I>, Rng&&, index_extents, int) -> plane_view<I, Rng>;
-template <auto I>
+template <auto, bool = true>
 struct plane_selection_fn;
 
 template <int I>
@@ -362,19 +368,28 @@ struct plane_selection_base_fn {
     template <Range R>
     constexpr auto operator()(R&& r, index_extents extents, int plane_coord) const
     {
-        return plane_view<I,
-                          R,
-                          decltype(rs::bind_back(
-                              plane_selection_fn<I>{}, extents, plane_coord))>{
+        return make_plane_view<I>(
             FWD(r),
             extents,
             plane_coord,
-            rs::bind_back(plane_selection_fn<I>{}, extents, plane_coord)};
+            rs::bind_back(plane_selection_fn<I>{}, extents, plane_coord));
+    }
+
+    template <Range R, typename F>
+    constexpr auto operator()(R&& r, index_extents extents, int plane_coord, F&& f) const
+    {
+        return make_plane_view<I>(
+            FWD(r),
+            extents,
+            plane_coord,
+            rs::compose(
+                rs::bind_back(plane_selection_fn<I, false>{}, extents, plane_coord),
+                FWD(f)));
     }
 };
 
 // First parameter indicate the direction of the plane {0, 1, 2}
-template <auto I>
+template <auto I, bool wrap>
 struct plane_selection_fn : plane_selection_base_fn<I> {
     using base = plane_selection_base_fn<I>;
 
@@ -384,8 +399,17 @@ struct plane_selection_fn : plane_selection_base_fn<I> {
         if (plane_coord < 0) { plane_coord += extents[I]; }
         if constexpr (Scalar<U>) {
             return tuple{base::operator()(FWD(u) | sel::D, MOVE(extents), plane_coord)};
-        } else {
+        } else if constexpr (Vector<U>) {
+            return tuple{
+                base::operator()(FWD(u) | sel::Dx, extents, plane_coord, sel::Dx),
+                base::operator()(FWD(u) | sel::Dy, extents, plane_coord, sel::Dy),
+                base::operator()(FWD(u) | sel::Dz, extents, plane_coord, sel::Dz)};
+        } else if constexpr (wrap) {
             return tuple{base::operator()(FWD(u), MOVE(extents), plane_coord)};
+        } else {
+            // when the vector selectors get applied, we don't want to add another layer
+            // of tuples
+            return base::operator()(FWD(u), MOVE(extents), plane_coord);
         }
     }
 
@@ -401,8 +425,8 @@ struct plane_selection_fn : plane_selection_base_fn<I> {
 };
 } // namespace detail
 
-template <auto I>
-constexpr auto plane_selection_fn = detail::plane_selection_fn<I>{};
+template <auto I, bool wrap = true>
+constexpr auto plane_selection_fn = detail::plane_selection_fn<I, wrap>{};
 
 //
 // Selectors for planes of data for Tuples, Scalars, and Vectors

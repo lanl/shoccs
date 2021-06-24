@@ -21,7 +21,7 @@ class simulation_cycle
 public:
     simulation_cycle() = default;
 
-    simulation_cycle(system&&, step_controller&&, integrator&&);
+    simulation_cycle(system&&, step_controller&&, integrator&&, field_io&&);
 
     static std::optional<simulation_cycle> from_lua(const sol::table&);
 

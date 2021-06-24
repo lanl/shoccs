@@ -10,13 +10,18 @@ namespace ccs
 
 simulation_cycle::simulation_cycle(system&& sys,
                                    step_controller&& controller,
-                                   integrator&& integrate)
-    : sys{MOVE(sys)}, controller{MOVE(controller)}, integrate{MOVE(integrate)}, io{}
+                                   integrator&& integrate,
+                                   field_io&& io)
+    : sys{MOVE(sys)},
+      controller{MOVE(controller)},
+      integrate{MOVE(integrate)},
+      io{MOVE(io)}
 {
 }
 
 real3 simulation_cycle::run()
 {
+    spdlog::info("begin time stepping");
     // a non-zero time would typically correspond to some kind of restart
     // functionality
     field u0{sys(controller)};
@@ -31,12 +36,13 @@ real3 simulation_cycle::run()
     sys.log(stats, controller);
 
     // initial write
-    io.write(names, u0, controller, 0);
+    io.write(names, u0, controller, .0);
 
     while (controller && sys.valid(stats)) {
 
         const std::optional<real> dt = sys.timestep_size(u0, controller);
         if (!dt) {
+            spdlog::info("required timestep too small");
             return {null_v<real>}; //{huge<double>, time};
         }
         u1 = integrate(sys, u0, controller, *dt);
@@ -49,6 +55,11 @@ real3 simulation_cycle::run()
         io.write(names, u1, controller, *dt);
         sys.log(stats, controller);
 
+        spdlog::info("Cycle: time= {}  step={}, dt={}, s0={}",
+                     (real)controller,
+                     (int)controller,
+                     *dt,
+                     stats.stats[0]);
         // prepare for next iteration to overwrite u0
         using std::swap;
         swap(u0, u1);
@@ -56,6 +67,9 @@ real3 simulation_cycle::run()
 
     // only return Linf if system ends in a valid state
     if (controller) {
+        spdlog::info("simulation ended prematurely at time/step  {} / {}",
+                     (real)controller,
+                     (int)controller);
         return {null_v<real>}; //, time};
     } else {
         return sys.summary(stats);
@@ -67,9 +81,11 @@ std::optional<simulation_cycle> simulation_cycle::from_lua(const sol::table& tbl
     auto sys_opt = system::from_lua(tbl);
     auto it_opt = integrator::from_lua(tbl);
     auto st_opt = step_controller::from_lua(tbl);
+    auto io_opt = field_io::from_lua(tbl);
 
-    if (sys_opt && it_opt && st_opt) {
-        return simulation_cycle{MOVE(*sys_opt), MOVE(*st_opt), MOVE(*it_opt)};
+    if (sys_opt && it_opt && st_opt && io_opt) {
+        return simulation_cycle{
+            MOVE(*sys_opt), MOVE(*st_opt), MOVE(*it_opt), MOVE(*io_opt)};
     } else {
         return std::nullopt;
     }

@@ -47,7 +47,7 @@ int main(int argc, char* argv[])
 
     if (result.count("check")) { return 0; }
     // do some registry and activate loggers for now
-    spdlog::info("Hello, {}!", "world");
+    spdlog::info("Starting shoccs");
     // auto console = spdlog::stdout_color_st("system");
 
     ccs::simulation_run(lua["simulation"]);

@@ -42,8 +42,7 @@ public:
                const step_controller& controller,
                real dt);
 
-    static std::optional<field_io>
-    from_lua(const sol::table&, index_extents, const domain_extents&);
+    static std::optional<field_io> from_lua(const sol::table&);
 };
 
 } // namespace ccs

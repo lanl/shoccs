@@ -14,16 +14,17 @@ TEST_CASE("field_io - default")
     lua.open_libraries(sol::lib::base, sol::lib::math);
     lua.script(R"(
         simulation = {
-            
+            mesh = {
+                index_extents = {31},
+                domain_bounds = {2}
+            }
         }
     )");
-    index_extents ix{};
-    domain_extents dom{};
     step_controller step{};
     std::vector<std::string> names{};
     field f{};
 
-    auto io_opt = field_io::from_lua(lua["simulation"], ix, dom);
+    auto io_opt = field_io::from_lua(lua["simulation"]);
     REQUIRE(!!io_opt);
     auto& io = *io_opt;
 
@@ -37,16 +38,21 @@ TEST_CASE("field_io - data")
     lua.open_libraries(sol::lib::base, sol::lib::math);
     lua.script(R"(
         simulation = {
+            mesh = {
+                index_extents = {2, 3, 4},
+                domain_bounds = {
+                    min = {0.1, 0.2, 0.3},
+                    max = {0.3, 0.5, 0.7}
+                }
+            },
             io = {
                 write_every_step = 1,
                 dir = "io_test"
             }
         }
     )");
-    auto ix = index_extents{.extents = {2, 3, 4}};
-    auto dom = domain_extents{.min = real3{0.1, 0.2, 0.3}, .max = real3{0.3, 0.5, 0.7}};
 
-    auto io_opt = field_io::from_lua(lua["simulation"], ix, dom);
+    auto io_opt = field_io::from_lua(lua["simulation"]);
     REQUIRE(!!io_opt);
     auto& io = *io_opt;
 

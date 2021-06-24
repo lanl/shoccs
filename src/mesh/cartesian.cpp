@@ -2,6 +2,7 @@
 
 #include <range/v3/all.hpp>
 
+#include <fmt/core.h>
 #include <sol/sol.hpp>
 #include <spdlog/spdlog.h>
 
