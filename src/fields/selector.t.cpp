@@ -326,7 +326,125 @@ TEST_CASE("multi_slice scalar assignment")
                                           vs::iota(23, 25))});
 }
 
-#if 0
+TEST_CASE("multi_slice vector extraction")
+{
+    using T = std::vector<int>;
+    using U = std::vector<index_slice>;
+
+    vector<T> v{tuple{tuple{vs::iota(0, 24)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(24, 48)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(48, 72)}, tuple{0, 0, 0}}};
+
+    U whole{{0, 24}};
+    REQUIRE(rs::equal(get<0>(v | sel::multi_slice(whole)), v | sel::Dx));
+    REQUIRE(rs::equal(get<1>(v | sel::multi_slice(whole)), v | sel::Dy));
+    REQUIRE(rs::equal(get<2>(v | sel::multi_slice(whole)), v | sel::Dz));
+
+    U sparse{{1, 2}, {4, 8}, {20, 24}};
+    REQUIRE(rs::equal(get<0>(v | sel::multi_slice(sparse)),
+                      get<0>(v) | sel::multi_slice(sparse)));
+    REQUIRE(rs::equal(get<1>(v | sel::multi_slice(sparse)),
+                      get<1>(v) | sel::multi_slice(sparse)));
+    REQUIRE(rs::equal(get<2>(v | sel::multi_slice(sparse)),
+                      get<2>(v) | sel::multi_slice(sparse)));
+
+    vector<T> u{tuple{tuple{vs::iota(48, 72)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(0, 24)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(24, 48)}, tuple{0, 0, 0}}};
+
+    const auto sp = sel::multi_slice(sparse);
+
+    REQUIRE(rs::equal(get<0>(v | sp).apply(u), get<0>(u) | sp));
+    REQUIRE(rs::equal(get<1>(v | sp).apply(u), get<1>(u) | sp));
+    REQUIRE(rs::equal(get<2>(v | sp).apply(u), get<2>(u) | sp));
+}
+
+TEST_CASE("multi_slice vector assignment")
+{
+    using T = std::vector<int>;
+    using U = std::vector<index_slice>;
+
+    vector<T> v{tuple{tuple{vs::iota(0, 24)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(24, 48)}, tuple{0, 0, 0}},
+                tuple{tuple{vs::iota(48, 72)}, tuple{0, 0, 0}}};
+
+    U a{{0, 24}};
+    auto whole = sel::multi_slice(a);
+
+    v | whole = -1;
+    REQUIRE(get<vi::Dx>(v) == tuple{vs::repeat_n(-1, 24)});
+    REQUIRE(get<vi::Dy>(v) == tuple{vs::repeat_n(-1, 24)});
+    REQUIRE(get<vi::Dz>(v) == tuple{vs::repeat_n(-1, 24)});
+
+    U b{{1, 3}, {6, 12}, {22, 24}};
+    auto sparse = sel::multi_slice(b);
+
+    v | sparse = -2;
+    REQUIRE(get<vi::Dx>(v) == tuple{vs::concat(vs::repeat_n(-1, 1),
+                                               vs::repeat_n(-2, 2),
+                                               vs::repeat_n(-1, 3),
+                                               vs::repeat_n(-2, 6),
+                                               vs::repeat_n(-1, 10),
+                                               vs::repeat_n(-2, 2))});
+    REQUIRE(get<vi::Dx>(v) == get<vi::Dy>(v));
+    REQUIRE(get<vi::Dx>(v) == get<vi::Dz>(v));
+
+    v | sparse = vs::concat(vs::iota(1, 3), vs::iota(6, 12), vs::iota(22, 24));
+    REQUIRE(get<vi::Dx>(v) == tuple{vs::concat(vs::repeat_n(-1, 1),
+                                               vs::iota(1, 3),
+                                               vs::repeat_n(-1, 3),
+                                               vs::iota(6, 12),
+                                               vs::repeat_n(-1, 10),
+                                               vs::iota(22, 24))});
+    REQUIRE(get<vi::Dx>(v) == get<vi::Dy>(v));
+    REQUIRE(get<vi::Dx>(v) == get<vi::Dz>(v));
+
+    v | sparse = tuple{vs::concat(vs::iota(1, 3), vs::iota(6, 12), vs::iota(22, 24)),
+                       vs::concat(vs::iota(25, 27), vs::iota(30, 36), vs::iota(46, 48)),
+                       vs::concat(vs::iota(49, 51), vs::iota(54, 60), vs::iota(70, 72))};
+    REQUIRE(get<vi::Dx>(v) == tuple{vs::concat(vs::repeat_n(-1, 1),
+                                               vs::iota(1, 3),
+                                               vs::repeat_n(-1, 3),
+                                               vs::iota(6, 12),
+                                               vs::repeat_n(-1, 10),
+                                               vs::iota(22, 24))});
+    REQUIRE(get<vi::Dy>(v) == tuple{vs::concat(vs::repeat_n(-1, 1),
+                                               vs::iota(25, 27),
+                                               vs::repeat_n(-1, 3),
+                                               vs::iota(30, 36),
+                                               vs::repeat_n(-1, 10),
+                                               vs::iota(46, 48))});
+    REQUIRE(get<vi::Dz>(v) == tuple{vs::concat(vs::repeat_n(-1, 1),
+                                               vs::iota(49, 51),
+                                               vs::repeat_n(-1, 3),
+                                               vs::iota(54, 60),
+                                               vs::repeat_n(-1, 10),
+                                               vs::iota(70, 72))});
+
+    vector<T> u = v + 1;
+
+    v | sparse = u;
+
+    REQUIRE(get<vi::Dx>(v) == tuple{vs::concat(vs::repeat_n(-1, 1),
+                                               vs::iota(2, 4),
+                                               vs::repeat_n(-1, 3),
+                                               vs::iota(7, 13),
+                                               vs::repeat_n(-1, 10),
+                                               vs::iota(23, 25))});
+    REQUIRE(get<vi::Dy>(v) == tuple{vs::concat(vs::repeat_n(-1, 1),
+                                               vs::iota(26, 28),
+                                               vs::repeat_n(-1, 3),
+                                               vs::iota(31, 37),
+                                               vs::repeat_n(-1, 10),
+                                               vs::iota(47, 49))});
+    REQUIRE(get<vi::Dz>(v) == tuple{vs::concat(vs::repeat_n(-1, 1),
+                                               vs::iota(50, 52),
+                                               vs::repeat_n(-1, 3),
+                                               vs::iota(55, 61),
+                                               vs::repeat_n(-1, 10),
+                                               vs::iota(71, 73))});
+}
+
 TEST_CASE("default operators for storing selections in mesh")
 {
 
@@ -462,4 +580,3 @@ TEST_CASE("multi_slice math")
                                           dble(vs::iota(22, 24)) /* sparse */
                                           )});
 }
-#endif

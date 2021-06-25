@@ -622,8 +622,13 @@ multi_slice_view(Rng&&, std::span<const index_slice>, Fn) -> multi_slice_view<Rn
 struct multi_slice_base_fn {
     template <typename Rng>
     constexpr auto operator()(Rng&& rng, std::span<const index_slice> slices) const;
+
+    template <typename Rng, typename F>
+    constexpr auto
+    operator()(Rng&& rng, std::span<const index_slice> slices, F&& f) const;
 };
 
+template <bool wrap = true>
 struct multi_slice_fn : multi_slice_base_fn {
     using base = multi_slice_base_fn;
 
@@ -632,8 +637,14 @@ struct multi_slice_fn : multi_slice_base_fn {
     {
         if constexpr (Scalar<U>) {
             return tuple{base::operator()(FWD(u) | sel::D, MOVE(slices))};
-        } else {
+        } else if constexpr (Vector<U>) {
+            return tuple{base::operator()(FWD(u) | sel::Dx, slices, sel::Dx),
+                         base::operator()(FWD(u) | sel::Dy, slices, sel::Dy),
+                         base::operator()(FWD(u) | sel::Dz, slices, sel::Dz)};
+        } else if constexpr (wrap) {
             return tuple{base::operator()(FWD(u), MOVE(slices))};
+        } else {
+            return base::operator()(FWD(u), MOVE(slices));
         }
     }
 
@@ -648,6 +659,17 @@ constexpr auto multi_slice_base_fn::operator()(Rng&& rng,
                                                std::span<const index_slice> slices) const
 {
     return multi_slice_view(FWD(rng), slices, rs::bind_back(multi_slice_fn{}, slices));
+}
+
+template <typename Rng, typename F>
+constexpr auto multi_slice_base_fn::operator()(Rng&& rng,
+                                               std::span<const index_slice> slices,
+                                               F&& f) const
+{
+    return multi_slice_view(
+        FWD(rng),
+        slices,
+        rs::compose(rs::bind_back(multi_slice_fn<false>{}, slices), FWD(f)));
 }
 
 } // namespace detail
