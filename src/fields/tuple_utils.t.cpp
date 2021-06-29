@@ -540,3 +540,51 @@ TEST_CASE("make_tuple")
     REQUIRE(get<0>(q) == 5.1);
     REQUIRE(get<1>(q) == 4.2);
 }
+
+TEST_CASE("tuple_cat")
+{
+    auto s = std::tuple<int, int>{-1, -2};
+    auto t = std::tuple<real>{0.1};
+    auto u = std::tuple<std::tuple<unsigned>>{1u};
+
+    auto v = tuple_cat<std::tuple<void*>>(s, t, u);
+
+    static_assert(
+        std::same_as<std::tuple<int, int, real, std::tuple<unsigned>>, decltype(v)>);
+
+    auto&& [a, b, c, d] = v;
+    REQUIRE(a == -1);
+    REQUIRE(b == -2);
+    REQUIRE(c == 0.1);
+    REQUIRE(get<0>(d) == 1u);
+}
+
+TEST_CASE("join")
+{
+    auto s = std::tuple<int, int>{-1, -2};
+    auto t = std::tuple<real>{0.1};
+    auto u = std::tuple<std::tuple<unsigned>>{1u};
+
+    // single nested tuple
+    {
+        auto v = std::tuple<std::tuple<int, int>>{s};
+        auto j = join(v);
+        static_assert(std::same_as<decltype(j), std::tuple<int, int>>);
+        auto&& [a, b] = j;
+        REQUIRE(a == -1);
+        REQUIRE(b == -2);
+    }
+
+    {
+        auto v = std::tuple{s, t, u};
+        auto j = join(v);
+        static_assert(
+            std::same_as<decltype(j), std::tuple<int, int, real, std::tuple<unsigned>>>);
+
+        auto&& [a, b, c, d] = j;
+        REQUIRE(a == -1);
+        REQUIRE(b == -2);
+        REQUIRE(c == 0.1);
+        REQUIRE(get<0>(d) == 1u);
+    }
+}

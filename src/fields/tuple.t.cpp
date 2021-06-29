@@ -499,3 +499,27 @@ TEST_CASE("numeric assignment with non-owning tuple")
     REQUIRE(y == tuple{zeros, zeros});
     REQUIRE(y == tuple{u, v});
 }
+
+TEST_CASE("tuple_cat")
+{
+    auto u = std::vector{-1, -2, -3};
+    auto v = std::vector{1, 2, 3};
+
+    auto x = tuple{v};
+    auto y = tuple{vs::iota(0, 10)};
+    auto z = tuple<std::span<int>, std::span<int>>{u, v};
+
+    auto t = tuple_cat<decltype(z)>(x, y, z);
+
+    REQUIRE(std::tuple_size_v<decltype(t)> == 4);
+
+    auto&& [a, b, c, d] = t;
+
+    a[0] = 0;
+    REQUIRE(v[0] == 0);
+
+    REQUIRE(rs::equal(a, v));
+    REQUIRE(rs::equal(b, vs::iota(0, 10)));
+    REQUIRE(rs::equal(c, u));
+    REQUIRE(rs::equal(d, v));
+}

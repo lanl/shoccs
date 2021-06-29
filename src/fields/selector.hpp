@@ -360,7 +360,7 @@ constexpr auto make_plane_view(R&& r, index_extents extents, int plane_coord, F 
 
 // template <int I, typename Rng>
 // plane_view(mp_int<I>, Rng&&, index_extents, int) -> plane_view<I, Rng>;
-template <auto, bool = true>
+template <auto>
 struct plane_selection_fn;
 
 template <int I>
@@ -382,14 +382,13 @@ struct plane_selection_base_fn {
             FWD(r),
             extents,
             plane_coord,
-            rs::compose(
-                rs::bind_back(plane_selection_fn<I, false>{}, extents, plane_coord),
-                FWD(f)));
+            rs::compose(rs::bind_back(plane_selection_fn<I>{}, extents, plane_coord),
+                        FWD(f)));
     }
 };
 
 // First parameter indicate the direction of the plane {0, 1, 2}
-template <auto I, bool wrap>
+template <auto I>
 struct plane_selection_fn : plane_selection_base_fn<I> {
     using base = plane_selection_base_fn<I>;
 
@@ -404,13 +403,8 @@ struct plane_selection_fn : plane_selection_base_fn<I> {
                 base::operator()(FWD(u) | sel::Dx, extents, plane_coord, sel::Dx),
                 base::operator()(FWD(u) | sel::Dy, extents, plane_coord, sel::Dy),
                 base::operator()(FWD(u) | sel::Dz, extents, plane_coord, sel::Dz)};
-        } else if constexpr (wrap) {
+        } else
             return tuple{base::operator()(FWD(u), MOVE(extents), plane_coord)};
-        } else {
-            // when the vector selectors get applied, we don't want to add another layer
-            // of tuples
-            return base::operator()(FWD(u), MOVE(extents), plane_coord);
-        }
     }
 
     constexpr auto operator()(index_extents extents, int plane_coord) const
@@ -425,8 +419,8 @@ struct plane_selection_fn : plane_selection_base_fn<I> {
 };
 } // namespace detail
 
-template <auto I, bool wrap = true>
-constexpr auto plane_selection_fn = detail::plane_selection_fn<I, wrap>{};
+template <auto I>
+constexpr auto plane_selection_fn = detail::plane_selection_fn<I>{};
 
 //
 // Selectors for planes of data for Tuples, Scalars, and Vectors
@@ -628,7 +622,6 @@ struct multi_slice_base_fn {
     operator()(Rng&& rng, std::span<const index_slice> slices, F&& f) const;
 };
 
-template <bool wrap = true>
 struct multi_slice_fn : multi_slice_base_fn {
     using base = multi_slice_base_fn;
 
@@ -641,10 +634,8 @@ struct multi_slice_fn : multi_slice_base_fn {
             return tuple{base::operator()(FWD(u) | sel::Dx, slices, sel::Dx),
                          base::operator()(FWD(u) | sel::Dy, slices, sel::Dy),
                          base::operator()(FWD(u) | sel::Dz, slices, sel::Dz)};
-        } else if constexpr (wrap) {
-            return tuple{base::operator()(FWD(u), MOVE(slices))};
         } else {
-            return base::operator()(FWD(u), MOVE(slices));
+            return tuple{base::operator()(FWD(u), MOVE(slices))};
         }
     }
 
@@ -667,9 +658,7 @@ constexpr auto multi_slice_base_fn::operator()(Rng&& rng,
                                                F&& f) const
 {
     return multi_slice_view(
-        FWD(rng),
-        slices,
-        rs::compose(rs::bind_back(multi_slice_fn<false>{}, slices), FWD(f)));
+        FWD(rng), slices, rs::compose(rs::bind_back(multi_slice_fn{}, slices), FWD(f)));
 }
 
 } // namespace detail
@@ -720,24 +709,49 @@ public:
     }
 
     template <typename U>
-        requires std::invocable<Fn, U>
-    constexpr auto apply(U&& u) const { return f(FWD(u)); }
+    constexpr auto apply(U&& u) const
+    {
+        constexpr bool nested = requires(optional_view o, U u) { o.base().apply(u); };
+        if constexpr (nested)
+        {
+            return f(this->base().apply(FWD(u)));
+        }
+        else { return f(FWD(u)); }
+    }
 
-    template <typename U>
-        requires requires(optional_view o, U u) { o.base().apply(u); }
-    // std::invocable<decltype(std::declval<optional_view>().base().apply), U>)
-    constexpr auto apply(U&& u) const { return f(this->base().apply(FWD(u))); }
+    // template <typename U>
+    //     requires std::invocable<Fn, U>
+    // constexpr auto apply(U&& u) const { return f(FWD(u)); }
+
+    // template <typename U>
+    //     requires requires(optional_view o, U u) { o.base().apply(u); }
+    // // std::invocable<decltype(std::declval<optional_view>().base().apply), U>)
+    // constexpr auto apply(U&& u) const { return f(this->base().apply(FWD(u))); }
 };
 
 template <typename Rng, typename Fn>
 optional_view(Rng&&, bool, Fn) -> optional_view<Rng, Fn>;
 
 struct optional_view_fn {
+
     template <Range U>
     constexpr auto operator()(U&& u, bool keep_bounds) const
     {
         return tuple{
             optional_view(FWD(u), keep_bounds, rs::bind_back(*this, keep_bounds))};
+    }
+
+    template <TupleLike U>
+        requires(!Range<U>)
+    constexpr auto operator()(U&& u, bool keep_bounds) const
+    {
+        return transform(
+            [keep_bounds](auto&& rng) {
+                return optional_view(FWD(rng),
+                                     keep_bounds,
+                                     rs::bind_back(optional_view_fn{}, keep_bounds));
+            },
+            FWD(u));
     }
 
     constexpr auto operator()(bool keep_bounds) const

@@ -36,6 +36,77 @@ struct make_tuple_fn<T<Ts...>> {
 template <TupleLike T>
 constexpr auto make_tuple = detail::make_tuple_fn<std::remove_cvref_t<T>>{};
 
+//
+// Version of mp11 tuple_cat that works with our tuples rather than just std::tuples
+//
+namespace detail
+{
+template <class L>
+using F = mp_iota<mp_size<L>>;
+
+template <class T, class I>
+using tuple_element = typename std::tuple_element<I::value, T>::type;
+
+template <class T>
+using from_tuple_like =
+    mp_product<tuple_element, mp_list<T>, mp_iota<std::tuple_size<T>>>;
+
+template <typename>
+struct make_tuple_cat_fn;
+
+template <template <typename...> typename T, typename... Ts>
+struct make_tuple_cat_fn<T<Ts...>> {
+private:
+    template <class... Is, class... Ks, class Tp>
+    constexpr auto tuple_cat_(mp_list<Is...>, mp_list<Ks...>, Tp tp) const
+    {
+        return T{get<Ks::value>(get<Is::value>(std::move(tp)))...};
+    }
+
+public:
+    template <typename... Tp>
+    constexpr auto operator()(Tp&&... tp) const
+    {
+        std::size_t const N = sizeof...(Tp);
+        // inner
+        using list1 = mp_list<from_tuple_like<std::remove_cvref_t<Tp>>...>;
+        using list2 = mp_iota_c<N>;
+        using list3 = mp_transform<mp_fill, list1, list2>;
+
+        using inner = mp_apply<mp_append, list3>;
+
+        // outer
+        using list4 = mp_transform<F, list1>;
+
+        using outer = mp_apply<mp_append, list4>;
+
+        //
+        return tuple_cat_(
+            inner(), outer(), std::forward_as_tuple(std::forward<Tp>(tp)...));
+    }
+};
+
+} // namespace detail
+
+template <TupleLike T>
+constexpr auto tuple_cat = detail::make_tuple_cat_fn<std::remove_cvref_t<T>>{};
+
+template <TupleLike T>
+constexpr decltype(auto) join(T&& t)
+{
+    return FWD(t);
+}
+
+template <NestedTuple T>
+constexpr auto join(T&& t)
+{
+    return []<auto... Is>(std::index_sequence<Is...>, auto&& t)
+    {
+        return tuple_cat<T>(get<Is>(t)...);
+    }
+    (sequence<T>, FWD(t));
+}
+
 template <auto I, TupleLike... T>
 constexpr auto get_all(T&&... t)
 {
