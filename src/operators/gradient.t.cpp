@@ -9,6 +9,8 @@
 
 #include <range/v3/all.hpp>
 
+#include <sol/sol.hpp>
+
 using namespace ccs;
 using Catch::Matchers::Approx;
 
@@ -38,8 +40,6 @@ constexpr auto f2_dz = vs::transform([](auto&& loc) {
 
 TEST_CASE("E2_1 Domain")
 {
-    using T = std::vector<real>;
-
     const auto extents = int3{15, 12, 13};
 
     auto m = mesh{index_extents{extents},
@@ -72,27 +72,74 @@ TEST_CASE("E2_1 Domain")
         REQUIRE_THAT(get<vi::Dy>(ex), Approx(get<vi::Dy>(du)));
         REQUIRE_THAT(get<vi::Dz>(ex), Approx(get<vi::Dz>(du)));
     }
-#if 0
-    SECTION("DDFFND")
-    {
+}
 
-        const auto gridBcs = bcs::Grid{bcs::dd, bcs::ff, bcs::nd};
-        // set the exact du we expect based on zeros assigned to dirichlet locations
-        scalar<T> ex = (loc | f2_ddx) + (loc | f2_ddy) + (loc | f2_ddz);
+TEST_CASE("E2 with Objects")
+{
+    sol::state lua;
+    lua.script(R"(
+        simulation = {
+            mesh = {
+                index_extents = {31, 32, 33},
+                domain_bounds = {
+                    min = {0.1, 0.2, 0.3},
+                    max = {1, 2, 2.2}
+                }
+            },
+            domain_boundaries = {
+                xmin = "dirichlet",
+                zmax = "dirichlet"
+            },
+            shapes = {
+                {
+                    type = "sphere",
+                    center = {0.45, 1.011, 1.31},
+                    radius = 0.141,
+                    boundary_condition = "dirichlet"
+                }
+            },
+            scheme = {
+                order = 1,
+                type = "E2",
+                alpha = {-1.47956280234494, 0.261900367793859, -0.145072532538541, -0.224665713988644}
+            }
+        }
+    )");
+    // mesh
+    auto m_opt = mesh::from_lua(lua["simulation"]);
+    REQUIRE(!!m_opt);
+    const mesh& m = *m_opt;
 
-        // zero boundaries
-        ex | m.dirichlet(gridBcs) = 0;
+    // bcs
+    auto bc_opt = bcs::from_lua(lua["simulation"], m.extents());
+    REQUIRE(!!bc_opt);
+    auto&& [gridBcs, objectBcs] = *bc_opt;
 
-        // neumann
-        scalar<T> nu{loc | f2_dz};
+    // scheme
+    auto scheme_opt = stencil::from_lua(lua["simulation"]);
+    REQUIRE(!!scheme_opt);
+    stencil st = *scheme_opt;
 
-        scalar<T> du{m.ss()};
-        REQUIRE((integer)rs::size(du | sel::D) == m.size());
+    const auto loc = m.xyz;
 
-        auto lap = laplacian{m, stencils::second::E2, gridBcs, objectBcs};
-        du = lap(u, nu);
+    // initialize fields
+    scalar_real u{loc | f2};
+    REQUIRE(rs::size(u | sel::Rx) == m.Rx().size());
 
-        REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));
-    }
-#endif
+    // set the exact du we expect based on zeros assigned to dirichlet locations
+    vector_real ex{m.vs()};
+
+    ex | m.fluid = tuple{loc | f2_dx, loc | f2_dy, loc | f2_dz};
+
+    // zero dirichlet boundaries
+    ex | m.dirichlet(gridBcs) = 0;
+
+    vector_real du{m.vs()};
+
+    auto grad = gradient{m, st, gridBcs, objectBcs};
+    du = grad(u);
+
+    REQUIRE_THAT(get<vi::Dx>(ex), Approx(get<vi::Dx>(du)));
+    REQUIRE_THAT(get<vi::Dy>(ex), Approx(get<vi::Dy>(du)));
+    REQUIRE_THAT(get<vi::Dz>(ex), Approx(get<vi::Dz>(du)));
 }

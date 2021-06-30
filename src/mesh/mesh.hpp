@@ -85,6 +85,11 @@ public:
         return tuple{tuple{size()}, tuple{Rx().size(), Ry().size(), Rz().size()}};
     }
 
+    auto vs() const // vector size
+    {
+        return tuple{ss(), ss(), ss()};
+    }
+
     template <int I = -1>
     auto dirichlet(const bcs::Grid& g) const
     {
