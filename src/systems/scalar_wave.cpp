@@ -4,14 +4,24 @@
 #include "real3_operators.hpp"
 #include <cmath>
 #include <numbers>
+
+#include <sol/sol.hpp>
+
+#include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 
 #include "operators/discrete_operator.hpp"
 
+#include <range/v3/algorithm/max.hpp>
+#include <range/v3/algorithm/min.hpp>
+#include <range/v3/algorithm/minmax.hpp>
 #include <range/v3/view/transform.hpp>
 
 namespace ccs::systems
 {
+namespace
+{
+constexpr auto abs = lift([](auto&& x) { return std::abs(x); });
 // system variables to be used in this system
 enum class scalars : int { u };
 
@@ -19,138 +29,133 @@ constexpr real twoPI = 2 * std::numbers::pi_v<real>;
 
 // negative gradient - coefficients of gradient
 template <int I>
-struct neg_G {
-    real3 center;
-    real radius;
+constexpr auto neg_G(const real3& center, real radius)
+{
+    return vs::transform([=](auto&& location) {
+        return -(get<I>(location) - get<I>(center)) / length(location - center);
+    });
+}
 
-    template <typename T>
-    real operator()(T&& location) const
-    {
-        return -(std::get<I>(location) - std::get<I>(center)) / length(location - center);
-    }
-};
-
-struct solution {
-    real3 center;
-    real radius;
-    real time;
-
-    //    real operator()(const mesh_object_info& info) const { return
-    //    (*this)(info.position); }
-
-    template <typename T>
-    real operator()(T&& location) const
-    {
+constexpr auto solution(const real3& center, real radius, real time)
+{
+    return vs::transform([=](auto&& location) {
         return std::sin(twoPI * (length(location - center) - radius - time));
-    }
+    });
+}
 
-    // gradient for neumann boundaries
-    real3 grad(const real3& location) const
-    {
-        const auto d = location - center;
-        return twoPI * d * std::cos(twoPI * (length(d) - radius - time)) / length(d);
-    }
-};
+} // namespace
 
-scalar_wave::scalar_wave( // cart_mesh&& cart_,
-                          // mesh&& cut_mesh_,
-                          // discrete_operator&& grad_,
-                          // field_io& io,
-    real3 center_,
-    real radius_) //,
-                  // double stats_begin_accumulate_)
-    : grad{}, grad_G{}, du{}, center{center_}, radius{radius_}
+scalar_wave::scalar_wave(mesh&& m_,
+                         bcs::Grid&& grid_bcs,
+                         bcs::Object&& object_bcs,
+                         stencil st,
+                         real3 center,
+                         real radius)
+    : m{MOVE(m_)},
+      grid_bcs{MOVE(grid_bcs)},
+      object_bcs{MOVE(object_bcs)},
+      grad{gradient(this->m, st, this->grid_bcs, this->object_bcs)},
+      center{center},
+      radius{radius}
 {
 
-    // Initialize the operator
-    auto op = discrete_operator{};
-    grad = op.to<gradient>(bcs::Grid{}); // domainBoundaries, ObjectBoundaries);
     // Initialize wave speeds
-    // grad_G | sel::D =
-    //     mesh::location | field::Tuple{vs::transform(neg_G<0>{center, radius}),
-    //                                   vs::transform(neg_G<1>{center, radius}),
-    //                                   vs::transform(neg_G<2>{center, radius})};
+    grad_G | m.fluid = m.vxyz | tuple{neg_G<0>(center, radius),
+                                      neg_G<1>(center, radius),
+                                      neg_G<2>(center, radius)};
+    // need to change this for outflow
     grad_G | sel::R = 0;
+
+    logger = spdlog::basic_logger_st("system", "logs/system.csv", true);
+    logger->set_pattern("%v");
+    logger->info("Date,Time,Step,Linf,Min,Max");
+    logger->set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
 }
 
-real scalar_wave::timestep_size(const field&, const step_controller&) const
+real scalar_wave::timestep_size(const field&, const step_controller& step) const
 {
-    // will need some notion of mesh size to implement this
-    // return cfl * std::min(m.h());
-    return null_v<>;
+    const auto h_min = rs::min(m.h());
+    return step.hyperbolic_cfl() * h_min;
 }
 
-// Evaluate the rhs of the system using the current u
-// this shouldn't be a std::vector<double>... This should be encapsulated in some
-// kind of field, vector/scalar field seems inadequate.  What would a system field look
-// like? It could contain vector and scalar fields.  Should it be owning (vectors) or
-// non-owning (spans)? If field be a templated entity than the call operator can't
-// be virtual (perhaps tag_invoke)?
-void scalar_wave::operator()(field& f, const step_controller& controller)
+//
+// sets the field f to the solution
+//
+void scalar_wave::operator()(field& f, const step_controller& c)
 {
-    // ensure the field is the right size
-    if (controller.simulation_step() == 0) {
-        // if (field.nfields() == 1 && field.extents() == int3{} && field.solid().size()
-        // != 0) {
-        // adjust the sizes
-        // f.nscalars(1).nvectors(0).extents(int3{}).solid(0).object_boundaries(int3{});
-    }
+
     // extract the field components to initialize
     auto&& u = f.scalars(scalars::u);
+    auto sol = m.xyz | solution(center, radius, c);
 
-    const auto time = controller.simulation_time();
-
-    // auto sol = mesh::location | vs::transform(solution{center, radius, time});
-    // u | sel::D = sol;
-    // u | sel::R = sol;
+    u | sel::D = 0;
+    u | m.fluid = sol;
+    u | sel::R = sol;
 }
 
-system_stats scalar_wave::stats(const field&, const field&, const step_controller&) const
+//
+// Compute the linf error as well as the min/max of the field
+//
+system_stats
+scalar_wave::stats(const field&, const field& f, const step_controller& c) const
 {
-    // this->stats_(stats0, time >= stats_begin_accumulate, time, solution{center,
-    // radius}); return stats0;
-    return {};
-}
-
-bool scalar_wave::valid(const system_stats&) const { return false; }
-
-void scalar_wave::rhs(field_view f, real, field_span df)
-{
-    // here we assume that the boundary values have been properly set in u
-    // but what to do do about neumann bc's?  Should we store them in du?
-    // Or should we just have a separate field for them?  Keep them separate for now
-
-    // for multivariate systems, will need to extract the variables and apply different
-    // operators on them
     auto&& u = f.scalars(scalars::u);
-    // grad should d/dx, d/dy, d/dz on F and Rx, Ry, Rz, respectively
-    // du = gradient(u);
-    grad(u);
-    // compute grad_G . u_rhs and store in v_rhs
-    auto&& u_rhs = df.scalars(scalars::u);
+    auto sol = m.xyz | solution(center, radius, c);
+    auto [min, max] = rs::minmax(u | m.fluid);
+    real error = rs::max(abs(u - sol) | m.fluid);
+    return system_stats{.stats = {error, min, max}};
+}
+
+//
+// Determine if the computed field is valid by checking the linf error
+//
+bool scalar_wave::valid(const system_stats& stats) const
+{
+    const auto& v = stats.stats[0];
+    return std::isfinite(v) && std::abs(v) <= 1e6;
+}
+
+//
+// rhs = - grad(G) . grad(u) -> dot(neg_G, du)
+//
+void scalar_wave::rhs(field_view f, real, field_span rhs)
+{
+    auto&& u = f.scalars(scalars::u);
+    auto&& u_rhs = rhs.scalars(scalars::u);
+
+    du = grad(u);
     u_rhs = dot(grad_G, du);
 }
 
-real3 scalar_wave::summary(const system_stats&) const { return {}; }
+real3 scalar_wave::summary(const system_stats& stats) const
+{
+    return {stats.stats[0], stats.stats[1], stats.stats[2]};
+}
 
 void scalar_wave::update_boundary(field_span f, real time)
 {
-    // update object boundaries
-    // auto sol = mesh::location | vs::transform(solution{center, radius, time});
-    // auto&& [u] = f.scalars(scalars::u);
+    auto&& u = f.scalars(scalars::u);
+    auto sol = m.xyz | solution(center, radius, time);
 
-    // u | sel::R = sol;
-
-    // update domain boundaries
+    u | m.dirichlet(grid_bcs) = sol;
+    // assumes dirichlet right now
+    u | sel::R = sol;
 }
 
-std::span<const std::string> scalar_wave::names() const { return {}; }
+std::span<const std::string> scalar_wave::names() const { return io_names; }
 
-void scalar_wave::log(const system_stats&, const step_controller&)
+void scalar_wave::log(const system_stats& stats, const step_controller& step)
 {
-    if (auto logger = spdlog::get("system"); logger) { logger->info("ScalarWave"); }
+    if (!logger) return;
+    logger->info(
+        fmt::format("{},{},{}", (real)step, (int)step, fmt::join(stats.stats, ",")));
 }
 
-system_size scalar_wave::size() const { return {}; }
+system_size scalar_wave::size() const { return {1, 0, m.ss()}; }
+
+std::optional<scalar_wave> scalar_wave::from_lua(const sol::table&)
+{
+    return std::nullopt;
+}
 
 } // namespace ccs::systems

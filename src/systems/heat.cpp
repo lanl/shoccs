@@ -123,7 +123,7 @@ void heat::update_boundary(field_span f, real time)
     auto l = m.xyz;
 
     u | m.dirichlet(grid_bcs) = l | m_sol(time);
-    // assumes dirichlet right how
+    // assumes dirichlet right now
     u | sel::R = l | m_sol(time);
 
     // set possible neumann bcs;

@@ -101,7 +101,8 @@ std::optional<system> system::from_lua(const sol::table& tbl)
         if (auto opt = systems::heat::from_lua(tbl); opt) return system(MOVE(*opt));
     } else if (type == "scalar wave") {
         spdlog::info("building scalar_wave system");
-        return system(systems::scalar_wave{});
+        if (auto opt = systems::scalar_wave::from_lua(tbl); opt)
+            return system(MOVE(*opt));
     } else if (type == "inviscid vortex") {
         spdlog::info("building inviscid_vortex system");
         return system(systems::inviscid_vortex{});

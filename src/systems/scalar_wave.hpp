@@ -5,19 +5,20 @@
 #include "temporal/step_controller.hpp"
 #include "types.hpp"
 
+#include <sol/forward.hpp>
+#include <spdlog/spdlog.h>
+
 namespace ccs::systems
 {
 
 // the system of pdes to solve is in this class
 class scalar_wave
 {
-    // required data structure
-    gradient grad;
+    mesh m;
+    bcs::Grid grid_bcs;
+    bcs::Object object_bcs;
 
-    // how should one initialize these?  Do they need the mesh or do they
-    // only require some reduced set of information
-    vector<std::vector<real>> grad_G;
-    vector<std::vector<real>> du;
+    gradient grad;
 
     // required data
     // std::vector<double> grad_c;
@@ -26,13 +27,16 @@ class scalar_wave
     real3 center; // center of the circular wave
     real radius;
 
-    // system_stats stats0;           // the stats associated with the previous timestep
-    // double stats_begin_accumulate; // time when accumululated errors begin;
+    vector_real grad_G;
+    vector_real du;
+
+    std::vector<std::string> io_names = {"U"};
+    std::shared_ptr<spdlog::logger> logger;
 
 public:
     scalar_wave() = default;
 
-    scalar_wave(real3 center, real radius);
+    scalar_wave(mesh&&, bcs::Grid&&, bcs::Object&&, stencil, real3 center, real radius);
 
     void operator()(field& s, const step_controller&);
 
@@ -53,6 +57,8 @@ public:
     void log(const system_stats&, const step_controller&);
 
     system_size size() const;
+
+    static std::optional<scalar_wave> from_lua(const sol::table&);
 };
 
 } // namespace ccs::systems

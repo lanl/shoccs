@@ -134,7 +134,10 @@ mesh::mesh(const index_extents& extents,
       ymax{sel::ymax(extents)},
       zmin{sel::zmin(extents)},
       zmax{sel::zmax(extents)},
-      xyz{cart.domain(), geometry.domain()}
+      xyz{cart.domain(), geometry.domain()},
+      vxyz{tuple{tuple{cart.domain(), geometry.domain()},
+                 tuple{cart.domain(), geometry.domain()},
+                 tuple{cart.domain(), geometry.domain()}}}
 
 {
     init_line<0>(lines_[0], cart.extents(), geometry.R(0));

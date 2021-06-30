@@ -114,5 +114,12 @@ public:
     tuple<decltype(std::declval<cartesian>().domain()),
           decltype(std::declval<object_geometry>().domain())>
         xyz;
+    tuple<tuple<decltype(std::declval<cartesian>().domain()),
+                decltype(std::declval<object_geometry>().domain())>,
+          tuple<decltype(std::declval<cartesian>().domain()),
+                decltype(std::declval<object_geometry>().domain())>,
+          tuple<decltype(std::declval<cartesian>().domain()),
+                decltype(std::declval<object_geometry>().domain())>>
+        vxyz;
 };
 } // namespace ccs

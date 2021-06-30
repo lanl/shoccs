@@ -313,6 +313,8 @@ TEST_CASE("mesh location span")
 
     const auto sol = loc | t;
 
+    REQUIRE(Vector<decltype(sol)>);
+
     v | sel::D = sol;
     REQUIRE(rs::equal(v | sel::Dx, vs::cartesian_product(x, y, z) | t));
 
@@ -336,6 +338,10 @@ TEST_CASE("mesh location span")
     REQUIRE(rs::equal(v | sel::xRx, rx | u));
     REQUIRE(rs::equal(v | sel::yRy, ry | u));
     REQUIRE(rs::equal(v | sel::zRz, rz | u));
+
+    REQUIRE(Vector<decltype(loc | tuple{vs::transform(loc_fn<0>{}),
+                                        vs::transform(loc_fn<1>{}),
+                                        vs::transform(loc_fn<2>{})})>);
 
     v | sel::Rx = loc | sel::Rx |
                   tuple{vs::transform(loc_fn<0>{}),

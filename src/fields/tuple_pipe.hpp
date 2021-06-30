@@ -36,7 +36,9 @@ private:
     {
         // Assume that if both are nested then we will preserve the structure
         // otherwise join the result
-        if constexpr (NestedTuple<U> && NestedTuple<F>)
+        if constexpr (NestedTuple<U> &&
+                      (NestedTuple<F> || (std::tuple_size_v<std::remove_cvref_t<U>> ==
+                                          std::tuple_size_v<std::remove_cvref_t<F>>)))
             return transform(
                 [](auto&& e, auto fn) { return FWD(e) | fn; }, FWD(u), FWD(f));
         else {
@@ -63,7 +65,8 @@ private:
     }
 
     template <TupleLike U, TupleLike F>
-        requires(std::derived_from<std::remove_cvref_t<U>, Type> && !SimilarTuples<U, F>)
+        requires(std::derived_from<std::remove_cvref_t<U>, Type> &&
+                 !TuplePipeableOver<F, U> && !SimilarTuples<U, F>)
     friend constexpr auto operator|(U&& u, F&& f)
     {
         return join(transform([&u](auto fn) { return u | fn; }, FWD(f)));
