@@ -110,9 +110,7 @@ struct selection_view_fn {
         using List = mp_at<Indices, mp_size_t<0>>;
         static_assert(!mp_empty<List>::value, "selection operation not permitted");
 
-        // Note that we don't wrap this in a tuple, otherwise we end up with the
-        // wrong nesting levels in the tuple assignment operator
-        return detail::make_selection<List>(tuple{get<List>(FWD(u))});
+        return tuple{detail::make_selection<List>(tuple{get<List>(FWD(u))})};
     }
 };
 

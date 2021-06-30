@@ -11,8 +11,6 @@ using namespace ccs;
 constexpr auto plus = lift(std::plus{});
 constexpr auto dble = [](auto&& v) { return plus(v, v); };
 
-#if 0
-
 TEST_CASE("planes construction")
 {
     index_extents t{};
@@ -458,7 +456,7 @@ TEST_CASE("default operators for storing selections in mesh")
 
     F = sel::multi_slice(v);
 }
-#endif
+
 TEST_CASE("optional tuple")
 {
     using T = std::vector<int>;
@@ -528,63 +526,24 @@ TEST_CASE("optional scalar")
     REQUIRE((s | sel::xmin(i)) == tuple{vs::iota(0, 12)});
     REQUIRE((s | sel::xmax(i)) == tuple{vs::repeat_n(1, 12)});
 
-    auto plane_s = s | tuple{sel::xmin(i),
-                             sel::xmax(i),
-                             sel::ymin(i),
-                             sel::ymax(i),
-                             sel::zmin(i),
-                             sel::zmax(i)};
-    using s_t = decltype(s);
-    using plane_s_t = decltype(plane_s);
-    using plane_t = decltype(tuple{sel::xmin(i),
-                                   sel::xmax(i),
-                                   sel::ymin(i),
-                                   sel::ymax(i),
-                                   sel::zmin(i),
-                                   sel::zmax(i)});
-    REQUIRE(std::tuple_size_v<plane_s_t> == 6);
-    REQUIRE(TupleLike<decltype(s)>);
-    REQUIRE(!TuplePipeableOver<plane_t, s_t>);
-    REQUIRE(!SimilarTuples<plane_t, s_t>);
+    scalar<T> v{tuple{vs::iota(24, 48)}, tuple{0, 0, 0}};
 
-    REQUIRE(!NestedTuple<plane_s_t>);
-    REQUIRE(SimilarTuples<plane_s_t, plane_t>);
-
-    using opt_t = decltype(tuple{sel::optional_view(false),
-                                 sel::optional_view(true),
-                                 sel::optional_view(false),
-                                 sel::optional_view(false),
-                                 sel::optional_view(false),
-                                 sel::optional_view(false)});
-    REQUIRE(TuplePipeableOver<opt_t, plane_s_t>);
-
-    auto opt_s = plane_s | tuple{sel::optional_view(false),
-                                 sel::optional_view(true),
-                                 sel::optional_view(false),
-                                 sel::optional_view(false),
-                                 sel::optional_view(false),
-                                 sel::optional_view(false)};
-
-    REQUIRE(!NestedTuple<decltype(opt_s)>);
-
-    // scalar<T> v{tuple{vs::iota(24, 48)}, tuple{0, 0, 0}};
-
-    // s | (tuple{sel::xmin(i),
-    //            sel::xmax(i),
-    //            sel::ymin(i),
-    //            sel::ymax(i),
-    //            sel::zmin(i),
-    //            sel::zmax(i)} |
-    //      tuple{sel::optional_view(false),
-    //            sel::optional_view(true),
-    //            sel::optional_view(false),
-    //            sel::optional_view(false),
-    //            sel::optional_view(false),
-    //            sel::optional_view(false)}) = v;
-    // REQUIRE((s | sel::xmin(i)) == tuple{vs::iota(0, 12)});
-    // REQUIRE((s | sel::xmax(i)) == tuple{vs::iota(36, 48)});
+    s |
+        tuple{sel::xmin(i),
+              sel::xmax(i),
+              sel::ymin(i),
+              sel::ymax(i),
+              sel::zmin(i),
+              sel::zmax(i)} |
+        tuple{sel::optional_view(false),
+              sel::optional_view(true),
+              sel::optional_view(false),
+              sel::optional_view(false),
+              sel::optional_view(false),
+              sel::optional_view(false)} = v;
+    REQUIRE((s | sel::xmin(i)) == tuple{vs::iota(0, 12)});
+    REQUIRE((s | sel::xmax(i)) == tuple{vs::iota(36, 48)});
 }
-#if 0
 
 TEST_CASE("optional vector")
 {
@@ -612,6 +571,10 @@ TEST_CASE("optional vector")
     REQUIRE(get<2>(v | sel::xmin(i)) == tuple{vs::iota(48, 60)});
     REQUIRE(get<2>(v | sel::xmax(i)) == tuple{vs::repeat_n(0, 12)});
 
+    using R = std::remove_cvref_t<decltype(r)>;
+    REQUIRE(!NestedTuple<R>);
+    REQUIRE(std::tuple_size_v<R> == 18);
+
     v | (tuple{sel::xmin(i),
                sel::xmax(i),
                sel::ymin(i),
@@ -632,36 +595,24 @@ TEST_CASE("optional vector")
                 tuple{tuple{vs::iota(0, 24)}, tuple{0, 0, 0}},
                 tuple{tuple{vs::iota(24, 48)}, tuple{0, 0, 0}}};
 
-    auto comb = (tuple{sel::xmin(i),
-                       sel::xmax(i),
-                       sel::ymin(i),
-                       sel::ymax(i),
-                       sel::zmin(i),
-                       sel::zmax(i)} |
-                 tuple{sel::optional_view(false),
-                       sel::optional_view(true),
-                       sel::optional_view(false),
-                       sel::optional_view(false),
-                       sel::optional_view(false),
-                       sel::optional_view(false)});
-
-    // get this to work!
-    // get<0>(v | comb).apply(u);
-
-    // s | (tuple{sel::xmin(i),
-    //            sel::xmax(i),
-    //            sel::ymin(i),
-    //            sel::ymax(i),
-    //            sel::zmin(i),
-    //            sel::zmax(i)} |
-    //      tuple{sel::optional_view(false),
-    //            sel::optional_view(true),
-    //            sel::optional_view(false),
-    //            sel::optional_view(false),
-    //            sel::optional_view(false),
-    //            sel::optional_view(false)}) = v;
-    // REQUIRE((s | sel::xmin(i)) == tuple{vs::iota(0, 12)});
-    // REQUIRE((s | sel::xmax(i)) == tuple{vs::iota(36, 48)});
+    v | (tuple{sel::xmin(i),
+               sel::xmax(i),
+               sel::ymin(i),
+               sel::ymax(i),
+               sel::zmin(i),
+               sel::zmax(i)} |
+         tuple{sel::optional_view(false),
+               sel::optional_view(true),
+               sel::optional_view(false),
+               sel::optional_view(false),
+               sel::optional_view(false),
+               sel::optional_view(false)}) = u;
+    REQUIRE(get<0>(v | sel::xmin(i)) == tuple{vs::iota(0, 12)});
+    REQUIRE(get<1>(v | sel::xmin(i)) == tuple{vs::iota(24, 36)});
+    REQUIRE(get<2>(v | sel::xmin(i)) == tuple{vs::iota(48, 60)});
+    REQUIRE(get<0>(v | sel::xmax(i)) == tuple{vs::iota(60, 72)});
+    REQUIRE(get<1>(v | sel::xmax(i)) == tuple{vs::iota(12, 24)});
+    REQUIRE(get<2>(v | sel::xmax(i)) == tuple{vs::iota(36, 48)});
 }
 
 TEST_CASE("multi_slice math")
@@ -701,4 +652,3 @@ TEST_CASE("multi_slice math")
                                           dble(vs::iota(22, 24)) /* sparse */
                                           )});
 }
-#endif

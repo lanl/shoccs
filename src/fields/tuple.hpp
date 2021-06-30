@@ -113,17 +113,13 @@ struct tuple<Args...> : view_tuple<Args...> {
 
     template <TupleLike T>
         requires(!std::is_assignable_v<view&, T> && !SimilarTuples<tuple, T>)
-    // template <typename T>
     constexpr tuple& operator=(T&& t)
     {
-        // const auto& v = get<0>(*this);
         *this = [ this, &t ]<auto... Is>(std::index_sequence<Is...>)
         {
-            // return make_tuple<tuple>(get<Is>(*this).apply(t)...);
             return tuple_cat<tuple>(get<Is>(*this).apply(t)...);
         }
         (sequence<tuple>);
-        //*this = make_tuple<tuple>(get<0>(*this).apply(FWD(t)));
         return *this;
     }
 

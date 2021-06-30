@@ -64,7 +64,7 @@ private:
     }
 
 public:
-    template <typename... Tp>
+    template <TupleLike... Tp>
     constexpr auto operator()(Tp&&... tp) const
     {
         std::size_t const N = sizeof...(Tp);
