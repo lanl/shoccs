@@ -56,7 +56,9 @@ scalar_wave::scalar_wave(mesh&& m_,
       object_bcs{MOVE(object_bcs)},
       grad{gradient(this->m, st, this->grid_bcs, this->object_bcs)},
       center{center},
-      radius{radius}
+      radius{radius},
+      grad_G{m.vs()},
+      du{m.vs()}
 {
 
     // Initialize wave speeds
@@ -132,6 +134,9 @@ real3 scalar_wave::summary(const system_stats& stats) const
     return {stats.stats[0], stats.stats[1], stats.stats[2]};
 }
 
+//
+// Must be called before computing the rhs
+//
 void scalar_wave::update_boundary(field_span f, real time)
 {
     auto&& u = f.scalars(scalars::u);
@@ -153,8 +158,59 @@ void scalar_wave::log(const system_stats& stats, const step_controller& step)
 
 system_size scalar_wave::size() const { return {1, 0, m.ss()}; }
 
-std::optional<scalar_wave> scalar_wave::from_lua(const sol::table&)
+std::optional<scalar_wave> scalar_wave::from_lua(const sol::table& tbl)
 {
+    // assume we can only get here if simulation.system.type == "scalar_wave" so check
+    // for the rest
+    real3 center;
+    real radius;
+    // if the center/radius was specified in the system table, use it.
+    if (tbl["system"]["center"].valid() && tbl["system"]["radius"].valid()) {
+
+        auto c = tbl["system"]["center"];
+        center = {c[1].get_or(0.0), c[2].get_or(0.0), c[3].get_or(0.0)};
+        radius = tbl["system"]["radius"];
+
+    } else if (tbl["shapes"].valid()) {
+        // attempt to extract the center/radius from the first specified shape in the
+        // shapes table
+        bool found{false};
+        auto t = tbl["shapes"];
+        for (int i = 1; t[i].valid() && !found; i++) {
+            found = (t[i]["type"].get_or(std::string{}) == "sphere");
+            if (found) {
+                center = {t[i]["center"][1].get_or(0.0),
+                          t[i]["center"][2].get_or(0.0),
+                          t[i]["center"][3].get_or(0.0)};
+                radius = t[i]["radius"].get_or(0.0);
+            }
+        }
+        if (!found) {
+            spdlog::error("No valid spheres found in simulation.shapes for scalar_wave");
+            return std::nullopt;
+        }
+    } else {
+        spdlog::error(
+            "a system.center / system.radius must be specified for scalar_wave");
+        return std::nullopt;
+    }
+
+    auto mesh_opt = mesh::from_lua(tbl);
+    if (!mesh_opt) return std::nullopt;
+
+    auto bc_opt = bcs::from_lua(tbl, mesh_opt->extents());
+    auto st_opt = stencil::from_lua(tbl);
+
+    if (bc_opt && st_opt) {
+
+        return scalar_wave{MOVE(*mesh_opt),
+                           MOVE(bc_opt->first),
+                           MOVE(bc_opt->second),
+                           *st_opt,
+                           center,
+                           radius};
+    }
+
     return std::nullopt;
 }
 
