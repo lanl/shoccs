@@ -14,8 +14,6 @@ namespace ccs
 
 derivative::derivative(int dir,
                        const mesh& m,
-                       // real h,
-                       // std::span<const mesh::line> lines,
                        const stencil& st,
                        const bcs::Grid& grid_bcs,
                        const bcs::Object& obj_bcs)
@@ -36,6 +34,9 @@ derivative::derivative(int dir,
     auto B_builder = matrix::csr::builder();
     auto O_builder = matrix::block::builder();
     auto N_builder = matrix::csr::builder();
+    auto Bf_builder = matrix::csr::builder();
+    auto Br_builder = matrix::csr::builder();
+    integer n_obj_intersections = 0;
 
     for (auto [stride, start, end] : m.lines(dir)) {
         // assert(offset == m.ic(start.m_coordinate));
@@ -51,6 +52,7 @@ derivative::derivative(int dir,
         auto leftMat = matrix::dense{};
 
         if (const auto& obj = start.object; obj) {
+            ++n_obj_intersections;
             const auto id = obj->objectID;
             assert(id < (integer)obj_bcs.size());
             const auto bc_t = obj_bcs[id];
@@ -94,6 +96,7 @@ derivative::derivative(int dir,
         auto rightMat = matrix::dense{};
 
         if (const auto& obj = end.object; obj) {
+            ++n_obj_intersections;
             const auto id = obj->objectID;
             assert(id < (integer)obj_bcs.size());
             const auto bc_t = obj_bcs[id];
@@ -148,33 +151,53 @@ derivative::derivative(int dir,
     O = MOVE(O_builder).to_block();
     B = MOVE(B_builder.to_csr(m.size()));
     N = MOVE(N_builder.to_csr(m.size()));
+    Br = MOVE(Br_builder.to_csr(n_obj_intersections));
+    Bf = MOVE(Bf_builder.to_csr(n_obj_intersections));
 }
 
 template <typename Op>
-requires(!Scalar<Op>) void derivative::operator()(scalar_view u,
-                                                  scalar_span du,
-                                                  Op op) const
+    requires(!Scalar<Op>)
+void derivative::operator()(scalar_view u, scalar_span du, Op op) const
 {
     using namespace si;
     O(get<D>(u), get<D>(du), op);
+
+    // full update for object should be
+    //
+    // Bfx(get<D>(u), get<Rx>(du))
+    // Bfy(get<D>(u), get<Ry>(du))
+    // Bfz(get<D>(u), get<Rz>(du))
+    //
+    // Brx(get<Rx>(u), get<Rx>(du));
+    // Bry(get<Ry>(u), get<Ry>(du));
+    // Brz(get<Rz>(u), get<Rz>(du));
+    //
+
     // This is ugly
     switch (dir) {
     case 0:
         B(get<Rx>(u), get<D>(du));
+
+        Bf(get<D>(u), get<Rx>(du));
+        Br(get<Rx>(u), get<Rx>(du));
         break;
     case 1:
         B(get<Ry>(u), get<D>(du));
+
+        Bf(get<D>(u), get<Ry>(du));
+        Br(get<Ry>(u), get<Ry>(du));
         break;
     default:
         B(get<Rz>(u), get<D>(du));
+
+        Bf(get<D>(u), get<Rz>(du));
+        Br(get<Rz>(u), get<Rz>(du));
     }
 }
 
 template <typename Op>
-requires(!Scalar<Op>) void derivative::operator()(scalar_view u,
-                                                  scalar_view nu,
-                                                  scalar_span du,
-                                                  Op op) const
+    requires(!Scalar<Op>)
+void derivative::operator()(scalar_view u, scalar_view nu, scalar_span du, Op op) const
 {
     using namespace si;
 
