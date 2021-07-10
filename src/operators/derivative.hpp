@@ -18,9 +18,10 @@ class derivative
     matrix::block O;
     matrix::csr B;
     matrix::csr N;
-    // operators for updating boundary data
-    matrix::csr Bf;
-    matrix::csr Br;
+    // operators for updating boundary data on Rx/y/z
+    matrix::csr Bfx, Brx;
+    matrix::csr Bfy, Bry;
+    matrix::csr Bfz, Brz;
     std::vector<real> interior_c;
 
 public:

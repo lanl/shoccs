@@ -80,6 +80,18 @@ public:
 
     auto R() const { return tuple{geometry.Rx(), geometry.Ry(), geometry.Rz()}; }
 
+    std::span<const mesh_object_info> R(int dir) const
+    {
+        switch (dir) {
+        case 0:
+            return Rx();
+        case 1:
+            return Ry();
+        default:
+            return Rz();
+        }
+    }
+
     auto ss() const // scalar size
     {
         return tuple{tuple{size()}, tuple{Rx().size(), Ry().size(), Rz().size()}};
