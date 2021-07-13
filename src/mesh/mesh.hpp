@@ -62,6 +62,18 @@ public:
 
     constexpr decltype(auto) extents() const { return cart.extents(); }
 
+    constexpr auto stride(int dir) const
+    {
+        switch (dir) {
+        case 0:
+            return index::stride<0>(extents());
+        case 1:
+            return index::stride<1>(extents());
+        default:
+            return index::stride<2>(extents());
+        }
+    }
+
     // convert an int3 coordinate to a flattened integer coordinate
     constexpr integer ic(int3 ijk) const
     {

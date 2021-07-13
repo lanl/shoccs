@@ -80,10 +80,19 @@ static void init_line(std::span<const shape> shapes,
                 real psi = off * (fluid_pos - hit->position[I]) / h;
 
                 auto id = hit->shape_id;
-                info.push_back(
-                    mesh_object_info{psi, hit->position, hit->ray_outside, coord, id});
-                sorted_info[id].push_back(
-                    mesh_object_info{psi, hit->position, hit->ray_outside, coord, id});
+                const auto& shp = shapes[id];
+                info.push_back(mesh_object_info{psi,
+                                                hit->position,
+                                                shp.normal(hit->position),
+                                                hit->ray_outside,
+                                                coord,
+                                                id});
+                sorted_info[id].push_back(mesh_object_info{psi,
+                                                           hit->position,
+                                                           shp.normal(hit->position),
+                                                           hit->ray_outside,
+                                                           coord,
+                                                           id});
 
                 t_min = std::nextafter(hit->t, t_max);
             }

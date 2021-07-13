@@ -1,12 +1,7 @@
 #include "derivative.hpp"
 #include "fields/selector.hpp"
 
-#include <range/v3/numeric/accumulate.hpp>
-#include <range/v3/view/chunk.hpp>
-#include <range/v3/view/drop.hpp>
-#include <range/v3/view/enumerate.hpp>
-#include <range/v3/view/for_each.hpp>
-#include <range/v3/view/join.hpp>
+#include <range/v3/all.hpp>
 
 #include <cassert>
 
@@ -15,6 +10,25 @@ namespace ccs
 
 namespace
 {
+
+struct OB_builder {
+    matrix::csr::builder O;
+    matrix::csr::builder B;
+
+    template <rs::random_access_range R>
+    void add_cut_row(integer shape_row, integer solid_ic, integer stride, R&& r)
+    {
+        B.add_point(shape_row, shape_row, r[0]);
+        for (auto&& [i, v] : vs::enumerate(r) | vs::drop(1))
+            O.add_point(shape_row, solid_ic + i * stride, v);
+    }
+
+    void to_csr(matrix::csr& O_matrix, matrix::csr& B_matrix, integer rows)
+    {
+        O_matrix = MOVE(O.to_csr(rows));
+        B_matrix = MOVE(B.to_csr(rows));
+    }
+};
 
 void cut_discretization(int r,
                         int dir,
@@ -26,7 +40,10 @@ void cut_discretization(int r,
                         matrix::csr& B,
                         std::span<const real> interior)
 {
-    if (m.R(r).size() == 0 || rs::accumulate(obj_bcs, true, [](auto&& acc, auto&& cur) {
+    const auto shapes = m.R(r);
+    const auto sz = shapes.size();
+
+    if (sz == 0 || rs::accumulate(obj_bcs, true, [](auto&& acc, auto&& cur) {
             return acc && (cur == bcs::Dirichlet);
         }))
         return; // quick exit'
@@ -34,20 +51,72 @@ void cut_discretization(int r,
     auto [p, rmax, tmax, ex_max] = st.query_max();
     auto h = m.h(dir);
 
+    OB_builder builder{};
+
     // allocate maximum amount of memory required by any boundary conditions
-    std::vector<real> left(rmax * tmax);
-    std::vector<real> right(rmax * tmax);
+    std::vector<real> c(rmax * tmax);
     std::vector<real> extra(ex_max);
+    auto stride = m.stride(dir);
 
     if (dir == r) {
         // no interpolation needed for this case
-        for (auto&& obj : m.R(r)) {
+        for (auto&& [shape_row, obj] : vs::enumerate(shapes)) {
             auto bc_t = obj_bcs[obj.shape_id];
             // nothing to do for dirichlet
             if (bc_t == bcs::Dirichlet) continue;
+
+            auto&& [pObj, rObj, tObj, exObj] = st.query(bc_t);
+            st.nbs(h, bc_t, obj.psi, obj.ray_outside, c, extra);
+
+            if (obj.ray_outside) {
+                auto rng = c | vs::drop_exactly((rObj - 1) * tObj) |
+                           vs::take_exactly(tObj) | vs::reverse;
+                builder.add_cut_row(shape_row, m.ic(obj.solid_coord), -stride, rng);
+            } else {
+                auto rng = c | vs::take_exactly(tObj);
+                builder.add_cut_row(shape_row, m.ic(obj.solid_coord), stride, rng);
+            }
         }
     } else {
+        for (auto&& [shape_row, obj] : vs::enumerate(shapes)) {
+            auto bc_t = obj_bcs[obj.shape_id];
+            // nothing to do for dirichlet
+            if (bc_t == bcs::Dirichlet) continue;
+
+            const bool right_wall = obj.normal[dir] < 0.0;
+
+            // get coefficient for derivative
+            auto&& [pObj, rObj, tObj, exObj] = st.query(bc_t);
+            st.nbs(h, bc_t, 1.0, right_wall, c, extra);
+            // get starting/ending coordinates of ray
+            int3 ray_first = obj.solid_coord;
+            if (obj.psi <= 0.5) ray_first[r] += 1 - 2 * obj.ray_outside;
+
+            // int3 ray_last = ray_start;
+            // ray_last[dir] obj.solid_coord[dir] + tObj;
+
+            //     if (obj.ray_outside) {
+            //         // Set the `self` coefficient in B
+            //         B_builder.add_point(shape_row, shape_row, c[rObj * tObj - 1]);
+            //         // Set the field coefficients
+            //         auto ic = m.ic(obj.solid_coord);
+            //         for (int i = 1; i < tObj; i++)
+            //             O_builder.add_point(
+            //                 shape_row, ic - i * stride, c[rObj * tObj - 1 - i]);
+            //     } else {
+            //         // Set the `self` coefficient in B
+            //         B_builder.add_point(shape_row, shape_row, c[0]);
+            //         // Set the field coefficients
+            //         auto ic = m.ic(obj.solid_coord);
+            //         for (int i = 1; i < tObj; i++)
+            //             O_builder.add_point(shape_row, ic + i * stride, c[i]);
+            //     }
+        }
     }
+
+    // construct ray in 'dir` emanative from R(r)
+
+    builder.to_csr(O, B, sz);
 }
 
 struct submatrix_size {
@@ -245,14 +314,8 @@ derivative::derivative(int dir,
     domain_discretization(dir, m, st, grid_bcs, obj_bcs, O, B, N, interior_c);
 
     cut_discretization(0, dir, m, st, grid_bcs, obj_bcs, Bfx, Brx, interior_c);
-    cut_discretization(1, dir, m, st, grid_bcs, obj_bcs, Bfx, Brx, interior_c);
-    cut_discretization(2, dir, m, st, grid_bcs, obj_bcs, Bfx, Brx, interior_c);
-
-    // auto Bf_builder = matrix::csr::builder();
-    // auto Br_builder = matrix::csr::builder();
-
-    // Br = MOVE(Br_builder.to_csr(0));
-    // Bf = MOVE(Bf_builder.to_csr(0));
+    cut_discretization(1, dir, m, st, grid_bcs, obj_bcs, Bfy, Bry, interior_c);
+    cut_discretization(2, dir, m, st, grid_bcs, obj_bcs, Bfz, Brz, interior_c);
 }
 
 template <typename Op>

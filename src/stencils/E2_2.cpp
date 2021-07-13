@@ -3,6 +3,8 @@
 #include <range/v3/algorithm/fill.hpp>
 #include <range/v3/algorithm/reverse.hpp>
 
+#include <cassert>
+
 namespace ccs::stencils
 {
 struct E2_2 {
@@ -27,11 +29,76 @@ struct E2_2 {
         }
     }
 
+    interp_info query_interp() const { return {P, T}; }
+
     void interior(real h, std::span<real> c) const
     {
         c[0] = 1 / (h * h);
         c[1] = -2 / (h * h);
         c[2] = 1 / (h * h);
+    }
+
+    std::span<const real> interp_interior(real y, std::span<real> c) const
+    {
+        c[0] = (y - 1) * y / 2;
+        c[1] = 1 - y * y;
+        c[2] = (y + 1) * y / 2;
+
+        return c.subspan(0, 2 * P + 1);
+    }
+
+    std::span<const real>
+    interp_wall(int i, real y, real psi, std::span<real> c, bool right) const
+    {
+        real y2 = y * y;
+        real psi2 = psi * psi;
+        real psi3 = psi2 * psi;
+
+        if (right) {
+            switch (i) {
+            case 0:
+                c[0] = -((-1 + psi) * (2 * y * (1 + y) + 2 * psi * (1 + 3 * y + y2) +
+                                       psi2 * (2 + 3 * y + y2))) /
+                       4.;
+                c[1] = -2 * psi * (1 + y) - y * (2 + y) + psi2 * (1 + 3 * y + y2) +
+                       (psi3 * (2 + 3 * y + y2)) / 2.;
+                c[2] = (-2 * psi * (-1 + y + y2) + 2 * (2 + 3 * y + y2) -
+                        psi3 * (2 + 3 * y + y2) - psi2 * (4 + 9 * y + 3 * y2)) /
+                       4.;
+                c[3] = (psi * (2 + 3 * y + y2)) / 2.;
+                break;
+            default:
+                assert(i == 1);
+                c[0] = -(((-1 + psi) * (1 + y) * (psi * (-1 + y) + y)) / (2 + psi));
+                c[1] = (psi * (2 + y) - y * (2 + y) + 2 * psi2 * (-1 + y2)) / (1 + psi);
+                c[2] = psi - psi * y2;
+                c[3] = ((1 + y) * (2 + 2 * psi * (-1 + y) + y)) / (2 + 3 * psi + psi2);
+            }
+        } else {
+            switch (i) {
+            case 0:
+                c[0] = (psi * (2 - 3 * y + y2)) / 2.;
+                c[1] = (psi2 * (-4 + 9 * y - 3 * y2) + psi * (2 + 2 * y - 2 * y2) +
+                        2 * (2 - 3 * y + y2) - psi3 * (2 - 3 * y + y2)) /
+                       4.;
+                c[2] = 2 * psi * (-1 + y) - (-2 + y) * y + psi2 * (1 - 3 * y + y2) +
+                       (psi3 * (2 - 3 * y + y2)) / 2.;
+                c[3] = -((-1 + psi) * (2 * (-1 + y) * y + 2 * psi * (1 - 3 * y + y2) +
+                                       psi2 * (2 - 3 * y + y2))) /
+                       4.;
+                break;
+            default:
+                assert(i == 1);
+                c[0] =
+                    ((-1 + y) * (-2 + y + 2 * psi * (1 + y))) / ((1 + psi) * (2 + psi));
+                c[1] = psi - psi * y2;
+                c[2] =
+                    -((psi * (-2 + y) + (-2 + y) * y - 2 * psi2 * (-1 + y2)) / (1 + psi));
+                c[3] = -(((-1 + psi) * (-1 + y) * (psi + y + psi * y)) / (2 + psi));
+            }
+        }
+
+        return c.subspan(0, T);
     }
 
     void nbs(real h,

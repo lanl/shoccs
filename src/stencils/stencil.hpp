@@ -23,6 +23,11 @@ struct info {
     int nextra;
 };
 
+struct interp_info {
+    int p;
+    int t;
+};
+
 // satisfaction of Stencil makes a type a stencil
 template <typename T>
 concept Stencil = requires(const T& st,
@@ -63,6 +68,9 @@ class stencil
                          std::span<real> coeffs,
                          std::span<real> extra) const = 0;
         virtual void interior(real c, std::span<real> coeffs) const = 0;
+        virtual std::span<const real> interp_interior(real, std::span<real>) const = 0;
+        virtual std::span<const real>
+        interp_wall(int i, real y, real psi, std::span<real> c, bool right) const = 0;
     };
 
     template <Stencil S>
@@ -92,6 +100,17 @@ class stencil
         void interior(real h, std::span<real> c) const override
         {
             return s.interior(h, c);
+        }
+
+        std::span<const real> interp_interior(real y, std::span<real> c) const override
+        {
+            return s.interp_interior(y, c);
+        }
+
+        std::span<const real>
+        interp_wall(int i, real y, real psi, std::span<real> c, bool right) const override
+        {
+            return s.interp_wall(i, y, psi, c, right);
         }
     };
 
@@ -149,6 +168,17 @@ public:
         }
 
         void interior(real h, std::span<real> c) const { return s->interior(h, c); }
+
+        std::span<const real> interp_interior(real y, std::span<real> c) const
+        {
+            return s->interp_interior(y, c);
+        }
+
+        std::span<const real>
+        interp_wall(int i, real y, real psi, std::span<real> c, bool right) const
+        {
+            return s->interp_wall(i, y, psi, c, right);
+        }
 
         static std::optional<stencil> from_lua(const sol::table&);
 };

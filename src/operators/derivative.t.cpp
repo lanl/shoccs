@@ -319,7 +319,7 @@ TEST_CASE("E2 with Objects")
                   std::vector<shape>{make_sphere(0, real3{0.45, 1.011, 1.31}, 0.25)}};
 
     const auto gridBcs = bcs::Grid{bcs::nn, bcs::dd, bcs::ff};
-    const auto objectBcs = bcs::Object{bcs::Dirichlet};
+    const auto objectBcs = bcs::Object{bcs::Floating};
 
     // initialize fields
     scalar<T> u = m.xyz | f2;
@@ -331,12 +331,15 @@ TEST_CASE("E2 with Objects")
 
     du_x | m.fluid = m.xyz | f2_ddx;
     du_x | m.dirichlet(gridBcs) = 0;
+    du_x | sel::R = m.xyz | f2_ddx;
 
     du_y | m.fluid = m.xyz | f2_ddy;
     du_y | m.dirichlet(gridBcs) = 0;
+    du_y | sel::R = m.xyz | f2_ddy;
 
     du_z | m.fluid = m.xyz | f2_ddz;
     du_z | m.dirichlet(gridBcs) = 0;
+    du_z | sel::R = m.xyz | f2_ddz;
 
     REQUIRE((integer)rs::size(du_x | sel::D) == m.size());
 
@@ -349,12 +352,15 @@ TEST_CASE("E2 with Objects")
     du = 0;
     dx(u, nu, du);
     REQUIRE_THAT(get<si::D>(du), Approx(get<si::D>(du_x)));
+    REQUIRE_THAT(get<si::Rx>(du), Approx(get<si::Rx>(du_x)));
 
     du = 0;
     dy(u, du);
     REQUIRE_THAT(get<si::D>(du), Approx(get<si::D>(du_y)));
+    REQUIRE_THAT(get<si::Ry>(du), Approx(get<si::Ry>(du_y)));
 
     du = 0;
     dz(u, du);
     REQUIRE_THAT(get<si::D>(du), Approx(get<si::D>(du_z)));
+    REQUIRE_THAT(get<si::Rz>(du), Approx(get<si::Rz>(du_z)));
 }

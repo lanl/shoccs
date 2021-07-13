@@ -36,6 +36,13 @@ struct sphere {
         }
         return std::nullopt;
     }
+
+    real3 normal(const real3& pos) const
+    {
+        const auto r = pos - origin;
+        const auto d = length(r);
+        return r / d;
+    }
 };
 
 // factory function

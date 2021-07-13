@@ -50,6 +50,16 @@ struct E2_1 {
         c[2] = 1 / (2 * h);
     }
 
+    std::span<const real> interp_interior(real, std::span<real> c) const
+    {
+        return c.subspan(0, 2 * P + 1);
+    }
+
+    std::span<const real> interp_wall(int, real, real, std::span<real> c, bool) const
+    {
+        return c.subspan(0, 4);
+    }
+
     void nbs(real h,
              bcs::type b,
              real psi,

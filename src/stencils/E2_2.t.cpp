@@ -2,11 +2,15 @@
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
+
+#include <fmt/core.h>
+#include <fmt/ranges.h>
 
 #include <vector>
 
-#include <range/v3/view/zip.hpp>
+#include <range/v3/all.hpp>
 
 #include <sol/sol.hpp>
 #include <spdlog/spdlog.h>
@@ -106,4 +110,80 @@ TEST_CASE("neumann")
                                     6.4,
                                     -8.253968253968255}));
     REQUIRE_THAT(extra, Approx(std::vector{0.8, 4.}));
+}
+
+TEST_CASE("interp")
+{
+    using T = std::vector<real>;
+    auto st = stencils::make_E2_2();
+
+    T ci(3);
+
+    constexpr auto f = [](auto&& x) { return 3. * x * x - 10. * x + 0.1; };
+    const real h = 10.0;
+    const auto mesh = vs::linear_distribute(-h, h, 3);
+
+    {
+        auto v = st.interp_interior(0.0, ci);
+        real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
+        REQUIRE(r == Catch::Approx(f(0.0)));
+    }
+
+    {
+        auto v = st.interp_interior(0.5, ci);
+        real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
+        REQUIRE(r == Catch::Approx(f(h / 2)));
+    }
+
+    {
+        auto v = st.interp_interior(-0.3, ci);
+        real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
+        REQUIRE(r == Catch::Approx(f(-3 * h / 10.)));
+    }
+
+    T cw(4);
+
+    {
+        real psi = 1.0;
+        real y = 0.1;
+        auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
+        auto v = st.interp_wall(0, y, psi, cw, false);
+        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+        REQUIRE(r == Catch::Approx(f(-h - psi * h + y * h)));
+    }
+    {
+        real psi = 0.9;
+        real y = 0.0;
+        auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
+        auto v = st.interp_wall(0, 0, psi, cw, false);
+        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+        REQUIRE(r == Catch::Approx(f(-h - psi * h + y * h)));
+    }
+
+    {
+        real psi = 0.;
+        real y = 0.4;
+        auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
+        auto v = st.interp_wall(1, y, psi, cw, false);
+        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+        REQUIRE(r == Catch::Approx(f(-h + y * h)));
+    }
+
+    {
+        real psi = 1.0;
+        real y = -0.2;
+        auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
+        auto v = st.interp_wall(0, y, psi, cw, true);
+        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+        REQUIRE(r == Catch::Approx(f(h + psi * h + y * h)));
+    }
+
+    {
+        real psi = 0.01;
+        real y = -0.3;
+        auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
+        auto v = st.interp_wall(1, y, psi, cw, true);
+        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+        REQUIRE(r == Catch::Approx(f(h + y * h)));
+    }
 }
