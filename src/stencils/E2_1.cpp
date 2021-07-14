@@ -43,6 +43,8 @@ struct E2_1 {
         }
     }
 
+    interp_info query_interp() const { return {P, 4}; }
+
     void interior(real h, std::span<real> c) const
     {
         c[0] = -1 / (2 * h);

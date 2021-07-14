@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mesh/mesh_types.hpp"
 #include "operators/boundaries.hpp"
 #include "types.hpp"
 
@@ -26,6 +27,12 @@ struct info {
 struct interp_info {
     int p;
     int t;
+};
+
+struct interp_line {
+    std::span<const real> v;
+    boundary left;
+    boundary right;
 };
 
 // satisfaction of Stencil makes a type a stencil
@@ -61,6 +68,7 @@ class stencil
         virtual any_stencil* clone() const = 0;
         virtual info query(bcs::type) const = 0;
         virtual info query_max() const = 0;
+        virtual interp_info query_interp() const = 0;
         virtual void nbs(real h,
                          bcs::type,
                          real psi,
@@ -86,6 +94,7 @@ class stencil
 
         info query(bcs::type b) const override { return s.query(b); }
         info query_max() const override { return s.query_max(); }
+        interp_info query_interp() const override { return s.query_interp(); }
 
         void nbs(real h,
                  bcs::type b,
@@ -178,6 +187,62 @@ public:
         interp_wall(int i, real y, real psi, std::span<real> c, bool right) const
         {
             return s->interp_wall(i, y, psi, c, right);
+        }
+
+        interp_line interp(int dir,
+                           int3 closest,
+                           real y,
+                           boundary left,
+                           boundary right,
+                           std::span<real> c) const
+        {
+            const auto&& [p, t] = s->query_interp();
+
+            const int ic = closest[dir];
+            const int lc = left.mesh_coordinate[dir];
+            const int rc = right.mesh_coordinate[dir];
+
+            // we use an interior interpolant if the boundaries are further away than p on
+            // both sides, or if they are are equal to p and not an object
+            if ((ic - lc > p || (ic - lc == p && !left.object)) &&
+                (rc - ic > p || (rc - ic == p && !right.object))) {
+                int3 l{closest};
+                int3 r{closest};
+                l[dir] -= p;
+                r[dir] += p;
+
+                return {s->interp_interior(y, c),
+                        boundary{l, std::nullopt},
+                        boundary{r, std::nullopt}};
+            } else if (ic - lc < rc - ic) {
+                // left boundary is closer
+                int3 r{left.mesh_coordinate};
+                r[dir] += t - 1;
+
+                auto obj = left.object;
+                real psi = obj ? obj->psi : 1.0;
+
+                // adjust y if the closest point is in the solid
+                if (obj && lc == ic) y += psi - 1;
+
+                return {s->interp_wall(ic - lc, y, psi, c, false),
+                        left,
+                        boundary{r, std::nullopt}};
+
+            } else {
+                // right boundary is closer
+                int3 l{right.mesh_coordinate};
+                l[dir] -= t - 1;
+
+                auto obj = right.object;
+                real psi = obj ? obj->psi : 1.0;
+
+                if (obj && rc == ic) y += psi - 1;
+
+                return {s->interp_wall(rc - lc, y, psi, c, true),
+                        boundary{l, std::nullopt},
+                        right};
+            }
         }
 
         static std::optional<stencil> from_lua(const sol::table&);
