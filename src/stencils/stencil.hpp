@@ -192,8 +192,8 @@ public:
         interp_line interp(int dir,
                            int3 closest,
                            real y,
-                           boundary left,
-                           boundary right,
+                           const boundary& left,
+                           const boundary& right,
                            std::span<real> c) const
         {
             const auto&& [p, t] = s->query_interp();

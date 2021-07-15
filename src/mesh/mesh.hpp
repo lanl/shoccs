@@ -104,6 +104,8 @@ public:
         }
     }
 
+    line interp_line(int dir, int3 pt) const;
+
     auto ss() const // scalar size
     {
         return tuple{tuple{size()}, tuple{Rx().size(), Ry().size(), Rz().size()}};

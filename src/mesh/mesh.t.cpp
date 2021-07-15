@@ -8,6 +8,9 @@
 
 #include "real3_operators.hpp"
 
+#include <fmt/core.h>
+#include <fmt/ranges.h>
+
 #include <sol/sol.hpp>
 #include <spdlog/spdlog.h>
 
@@ -27,6 +30,22 @@ TEST_CASE("lines with no cut-cells")
     REQUIRE(extents[1] * extents[2] == (integer)m.lines(0).size());
     REQUIRE(extents[0] * extents[2] == (integer)m.lines(1).size());
     REQUIRE(extents[0] * extents[1] == (integer)m.lines(2).size());
+
+    {
+        auto&& [s, l, r] = m.interp_line(0, int3{9, 10, 11});
+        REQUIRE(l.mesh_coordinate == int3{0, 10, 11});
+        REQUIRE(r.mesh_coordinate == int3{20, 10, 11});
+    }
+    {
+        auto&& [s, l, r] = m.interp_line(1, int3{9, 10, 11});
+        REQUIRE(l.mesh_coordinate == int3{9, 0, 11});
+        REQUIRE(r.mesh_coordinate == int3{9, 21, 11});
+    }
+    {
+        auto&& [s, l, r] = m.interp_line(2, int3{9, 10, 11});
+        REQUIRE(l.mesh_coordinate == int3{9, 10, 0});
+        REQUIRE(r.mesh_coordinate == int3{9, 10, 22});
+    }
 }
 
 TEST_CASE("lines")
@@ -72,6 +91,16 @@ TEST_CASE("lines")
         }
 
         {
+            auto&& [s, l, r] = m.interp_line(0, int3{9, 6, 3});
+            REQUIRE(l.mesh_coordinate == int3{0, 6, 3});
+            REQUIRE(r.mesh_coordinate == int3{10, 6, 3});
+            REQUIRE(r.object);
+            REQUIRE(r.object->object_coordinate == 0);
+            REQUIRE(r.object->objectID == 0);
+            REQUIRE(r.object->psi == Catch::Approx(0.40365385103120377));
+        }
+
+        {
             const auto& l = line[6 * extents[2] + 3 + 1];
             REQUIRE(l.start.mesh_coordinate == int3{10, 6, 3});
             REQUIRE(l.start.object);
@@ -80,6 +109,14 @@ TEST_CASE("lines")
             REQUIRE(l.start.object->psi == Catch::Approx(0.2036538510312047));
             REQUIRE(l.end.mesh_coordinate == int3{20, 6, 3});
             REQUIRE(!l.end.object);
+        }
+
+        {
+            auto&& [s, l, r] = m.interp_line(0, int3{11, 8, 6});
+            REQUIRE(l.mesh_coordinate == int3{11, 8, 6});
+            REQUIRE(r.mesh_coordinate == int3{extents[0] - 1, 8, 6});
+            REQUIRE(l.object);
+            REQUIRE(l.object->psi == Catch::Approx(0.1931111964292742));
         }
     }
 
@@ -125,6 +162,16 @@ TEST_CASE("lines")
             REQUIRE(l.end.mesh_coordinate == int3{8, 21, 4});
             REQUIRE(!l.end.object);
         }
+
+        {
+            auto&& [s, l, r] = m.interp_line(1, int3{8, 9, 4});
+            REQUIRE(l.mesh_coordinate == int3{8, 7, 4});
+            REQUIRE(r.mesh_coordinate == int3{8, extents[1] - 1, 4});
+            REQUIRE(l.object);
+            REQUIRE(!r.object);
+            REQUIRE(l.object->object_coordinate == 1);
+            REQUIRE(l.object->psi == Catch::Approx(0.42843940270618086));
+        }
     }
     SECTION("Z")
     {
@@ -159,6 +206,16 @@ TEST_CASE("lines")
         }
 
         {
+            auto&& [s, l, r] = m.interp_line(2, int3{8, 6, 2});
+            REQUIRE(l.mesh_coordinate == int3{8, 6, 0});
+            REQUIRE(r.mesh_coordinate == int3{8, 6, 5});
+            REQUIRE(!l.object);
+            REQUIRE(r.object);
+            REQUIRE(r.object->object_coordinate == 0);
+            REQUIRE(r.object->psi == Catch::Approx(0.7263250848475999));
+        }
+
+        {
             const auto& l = line[12 * extents[1] + 8 + (n_intersections / 2)];
             REQUIRE(l.start.mesh_coordinate == int3{12, 8, 5});
             REQUIRE(l.start.object);
@@ -167,6 +224,16 @@ TEST_CASE("lines")
             REQUIRE(l.start.object->psi == Catch::Approx(0.4491194432954615));
             REQUIRE(l.end.mesh_coordinate == int3{12, 8, 22});
             REQUIRE(!l.end.object);
+        }
+
+        {
+            auto&& [s, l, r] = m.interp_line(2, int3{12, 8, 10});
+            REQUIRE(l.mesh_coordinate == int3{12, 8, 5});
+            REQUIRE(r.mesh_coordinate == int3{12, 8, extents[2] - 1});
+            REQUIRE(l.object);
+            REQUIRE(!r.object);
+            REQUIRE(l.object->object_coordinate == (integer)m.Rz().size() - 1);
+            REQUIRE(l.object->psi == Catch::Approx(0.4491194432954615));
         }
     }
 }

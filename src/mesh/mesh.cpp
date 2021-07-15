@@ -166,6 +166,45 @@ bool mesh::dirichlet_line(const int3& start, int dir, const bcs::Grid& cart_bcs)
     return result;
 }
 
+line mesh::interp_line(int dir, int3 pt) const
+{
+    // start with mesh boundaries and bring bounds closer if needed
+    int3 l{pt};
+    l[dir] = 0;
+    int3 r{pt};
+    r[dir] = extents()[dir] - 1;
+    boundary start{l, std::nullopt};
+    boundary end{r, std::nullopt};
+
+    const auto [f, s] = index::dirs(dir);
+
+    for (integer i = -1; auto&& [psi, pos, n, ray_out, ijk, id] : R(dir)) {
+        ++i;
+
+        if (ijk[s] > pt[s]) break;
+        if (ijk[s] != pt[s] || ijk[f] != pt[f]) continue;
+
+        // check left/right  boundary
+        if (n[dir] >= 0.0 && ijk[dir] <= pt[dir]) {
+            assert(n[dir] != 0.0);
+            // use >= just in case the object has a solid_coord on a domain wall
+            if (ijk[dir] >= start.mesh_coordinate[dir])
+                start = boundary{ijk, object_boundary{i, id, psi}};
+
+        } else if (n[dir] < 0.0 && ijk[dir] >= pt[dir]) {
+            assert(n[dir] != 0.0);
+            if (ijk[dir] <= end.mesh_coordinate[dir])
+                end = boundary{ijk, object_boundary{i, id, psi}};
+        }
+    }
+
+    // need to reexamine the case for interpolating when pt coincides with two solid
+    // points.
+    assert(start.mesh_coordinate != end.mesh_coordinate);
+
+    return {stride(dir), start, end};
+}
+
 std::optional<mesh> mesh::from_lua(const sol::table& tbl)
 {
     auto shapes_opt = object_geometry::from_lua(tbl);
