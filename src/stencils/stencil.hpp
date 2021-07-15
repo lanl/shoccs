@@ -219,7 +219,7 @@ public:
                 int3 r{left.mesh_coordinate};
                 r[dir] += t - 1;
 
-                auto obj = left.object;
+                const auto& obj = left.object;
                 real psi = obj ? obj->psi : 1.0;
 
                 // adjust y if the closest point is in the solid
@@ -234,12 +234,12 @@ public:
                 int3 l{right.mesh_coordinate};
                 l[dir] -= t - 1;
 
-                auto obj = right.object;
+                const auto& obj = right.object;
                 real psi = obj ? obj->psi : 1.0;
 
-                if (obj && rc == ic) y += psi - 1;
+                if (obj && rc == ic) y += 1 - psi;
 
-                return {s->interp_wall(rc - lc, y, psi, c, true),
+                return {s->interp_wall(rc - ic, y, psi, c, true),
                         boundary{l, std::nullopt},
                         right};
             }

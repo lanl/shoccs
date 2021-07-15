@@ -123,67 +123,226 @@ TEST_CASE("interp")
     const real h = 10.0;
     const auto mesh = vs::linear_distribute(-h, h, 3);
 
+    SECTION("interior direct")
     {
-        auto v = st.interp_interior(0.0, ci);
-        real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
-        REQUIRE(r == Catch::Approx(f(0.0)));
+
+        {
+            auto v = st.interp_interior(0.0, ci);
+            real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
+            REQUIRE(r == Catch::Approx(f(0.0)));
+        }
+
+        {
+            auto v = st.interp_interior(0.5, ci);
+            real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
+            REQUIRE(r == Catch::Approx(f(h / 2)));
+        }
+
+        {
+            auto v = st.interp_interior(-0.3, ci);
+            real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
+            REQUIRE(r == Catch::Approx(f(-3 * h / 10.)));
+        }
     }
 
+    SECTION("interior driver")
     {
-        auto v = st.interp_interior(0.5, ci);
-        real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
-        REQUIRE(r == Catch::Approx(f(h / 2)));
-    }
 
-    {
-        auto v = st.interp_interior(-0.3, ci);
-        real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
-        REQUIRE(r == Catch::Approx(f(-3 * h / 10.)));
+        {
+            real y = 0.0;
+            auto&& [v, left, right] =
+                st.interp(2,
+                          int3{-10, -10, 1},
+                          y,
+                          boundary{int3{-5000, -5000, 0}, std::nullopt},
+                          boundary{int3{5000, 5000, 2}, std::nullopt},
+                          ci);
+            REQUIRE(!left.object);
+            REQUIRE(!right.object);
+            real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
+            REQUIRE(r == Catch::Approx(f(y * h)));
+        }
+
+        {
+            real y = -0.3;
+            auto&& [v, left, right] =
+                st.interp(1,
+                          int3{-10, -10, 1},
+                          y,
+                          boundary{int3{-5000, -5000, 0}, std::nullopt},
+                          boundary{int3{5000, 5000, 2}, std::nullopt},
+                          ci);
+            REQUIRE(!left.object);
+            REQUIRE(!right.object);
+            real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
+            REQUIRE(r == Catch::Approx(f(y * h)));
+        }
     }
 
     T cw(4);
 
+    SECTION("wall direct")
     {
-        real psi = 1.0;
-        real y = 0.1;
-        auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
-        auto v = st.interp_wall(0, y, psi, cw, false);
-        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
-        REQUIRE(r == Catch::Approx(f(-h - psi * h + y * h)));
-    }
-    {
-        real psi = 0.9;
-        real y = 0.0;
-        auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
-        auto v = st.interp_wall(0, 0, psi, cw, false);
-        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
-        REQUIRE(r == Catch::Approx(f(-h - psi * h + y * h)));
+
+        {
+            real psi = 1.0;
+            real y = 0.1;
+            auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
+            auto v = st.interp_wall(0, y, psi, cw, false);
+            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+            REQUIRE(r == Catch::Approx(f(-h - psi * h + y * h)));
+        }
+        {
+            real psi = 0.9;
+            real y = 0.0;
+            auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
+            auto v = st.interp_wall(0, 0, psi, cw, false);
+            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+            REQUIRE(r == Catch::Approx(f(-h - psi * h + y * h)));
+        }
+
+        {
+            real psi = 0.;
+            real y = 0.4;
+            auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
+            auto v = st.interp_wall(1, y, psi, cw, false);
+            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+            REQUIRE(r == Catch::Approx(f(-h + y * h)));
+        }
+
+        {
+            real psi = 1.0;
+            real y = -0.2;
+            auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
+            auto v = st.interp_wall(0, y, psi, cw, true);
+            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+            REQUIRE(r == Catch::Approx(f(h + psi * h + y * h)));
+        }
+
+        {
+            real psi = 0.01;
+            real y = -0.3;
+            auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
+            auto v = st.interp_wall(1, y, psi, cw, true);
+            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+            REQUIRE(r == Catch::Approx(f(h + y * h)));
+        }
     }
 
+    SECTION("wall driver")
     {
-        real psi = 0.;
-        real y = 0.4;
-        auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
-        auto v = st.interp_wall(1, y, psi, cw, false);
-        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
-        REQUIRE(r == Catch::Approx(f(-h + y * h)));
-    }
 
-    {
-        real psi = 1.0;
-        real y = -0.2;
-        auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
-        auto v = st.interp_wall(0, y, psi, cw, true);
-        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
-        REQUIRE(r == Catch::Approx(f(h + psi * h + y * h)));
-    }
+        {
+            real psi = 0.8;
+            real y = 0.3;
+            auto&& [v, left, right] =
+                st.interp(0,
+                          int3{0, 1, 1},
+                          y,
+                          boundary{int3{0, 1, 1}, object_boundary{0, 1, psi}},
+                          boundary{int3{3, 1, 1}, std::nullopt},
+                          cw);
+            REQUIRE(left.object);
+            REQUIRE(!right.object);
 
-    {
-        real psi = 0.01;
-        real y = -0.3;
-        auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
-        auto v = st.interp_wall(1, y, psi, cw, true);
-        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
-        REQUIRE(r == Catch::Approx(f(h + y * h)));
+            auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
+            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+
+            // y is relataive to the solid point rather than the cut-location
+            REQUIRE(r == Catch::Approx(f(-2 * h + y * h)));
+        }
+
+        {
+            real psi = 1.0;
+            real y = 0.1;
+            auto&& [v, left, right] = st.interp(0,
+                                                int3{0, 1, 1},
+                                                y,
+                                                boundary{int3{0, 1, 1}, std::nullopt},
+                                                boundary{int3{3, 1, 1}, std::nullopt},
+                                                cw);
+            REQUIRE(!left.object);
+            REQUIRE(!right.object);
+
+            auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
+            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+
+            REQUIRE(r == Catch::Approx(f(-2 * h + y * h)));
+        }
+
+        {
+            real psi = 0.;
+            real y = 0.4;
+            auto&& [v, left, right] =
+                st.interp(2,
+                          int3{10, 10, 1},
+                          y,
+                          boundary{int3{1, 1, 0}, object_boundary{0, 1, psi}},
+                          boundary{int3{1, 1, 3}, std::nullopt},
+                          cw);
+            REQUIRE(left.object);
+            REQUIRE(!right.object);
+
+            auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
+            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+
+            REQUIRE(r == Catch::Approx(f(-h + y * h)));
+        }
+
+        {
+            real psi = 1.0;
+            real y = -0.2;
+            auto&& [v, left, right] = st.interp(0,
+                                                int3{10, 1, 1},
+                                                y,
+                                                boundary{int3{-10, 1, 1}, std::nullopt},
+                                                boundary{int3{10, 1, 1}, std::nullopt},
+                                                cw);
+            REQUIRE(!left.object);
+            REQUIRE(!right.object);
+
+            auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
+            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+
+            REQUIRE(r == Catch::Approx(f(2 * h + y * h)));
+        }
+
+        {
+            real psi = 0.9;
+            real y = -0.2;
+            auto&& [v, left, right] =
+                st.interp(0,
+                          int3{10, 1, 1},
+                          y,
+                          boundary{int3{-10, 1, 1}, std::nullopt},
+                          boundary{int3{10, 1, 1}, object_boundary{0, 3, psi}},
+                          cw);
+            REQUIRE(!left.object);
+            REQUIRE(right.object);
+
+            auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
+            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+
+            REQUIRE(r == Catch::Approx(f(2 * h + y * h)));
+        }
+
+        {
+            real psi = 0.01;
+            real y = -0.3;
+            auto&& [v, left, right] =
+                st.interp(2,
+                          int3{0, 11, 15},
+                          y,
+                          boundary{int3{-10, 1, 1}, std::nullopt},
+                          boundary{int3{0, 11, 16}, object_boundary{0, 3, psi}},
+                          cw);
+            REQUIRE(!left.object);
+            REQUIRE(right.object);
+
+            auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
+            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+
+            REQUIRE(r == Catch::Approx(f(h + y * h)));
+        }
     }
 }
