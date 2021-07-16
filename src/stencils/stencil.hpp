@@ -249,12 +249,14 @@ public:
 };
 
 stencil make_E2_2();
+stencil make_E4_2();
 stencil make_E2_1(std::span<const real>);
 
 namespace second
 {
 extern stencil E2;
-}
+extern stencil E4;
+} // namespace second
 
 } // namespace ccs::stencils
 
