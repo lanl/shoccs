@@ -23,6 +23,47 @@ struct OB_builder {
             O.add_point(shape_row, solid_ic + i * stride, v);
     }
 
+    template <rs::random_access_range R>
+    void add_cut_point(integer shape_row, R&& r)
+    {
+        B.add_point(shape_row, shape_row, r[0]);
+    }
+
+    // this routine is currently no good for planar objects which result in interior
+    // stencils where every point is a solid point
+    template <rs::random_access_range R>
+    void add_interp_row(integer shape_row,
+                        real deriv_coeff,
+                        R&& interp_coeffs,
+                        const boundary& left,
+                        const boundary& right,
+                        integer stride,
+                        const mesh& m)
+    {
+        auto left_ic = m.ic(left.mesh_coordinate);
+        auto right_ic = m.ic(right.mesh_coordinate);
+
+        auto it = rs::begin(interp_coeffs);
+        // handle left point
+        if (const auto& obj = left.object; obj)
+            B.add_point(shape_row, obj->object_coordinate, deriv_coeff * *it);
+        else
+            O.add_point(shape_row, left_ic, deriv_coeff * *it);
+        ++it;
+
+        // handle interior
+        for (int ic = left_ic + stride; ic < right_ic; ic += stride) {
+            O.add_point(shape_row, ic, deriv_coeff * *it);
+            ++it;
+        }
+
+        // handle right point
+        if (const auto& obj = right.object; obj)
+            B.add_point(shape_row, obj->object_coordinate, deriv_coeff * *it);
+        else
+            O.add_point(shape_row, right_ic, deriv_coeff * *it);
+    }
+
     void to_csr(matrix::csr& O_matrix, matrix::csr& B_matrix, integer rows)
     {
         O_matrix = MOVE(O.to_csr(rows));
@@ -55,6 +96,8 @@ void cut_discretization(int r,
 
     // allocate maximum amount of memory required by any boundary conditions
     std::vector<real> c(rmax * tmax);
+    std::vector<real> interp_c(tmax);
+    std::span<real> c_line;
     std::vector<real> extra(ex_max);
     auto stride = m.stride(dir);
 
@@ -83,34 +126,43 @@ void cut_discretization(int r,
             // nothing to do for dirichlet
             if (bc_t == bcs::Dirichlet) continue;
 
-            const bool right_wall = obj.normal[dir] < 0.0;
-
+            const bool right_interp_wall = obj.normal[dir] < 0.0;
             // get coefficient for derivative
             auto&& [pObj, rObj, tObj, exObj] = st.query(bc_t);
-            st.nbs(h, bc_t, 1.0, right_wall, c, extra);
-            // get starting/ending coordinates of ray
-            int3 ray_first = obj.solid_coord;
-            if (obj.psi <= 0.5) ray_first[r] += 1 - 2 * obj.ray_outside;
+            st.nbs(h, bc_t, 1.0, right_interp_wall, c, extra);
+            // get the line required for the interp point and reorder such that
+            // the first point is the intersection point
+            if (right_interp_wall) {
+                c_line = std::span(rs::begin(c) + (rObj - 1) * tObj, tObj);
+                rs::reverse(c_line);
+            } else {
+                c_line = std::span(rs::begin(c), tObj);
+            }
+            // get starting coordinates of closest point
+            int3 cp = [&obj, &r]() {
+                int3 ray = obj.solid_coord;
+                if (obj.psi <= 0.5) ray[r] += 1 - 2 * obj.ray_outside;
+                return ray;
+            }();
+            // The first point for all stencils will be the solid_coord.  Set the shift
+            // accordingly
+            const int cp_shift = right_interp_wall ? -1 : 1;
+            // Set interp distance y for interp stencils in (i + y) format
+            const real y = [&obj]() {
+                real sign = obj.ray_outside ? 1.0 : -1.0;
+                return sign * (obj.psi <= 0.5 ? obj.psi : obj.psi - 1);
+            }();
 
-            // int3 ray_last = ray_start;
-            // ray_last[dir] obj.solid_coord[dir] + tObj;
+            builder.add_cut_point(shape_row, c_line);
 
-            //     if (obj.ray_outside) {
-            //         // Set the `self` coefficient in B
-            //         B_builder.add_point(shape_row, shape_row, c[rObj * tObj - 1]);
-            //         // Set the field coefficients
-            //         auto ic = m.ic(obj.solid_coord);
-            //         for (int i = 1; i < tObj; i++)
-            //             O_builder.add_point(
-            //                 shape_row, ic - i * stride, c[rObj * tObj - 1 - i]);
-            //     } else {
-            //         // Set the `self` coefficient in B
-            //         B_builder.add_point(shape_row, shape_row, c[0]);
-            //         // Set the field coefficients
-            //         auto ic = m.ic(obj.solid_coord);
-            //         for (int i = 1; i < tObj; i++)
-            //             O_builder.add_point(shape_row, ic + i * stride, c[i]);
-            //     }
+            for (int i = 1; i < tObj; i++) {
+                cp[dir] += cp_shift;
+                auto&& [r_stride, left_bounds, right_bounds] = m.interp_line(r, cp);
+                auto&& [interp_v, left, right] =
+                    st.interp(r, cp, y, left_bounds, right_bounds, interp_c);
+                builder.add_interp_row(
+                    shape_row, c_line[i], interp_v, left, right, r_stride, m);
+            }
         }
     }
 

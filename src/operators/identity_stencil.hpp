@@ -22,6 +22,13 @@ struct identity {
     }
     info query_max() const { return {0, 2, 4, 2}; }
 
+    interp_info query_interp() const { return {}; }
+    std::span<const real> interp_interior(real, std::span<real> c) const { return c; }
+    std::span<const real> interp_wall(int, real, real, std::span<real> c, bool) const
+    {
+        return c;
+    }
+
     void interior(real, std::span<real> c) const { c[0] = 1; }
 
     void nbs(real,

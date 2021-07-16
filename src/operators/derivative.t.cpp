@@ -11,6 +11,9 @@
 
 #include <range/v3/all.hpp>
 
+#include <fmt/core.h>
+#include <fmt/ranges.h>
+
 using namespace ccs;
 using Catch::Matchers::Approx;
 
@@ -351,16 +354,23 @@ TEST_CASE("E2 with Objects")
 
     du = 0;
     dx(u, nu, du);
+
     REQUIRE_THAT(get<si::D>(du), Approx(get<si::D>(du_x)));
     REQUIRE_THAT(get<si::Rx>(du), Approx(get<si::Rx>(du_x)));
+    REQUIRE_THAT(get<si::Ry>(du), Approx(get<si::Ry>(du_x)));
+    REQUIRE_THAT(get<si::Rz>(du), Approx(get<si::Rz>(du_x)));
 
     du = 0;
     dy(u, du);
     REQUIRE_THAT(get<si::D>(du), Approx(get<si::D>(du_y)));
+    REQUIRE_THAT(get<si::Rx>(du), Approx(get<si::Rx>(du_y)));
     REQUIRE_THAT(get<si::Ry>(du), Approx(get<si::Ry>(du_y)));
+    REQUIRE_THAT(get<si::Rz>(du), Approx(get<si::Rz>(du_y)));
 
     du = 0;
     dz(u, du);
     REQUIRE_THAT(get<si::D>(du), Approx(get<si::D>(du_z)));
+    REQUIRE_THAT(get<si::Rx>(du), Approx(get<si::Rx>(du_z)));
+    REQUIRE_THAT(get<si::Ry>(du), Approx(get<si::Ry>(du_z)));
     REQUIRE_THAT(get<si::Rz>(du), Approx(get<si::Rz>(du_z)));
 }
