@@ -26,6 +26,10 @@ std::optional<stencil> stencil::from_lua(const sol::table& tbl)
             spdlog::info("E2 scheme chosen");
             return second::E2;
         }
+        if (type == "E4") {
+            spdlog::info("E4 scheme chosen");
+            return second::E4;
+        }
     } else if (order == 1) {
         if (type == "E2") {
             spdlog::info("E2 first scheme chosen");
