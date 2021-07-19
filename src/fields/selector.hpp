@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "tuple.hpp"
 
 #include "scalar.hpp"
@@ -763,6 +765,180 @@ namespace sel
 {
 constexpr inline auto optional_view = ::ccs::detail::optional_view_fn{};
 // using multi_slice_t = decltype(multi_slice(std::span<const index_slice>{}));
+} // namespace sel
+
+//
+// indirect selction based on predicate ranges (modeled after remove_if from range-v3)
+//
+namespace detail
+{
+// predicate view is used to select elements from a different range if the predicate range
+// is true
+template <typename Rng, typename Pred, typename Fn>
+class predicate_view : public rs::view_adaptor<predicate_view<Rng, Pred, Fn>, Rng>
+{
+
+    friend rs::range_access;
+
+    class adaptor : public rs::adaptor_base
+    {
+        predicate_view* rng_;
+
+    public:
+        adaptor() = default;
+        constexpr adaptor(predicate_view* rng) : rng_{rng} {}
+
+        //        template <typename R>
+        static constexpr auto begin(predicate_view& rng) { return *rng.begin_; }
+
+        // template <typename I>
+        constexpr void next(rs::iterator_t<Rng>& it) const
+        {
+            rng_->satisfy_forward(++it, true);
+        }
+
+        constexpr void prev(rs::iterator_t<Rng>& it) const { rng_->satisfy_reverse(it); }
+
+        void advance() = delete;
+        void distance_to() = delete;
+    };
+
+    adaptor begin_adaptor()
+    {
+        cache_begin();
+        return {this};
+    }
+
+    adaptor end_adaptor()
+    {
+        cache_begin();
+        return {this};
+    }
+
+    constexpr void satisfy_forward(rs::iterator_t<Rng>& it, bool step_pred = false)
+    {
+        const auto last = rs::end(this->base());
+        const auto pred_last = rs::end(this->pred);
+
+        if (step_pred) ++pred_it;
+
+        while (it != last && pred_it != pred_last && !(*pred_it)) {
+            ++it;
+            ++pred_it;
+        }
+    }
+
+    constexpr void satisfy_reverse(rs::iterator_t<Rng>& it)
+    {
+        do {
+            --it;
+            --pred_it;
+        } while (!(*pred_it));
+    }
+
+    constexpr void cache_begin()
+    {
+        if (begin_) return;
+
+        auto it = rs::begin(this->base());
+        pred_it = rs::begin(pred);
+        satisfy_forward(it);
+        begin_.emplace(MOVE(it));
+    }
+
+    Pred pred;
+    rs::semiregular_box_t<Fn> f;
+
+    std::optional<rs::iterator_t<Rng>> begin_;
+    rs::iterator_t<Pred> pred_it;
+
+public:
+    predicate_view() = default;
+
+    explicit constexpr predicate_view(Rng&& rng, Pred p, Fn f)
+        : predicate_view::view_adaptor{FWD(rng)}, pred{MOVE(p)}, f{MOVE(f)}
+    {
+    }
+
+    template <typename U>
+    constexpr auto apply(U&& u) const
+    {
+        constexpr bool nested = requires(predicate_view o, U u) { o.base().apply(u); };
+        if constexpr (nested)
+        {
+            return f(this->base().apply(FWD(u)));
+        }
+        else { return f(FWD(u)); }
+    }
+};
+
+template <typename Rng, typename Pred, typename Fn>
+predicate_view(Rng&&, Pred, Fn) -> predicate_view<Rng, Pred, Fn>;
+
+struct predicate_view_base_fn {
+    template <typename Rng, typename Pred>
+    constexpr auto operator()(Rng&& rng, Pred&& pred) const;
+
+    template <typename Rng, typename Pred, typename F>
+    constexpr auto operator()(Rng&& rng, Pred&&, F&& f) const;
+};
+
+struct predicate_view_fn : predicate_view_base_fn {
+    using base = predicate_view_base_fn;
+
+    template <TupleLike U, typename P>
+    constexpr auto operator()(U&& u, P&& p) const
+    {
+        if constexpr (SimilarTuples<U, P>)
+            return transform(
+                [this](auto&& ui, auto&& pi) {
+                    return this->base::operator()(tuple{FWD(ui)}, FWD(pi));
+                },
+                FWD(u),
+                FWD(p));
+        else
+            return transform(
+                [this, pi = FWD(p)](auto&& ui) {
+                    return this->base::operator()(tuple{FWD(ui)}, pi);
+                },
+                FWD(u));
+        // if constexpr (Scalar<U>) {
+        //     return tuple{base::operator()(FWD(u) | sel::D, MOVE(slices))};
+        // } else if constexpr (Vector<U>) {
+        //     return tuple{base::operator()(FWD(u) | sel::Dx, slices, sel::Dx),
+        //                  base::operator()(FWD(u) | sel::Dy, slices, sel::Dy),
+        //                  base::operator()(FWD(u) | sel::Dz, slices, sel::Dz)};
+        // } else {
+        //     return tuple{base::operator()(FWD(u), MOVE(slices))};
+        // }
+    }
+
+    template <typename P>
+    constexpr auto operator()(P&& p) const
+    {
+        return rs::make_view_closure(rs::bind_back(*this, FWD(p)));
+    }
+};
+
+template <typename Rng, typename Pred>
+constexpr auto predicate_view_base_fn::operator()(Rng&& rng, Pred&& pred) const
+{
+    return predicate_view(FWD(rng), pred, rs::bind_back(predicate_view_fn{}, pred));
+}
+
+template <typename Rng, typename Pred, typename F>
+constexpr auto predicate_view_base_fn::operator()(Rng&& rng, Pred&& pred, F&& f) const
+{
+    return predicate_view(
+        FWD(rng), pred, rs::compose(rs::bind_back(predicate_view_fn{}, pred), FWD(f)));
+}
+
+} // namespace detail
+
+namespace sel
+{
+constexpr inline auto predicate = ::ccs::detail::predicate_view_fn{};
+
 } // namespace sel
 
 } // namespace ccs

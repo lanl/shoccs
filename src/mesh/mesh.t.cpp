@@ -287,6 +287,14 @@ TEST_CASE("selections with object")
     u | m.fluid = 1;
 
     {
+        const bcs::Object obj_bcs = {bcs::Floating};
+        u | m.dirichlet(obj_bcs) = -1;
+        // REQUIRE(rs::count(u | sel::Rx, -1) == 0);
+        // REQUIRE(rs::count(u | sel::Ry, -1) == 0);
+        // REQUIRE(rs::count(u | sel::Rz, -1) == 0);
+    }
+
+    {
         using F = decltype(u | m.fluid);
 
         REQUIRE(rs::bidirectional_range<F>);

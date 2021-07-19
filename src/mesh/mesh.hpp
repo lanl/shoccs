@@ -122,6 +122,13 @@ public:
         return grid_boundaries<bcs::Dirichlet, I>(g);
     }
 
+    auto dirichlet(const bcs::Object& o) const
+    {
+        return sel::R | sel::predicate(tuple{o} | vs::transform([](auto&& io) {
+                                           return io == bcs::Dirichlet;
+                                       }));
+    }
+
     template <int I = -1>
     auto neumann(const bcs::Grid& g) const
     {

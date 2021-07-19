@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "selector.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -651,4 +653,69 @@ TEST_CASE("multi_slice math")
                                           vs::iota(13, 23),      /* whole */
                                           dble(vs::iota(22, 24)) /* sparse */
                                           )});
+}
+
+TEST_CASE("predicate extraction")
+{
+    auto t = tuple{vs::iota(0, 12)};
+    auto v = tuple{vs::iota(1, 13)} | vs::transform([](auto&& v) { return v < 5; });
+
+    REQUIRE(rs::equal(t | sel::predicate(v), vs::iota(0, 4)));
+}
+
+TEST_CASE("predicate assignment")
+{
+    using T = std::vector<int>;
+    auto t = tuple<T>{vs::iota(0, 12)};
+    auto v =
+        tuple{vs::iota(1, 13)} | vs::transform([](auto&& v) { return v < 5 || v > 9; });
+
+    t | sel::predicate(v) = -1;
+
+    REQUIRE(t == std::vector{-1, -1, -1, -1, 4, 5, 6, 7, 8, -1, -1, -1});
+}
+
+TEST_CASE("predicate scalar extraction")
+{
+    using T = std::vector<int>;
+    scalar<T> s{tuple{vs::iota(0, 12)},
+                tuple{vs::iota(0, 2), vs::iota(5, 9), vs::iota(-1, 3)}};
+
+    auto dp =
+        tuple{vs::iota(0, 12)} | vs::transform([](auto&& i) { return 2 * (i / 2) == i; });
+
+    REQUIRE(rs::equal(s | sel::D | sel::predicate(dp), vs::iota(0, 12) | vs::stride(2)));
+
+    scalar<T> v{s};
+    auto rp = v | sel::R | vs::transform([](auto&& i) { return 2 * (i / 2) == i; });
+
+    auto r = s | sel::R | sel::predicate(rp);
+    REQUIRE(rs::equal(get<0>(r), T{0}));
+    REQUIRE(rs::equal(get<1>(r), T{6, 8}));
+    REQUIRE(rs::equal(get<2>(r), T{0, 2}));
+}
+
+TEST_CASE("predicate scalar assignment")
+{
+    using T = std::vector<int>;
+    scalar<T> s{tuple{vs::iota(0, 12)},
+                tuple{vs::iota(0, 2), vs::iota(5, 9), vs::iota(-1, 3)}};
+
+    auto dp =
+        tuple{vs::iota(0, 12)} | vs::transform([](auto&& i) { return 2 * (i / 2) == i; });
+
+    s | sel::D | sel::predicate(dp) = -2;
+
+    REQUIRE(rs::equal(s | sel::D, T{-2, 1, -2, 3, -2, 5, -2, 7, -2, 9, -2, 11}));
+
+    scalar<T> v{s};
+    auto rp = v | sel::R | vs::transform([](auto&& i) { return 2 * (i / 2) == i; });
+
+    scalar<T> u = s - 10;
+
+    s | sel::R | sel::predicate(rp) = u;
+
+    REQUIRE(rs::equal(get<si::Rx>(s), T{-10, 1}));
+    REQUIRE(rs::equal(get<si::Ry>(s), T{5, -4, 7, -2}));
+    REQUIRE(rs::equal(get<si::Rz>(s), T{-1, -10, 1, -8}));
 }
