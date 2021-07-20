@@ -332,17 +332,14 @@ TEST_CASE("E2 with Objects")
 
     scalar<T> du_x{m.ss()}, du_y{m.ss()}, du_z{m.ss()};
 
-    du_x | m.fluid = m.xyz | f2_ddx;
-    du_x | m.dirichlet(gridBcs) = 0;
-    du_x | sel::R = m.xyz | f2_ddx;
+    du_x | m.fluid_all(objectBcs) = m.xyz | f2_ddx;
+    du_x | m.dirichlet(gridBcs, objectBcs) = 0;
 
-    du_y | m.fluid = m.xyz | f2_ddy;
-    du_y | m.dirichlet(gridBcs) = 0;
-    du_y | sel::R = m.xyz | f2_ddy;
+    du_y | m.fluid_all(objectBcs) = m.xyz | f2_ddy;
+    du_y | m.dirichlet(gridBcs, objectBcs) = 0;
 
-    du_z | m.fluid = m.xyz | f2_ddz;
-    du_z | m.dirichlet(gridBcs) = 0;
-    du_z | sel::R = m.xyz | f2_ddz;
+    du_z | m.fluid_all(objectBcs) = m.xyz | f2_ddz;
+    du_z | m.dirichlet(gridBcs, objectBcs) = 0;
 
     REQUIRE((integer)rs::size(du_x | sel::D) == m.size());
 

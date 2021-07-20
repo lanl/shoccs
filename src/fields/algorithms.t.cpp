@@ -10,7 +10,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <range/v3/algorithm/equal.hpp>
+#include <range/v3/all.hpp>
 
 #include <vector>
 
@@ -42,3 +42,24 @@ TEST_CASE("dot product")
     REQUIRE(rs::equal(s | sel::Rz,
                       std::vector{3 * 30 + 4 * 40 + 5 * 50, 4 * 40 + 5 * 50 + 6 * 60}));
 };
+
+TEST_CASE("minmax")
+{
+    scalar_real s{tuple{vs::iota(0, 12)},
+                  tuple{vs::iota(-10, -8), vs::iota(-8, 6), vs::iota(12, 13)}};
+
+    auto&& [smin, smax] = minmax(s);
+
+    REQUIRE(smin == -10);
+    REQUIRE(smax == 12);
+}
+
+TEST_CASE("max")
+{
+    scalar_real s{tuple{vs::iota(0, 12)},
+                  tuple{vs::iota(-10, -8), vs::iota(-8, 6), vs::iota(12, 13)}};
+
+    auto smax = max(s);
+
+    REQUIRE(smax == 12);
+}

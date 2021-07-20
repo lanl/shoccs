@@ -260,6 +260,19 @@ constexpr void for_each(F&& f, T&&... t)
     (sequence<U>, FWD(t)...);
 }
 
+template <typename Fn, TupleLike T, typename I>
+constexpr I reduce(Fn f, T&& t, I init)
+{
+    for_each([&f, &init](auto&& v) { init = f(MOVE(init), FWD(v)); }, FWD(t));
+    return init;
+}
+
+template <typename TransformFn, TupleLike T, typename ReduceFn, typename I>
+constexpr I transform_reduce(TransformFn tf, T&& t, ReduceFn rf, I init)
+{
+    return reduce(MOVE(rf), transform(MOVE(tf), FWD(t)), MOVE(init));
+}
+
 // Given a container and and input range, attempt to resize the container.
 // Either way, copy the input range into the container - may not be safe.
 template <Range R, OutputRange<R> C>

@@ -858,6 +858,7 @@ public:
     explicit constexpr predicate_view(Rng&& rng, Pred p, Fn f)
         : predicate_view::view_adaptor{FWD(rng)}, pred{MOVE(p)}, f{MOVE(f)}
     {
+        assert(rs::size(rng) == rs::size(p));
     }
 
     template <typename U>

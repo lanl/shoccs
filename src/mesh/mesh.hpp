@@ -40,6 +40,16 @@ class mesh
         }
     }
 
+    template <typename Fn>
+    auto object_boundaries(Fn cmp) const
+    {
+        auto t = vs::transform([cmp = MOVE(cmp)](auto&& info) { return cmp(FWD(info)); });
+
+        return tuple{sel::Rx, sel::Ry, sel::Rz} | tuple{sel::predicate(Rx() | t),
+                                                        sel::predicate(Ry() | t),
+                                                        sel::predicate(Rz() | t)};
+    }
+
 public:
     mesh() = default;
     mesh(const index_extents& extents, const domain_extents& bounds);
@@ -124,9 +134,26 @@ public:
 
     auto dirichlet(const bcs::Object& o) const
     {
-        return sel::R | sel::predicate(tuple{o} | vs::transform([](auto&& io) {
-                                           return io == bcs::Dirichlet;
-                                       }));
+        return object_boundaries(
+            [&o](auto&& info) { return o[info.shape_id] == bcs::Dirichlet; });
+    }
+
+    auto non_dirichlet(const bcs::Object& o) const
+    {
+        return object_boundaries(
+            [&o](auto&& info) { return o[info.shape_id] != bcs::Dirichlet; });
+    }
+
+    template <int I = -1>
+    auto dirichlet(const bcs::Grid& g, const bcs::Object& o) const
+    {
+        return tuple_cat<tuple<integer>>(this->template dirichlet<I>(g),
+                                         this->dirichlet(o));
+    }
+
+    auto fluid_all(const bcs::Object& o) const
+    {
+        return tuple_cat<tuple<integer>>(tuple{fluid}, non_dirichlet(o));
     }
 
     template <int I = -1>

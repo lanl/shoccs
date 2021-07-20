@@ -718,4 +718,6 @@ TEST_CASE("predicate scalar assignment")
     REQUIRE(rs::equal(get<si::Rx>(s), T{-10, 1}));
     REQUIRE(rs::equal(get<si::Ry>(s), T{5, -4, 7, -2}));
     REQUIRE(rs::equal(get<si::Rz>(s), T{-1, -10, 1, -8}));
+
+    s | (sel::R | sel::predicate(rp)) = 3;
 }

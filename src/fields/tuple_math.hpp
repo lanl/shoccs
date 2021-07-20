@@ -59,7 +59,7 @@ private:
     {                                                                                    \
         auto tp = [&]<auto... Is>(std::index_sequence<Is...>)                            \
         {                                                                                \
-            return make_tuple<U>(get<Is>(u).apply(v)...);                                \
+            return tuple_cat<U>(get<Is>(u).apply(v)...);                                 \
         }                                                                                \
         (sequence<U>);                                                                   \
         static_assert(OutputTuple<U, decltype(tp)>);                                     \

@@ -11,12 +11,6 @@
 
 #include <iostream>
 
-namespace ccs
-{
-template <typename T>
-concept any_output_range = rs::range<T> && rs::output_range<T, rs::range_value_t<T>>;
-}
-
 using namespace ccs;
 
 TEST_CASE("Output Ranges")
@@ -304,4 +298,16 @@ TEST_CASE("expansion")
     auto x = wrapper<std::vector<int>>{std::vector{1, 2, 3}};
     auto y = wrapper<std::vector<int>>{std::vector{4, 5, 6}};
     zip_wrap(x, y);
+}
+
+TEST_CASE("underlying_range")
+{
+    using T = std::vector<int>;
+
+    static_assert(std::same_as<underlying_range_t<T>, T>);
+    static_assert(std::same_as<underlying_range_t<std::tuple<T>>, T>);
+    static_assert(std::same_as<underlying_range_t<std::tuple<T, T>>, T>);
+    static_assert(
+        std::same_as<underlying_range_t<std::tuple<std::tuple<T>, std::tuple<T, T, T>>>,
+                     T>);
 }

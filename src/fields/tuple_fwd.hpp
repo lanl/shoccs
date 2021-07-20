@@ -674,6 +674,35 @@ struct viewable_range_by_value_impl<T&> {
 
 template <typename T>
 using viewable_range_by_value = detail::viewable_range_by_value_impl<T>::type;
+
+namespace detail
+{
+template <typename>
+struct underlying_range_impl;
+}
+
+template <typename T>
+using underlying_range_t = detail::underlying_range_impl<T>::type;
+
+namespace detail
+{
+template <typename>
+struct underlying_range_impl {
+    static_assert("No underlying range type for tuple");
+};
+
+template <Range R>
+struct underlying_range_impl<R> {
+    using type = std::remove_cvref_t<R>;
+};
+
+template <TupleLike T>
+    requires(!Range<T>)
+struct underlying_range_impl<T> {
+    using type = underlying_range_t<std::remove_cvref_t<mp_first<tuple_get_types<T>>>>;
+};
+} // namespace detail
+
 } // namespace ccs
 
 // need to specialize this bool inorder for r_tuples to have the correct behavior.

@@ -12,10 +12,6 @@
 
 #include "operators/discrete_operator.hpp"
 
-#include <range/v3/algorithm/max.hpp>
-#include <range/v3/algorithm/min.hpp>
-#include <range/v3/algorithm/minmax.hpp>
-
 namespace ccs::systems
 {
 
@@ -64,10 +60,12 @@ void heat::operator()(field& f, const step_controller& c)
 system_stats heat::stats(const field&, const field& f, const step_controller& step) const
 {
     auto&& u = f.scalars(scalars::u);
+
     auto sol = m.xyz | m_sol(step.simulation_time());
-    auto [min, max] = rs::minmax(u | m.fluid);
-    real error = rs::max(abs(u - sol) | m.fluid);
-    return system_stats{.stats = {error, min, max}};
+    auto [u_min, u_max] = minmax(u | m.fluid_all(object_bcs));
+
+    real error = max(abs(u - sol) | m.fluid_all(object_bcs));
+    return system_stats{.stats = {error, u_min, u_max}};
 }
 
 //
@@ -103,12 +101,11 @@ void heat::rhs(field_view f, real time, field_span rhs) const
     u_rhs *= diffusivity;
 
     if (m_sol) {
-        const auto& l = m.xyz;
-        // this does not currently account for non-dirichlet bcs on R
-        u_rhs | m.fluid +=
-            (l | m_sol.ddt(time)) - (diffusivity * (l | m_sol.laplacian(time)));
-        // need to zero the mms contribution on dirichlet boundaries
-        u_rhs | m.dirichlet(grid_bcs) = 0;
+        const auto src =
+            (m.xyz | m_sol.ddt(time)) - (diffusivity * (m.xyz | m_sol.laplacian(time)));
+
+        u_rhs | m.fluid_all(object_bcs) += src;
+        u_rhs | m.dirichlet(grid_bcs, object_bcs) = 0;
     }
 }
 
@@ -122,9 +119,7 @@ void heat::update_boundary(field_span f, real time)
     auto&& u = f.scalars(scalars::u);
     auto l = m.xyz;
 
-    u | m.dirichlet(grid_bcs) = l | m_sol(time);
-    // assumes dirichlet right now
-    u | sel::R = l | m_sol(time);
+    u | m.dirichlet(grid_bcs, object_bcs) = l | m_sol(time);
 
     // set possible neumann bcs;
     neumann_u | m.neumann<0>(grid_bcs) = l | m_sol.gradient(0, time);

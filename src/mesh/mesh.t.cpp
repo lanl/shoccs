@@ -289,9 +289,17 @@ TEST_CASE("selections with object")
     {
         const bcs::Object obj_bcs = {bcs::Floating};
         u | m.dirichlet(obj_bcs) = -1;
-        // REQUIRE(rs::count(u | sel::Rx, -1) == 0);
-        // REQUIRE(rs::count(u | sel::Ry, -1) == 0);
-        // REQUIRE(rs::count(u | sel::Rz, -1) == 0);
+        REQUIRE(rs::count(u | sel::Rx, -1) == 0);
+        REQUIRE(rs::count(u | sel::Ry, -1) == 0);
+        REQUIRE(rs::count(u | sel::Rz, -1) == 0);
+    }
+
+    {
+        const bcs::Object obj_bcs = {bcs::Dirichlet};
+        u | m.dirichlet(obj_bcs) = -1;
+        REQUIRE(rs::count(u | sel::Rx, -1) == (integer)rs::size(u | sel::Rx));
+        REQUIRE(rs::count(u | sel::Ry, -1) == (integer)rs::size(u | sel::Ry));
+        REQUIRE(rs::count(u | sel::Rz, -1) == (integer)rs::size(u | sel::Rz));
     }
 
     {
@@ -316,6 +324,11 @@ TEST_CASE("selections with object")
     v | sel::D = m.xyz | vs::transform([center = real3{0.01, -0.01, 0.5}](auto&& loc) {
                      return length(loc - center) > 0.25 ? 1 : -1;
                  });
+
+    {
+        const bcs::Object obj_bcs = {bcs::Dirichlet};
+        u | m.dirichlet(obj_bcs) = 0;
+    }
 
     REQUIRE(u == v);
 

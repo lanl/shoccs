@@ -2,16 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <range/v3/algorithm/equal.hpp>
-#include <range/v3/numeric/accumulate.hpp>
-#include <range/v3/range/concepts.hpp>
-#include <range/v3/view/all.hpp>
-#include <range/v3/view/iota.hpp>
-#include <range/v3/view/repeat.hpp>
-#include <range/v3/view/repeat_n.hpp>
-#include <range/v3/view/transform.hpp>
-#include <range/v3/view/zip.hpp>
-#include <range/v3/view/zip_with.hpp>
+#include <range/v3/all.hpp>
 
 #include <iostream>
 #include <vector>
@@ -176,6 +167,14 @@ TEST_CASE("nested for_each")
     REQUIRE(get<1>(get<1>(t)) == T{30});
 }
 
+TEST_CASE("reduce")
+{
+    auto a = reduce([](auto&& acc, auto&& item) { return std::max(FWD(acc), FWD(item)); },
+                    std::tuple{std::tuple{2}, std::tuple{4}, std::tuple{1}},
+                    -1234);
+    REQUIRE(a == 4);
+}
+
 TEST_CASE("transform")
 {
 
@@ -288,6 +287,28 @@ TEST_CASE("nested transform")
     REQUIRE(rs::equal(get<0>(get<0>(b)), T{1, 3}));
     REQUIRE(rs::equal(get<0>(get<1>(b)), T{5, 7}));
     REQUIRE(rs::equal(get<1>(get<1>(b)), T{9}));
+}
+
+TEST_CASE("transform_reduce")
+{
+    using T = std::vector<int>;
+    auto s = std::tuple{T{0, 1, 2}, T{-1, 0, 0}, T{1, -10, 1}};
+
+    auto k = transform_reduce(rs::max, s, std::plus{}, -3);
+
+    REQUIRE(k == 0);
+
+    auto [min, max] = transform_reduce(
+        rs::minmax,
+        s,
+        [](auto&& acc, auto&& item) {
+            return rs::minmax_result<int>{rs::min(acc.min, item.min),
+                                          rs::max(acc.max, item.max)};
+        },
+        rs::minmax_result<int>{});
+
+    REQUIRE(min == -10);
+    REQUIRE(max == 2);
 }
 
 TEST_CASE("range lift")
