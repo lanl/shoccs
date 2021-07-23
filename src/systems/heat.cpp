@@ -12,6 +12,8 @@
 
 #include "operators/discrete_operator.hpp"
 
+#include <range/v3/algorithm/max_element.hpp>
+
 namespace ccs::systems
 {
 
@@ -28,14 +30,21 @@ heat::heat(mesh&& m,
       grid_bcs{MOVE(grid_bcs)},
       object_bcs{MOVE(object_bcs)},
       m_sol{MOVE(m_sol)},
-      lap{laplacian(this->m, st, this->grid_bcs, this->object_bcs)},
+      lap{this->m, st, this->grid_bcs, this->object_bcs, "logs/laplacian.csv"},
       diffusivity{diffusivity},
       neumann_u{m.ss()}
 {
     assert(!!(this->m_sol));
-    logger = spdlog::basic_logger_st("system", "logs/system.csv", true);
+
+    auto sink =
+        std::make_shared<spdlog::sinks::basic_file_sink_st>("logs/system.csv", true);
+    logger = std::make_shared<spdlog::logger>("system", sink);
     logger->set_pattern("%v");
-    logger->info("Date,Time,Step,Linf,Min,Max");
+    // logger->info("Timestamp,Step,Linf,Min,Max");
+    logger->info(
+        "Timestamp,Time,Step,Linf,Min,Max,Domain_Linf,Domain_ic,Rx_Linf,Rx_ic,Ry_"
+        "Linf,Ry_ic,Rz_Linf,Rz_ic");
+
     logger->set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
 }
 
@@ -65,7 +74,33 @@ system_stats heat::stats(const field&, const field& f, const step_controller& st
     auto [u_min, u_max] = minmax(u | m.fluid_all(object_bcs));
 
     real error = max(abs(u - sol) | m.fluid_all(object_bcs));
-    return system_stats{.stats = {error, u_min, u_max}};
+    // Extra info for debugging:
+    auto linf = abs(u - sol);
+    auto fluid_error = linf | m.fluid_all(object_bcs);
+    auto max_el = transform(rs::max_element, fluid_error);
+    auto err_pairs = transform(
+        [](auto&& rng, auto&& max_el) {
+            if (rs::end(rng) != max_el)
+                return std::pair{
+                    *max_el, (real)rs::distance(rs::begin(rng.base()), max_el.base())};
+            else
+                return std::pair{0.0, (real)0};
+        },
+        fluid_error,
+        max_el);
+
+    auto&& [d, rx, ry, rz] = err_pairs;
+    return system_stats{.stats = {error,
+                                  u_min,
+                                  u_max,
+                                  d.first,
+                                  d.second,
+                                  rx.first,
+                                  rx.second,
+                                  ry.first,
+                                  ry.second,
+                                  rz.first,
+                                  rz.second}};
 }
 
 //

@@ -9,6 +9,8 @@
 #include "mesh/mesh.hpp"
 #include "stencils/stencil.hpp"
 
+#include <spdlog/spdlog.h>
+
 namespace ccs
 {
 class derivative
@@ -31,7 +33,8 @@ public:
                const mesh& m,
                const stencil& st,
                const bcs::Grid& grid_bcs,
-               const bcs::Object& object_bcs);
+               const bcs::Object& object_bcs,
+               std::shared_ptr<spdlog::logger> = {});
 
     // operator for when neumann conditions are not needed
     template <typename Op = eq_t>

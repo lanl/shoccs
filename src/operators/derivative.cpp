@@ -5,6 +5,8 @@
 
 #include <cassert>
 
+#include <spdlog/spdlog.h>
+
 namespace ccs
 {
 
@@ -38,10 +40,11 @@ struct OB_builder {
                         const boundary& left,
                         const boundary& right,
                         integer stride,
-                        const mesh& m)
+                        const mesh& m,
+                        std::string& msg)
     {
-        auto left_ic = m.ic(left.mesh_coordinate);
-        auto right_ic = m.ic(right.mesh_coordinate);
+        const auto left_ic = m.ic(left.mesh_coordinate);
+        const auto right_ic = m.ic(right.mesh_coordinate);
 
         auto it = rs::begin(interp_coeffs);
         // handle left point
@@ -49,6 +52,7 @@ struct OB_builder {
             B.add_point(shape_row, obj->object_coordinate, deriv_coeff * *it);
         else
             O.add_point(shape_row, left_ic, deriv_coeff * *it);
+
         ++it;
 
         // handle interior
@@ -62,6 +66,17 @@ struct OB_builder {
             B.add_point(shape_row, obj->object_coordinate, deriv_coeff * *it);
         else
             O.add_point(shape_row, right_ic, deriv_coeff * *it);
+
+        if (msg.size()) {
+            if (!(left.object || right.object))
+                msg += fmt::format(",{},{}", -1, 1.);
+            else if (left.object)
+                msg += fmt::format(
+                    ",{},{}", left.object->object_coordinate, left.object->psi);
+            else
+                msg += fmt::format(
+                    ",{},{}", right.object->object_coordinate, right.object->psi);
+        }
     }
 
     void to_csr(matrix::csr& O_matrix, matrix::csr& B_matrix, integer rows)
@@ -79,7 +94,8 @@ void cut_discretization(int r,
                         const bcs::Object& obj_bcs,
                         matrix::csr& O,
                         matrix::csr& B,
-                        std::span<const real> interior)
+                        std::span<const real> interior,
+                        std::shared_ptr<spdlog::logger> logger)
 {
     const auto shapes = m.R(r);
     const auto sz = shapes.size();
@@ -153,6 +169,11 @@ void cut_discretization(int r,
                 return sign * (obj.psi <= 0.5 ? obj.psi : obj.psi - 1);
             }();
 
+            // prepare the log message if we are logging
+            std::string msg{};
+            if (logger)
+                msg = fmt::format("{},{},{},{},{}", dir, r, shape_row, y, obj.psi);
+
             builder.add_cut_point(shape_row, c_line);
 
             for (int i = 1; i < tObj; i++) {
@@ -161,8 +182,10 @@ void cut_discretization(int r,
                 auto&& [interp_v, left, right] =
                     st.interp(r, cp, y, left_bounds, right_bounds, interp_c);
                 builder.add_interp_row(
-                    shape_row, c_line[i], interp_v, left, right, r_stride, m);
+                    shape_row, c_line[i], interp_v, left, right, r_stride, m, msg);
             }
+
+            if (logger) logger->info("{}", MOVE(msg));
         }
     }
 
@@ -353,9 +376,11 @@ derivative::derivative(int dir,
                        const mesh& m,
                        const stencil& st,
                        const bcs::Grid& grid_bcs,
-                       const bcs::Object& obj_bcs)
+                       const bcs::Object& obj_bcs,
+                       std::shared_ptr<spdlog::logger> logger)
     : dir{dir}
 {
+    if (m.extents()[dir] < 2) return;
     // query the stencil and allocate memory
     auto [p, rmax, tmax, ex_max] = st.query_max();
     auto h = m.h(dir);
@@ -365,9 +390,9 @@ derivative::derivative(int dir,
 
     domain_discretization(dir, m, st, grid_bcs, obj_bcs, O, B, N, interior_c);
 
-    cut_discretization(0, dir, m, st, grid_bcs, obj_bcs, Bfx, Brx, interior_c);
-    cut_discretization(1, dir, m, st, grid_bcs, obj_bcs, Bfy, Bry, interior_c);
-    cut_discretization(2, dir, m, st, grid_bcs, obj_bcs, Bfz, Brz, interior_c);
+    cut_discretization(0, dir, m, st, grid_bcs, obj_bcs, Bfx, Brx, interior_c, logger);
+    cut_discretization(1, dir, m, st, grid_bcs, obj_bcs, Bfy, Bry, interior_c, logger);
+    cut_discretization(2, dir, m, st, grid_bcs, obj_bcs, Bfz, Brz, interior_c, logger);
 }
 
 template <typename Op>

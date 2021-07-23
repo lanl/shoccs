@@ -1,6 +1,8 @@
 #include "mesh.hpp"
 
 #include <sol/sol.hpp>
+
+#include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/spdlog.h>
 
 namespace ccs
@@ -148,6 +150,22 @@ mesh::mesh(const index_extents& extents,
     int i = extents[2] > 1 ? 2 : extents[1] > 1 ? 1 : 0;
     init_slices(fluid_slices, lines_[i], extents);
     fluid = sel::multi_slice(fluid_slices);
+
+    auto sink =
+        std::make_shared<spdlog::sinks::basic_file_sink_st>("logs/geometry.csv", true);
+    logger = std::make_shared<spdlog::logger>("geometry", sink);
+    logger->set_pattern("%v");
+    logger->info("Timestamp,direction,ic,psi,x,y,z,i,j,k");
+    logger->set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
+
+    for (int dir = 0; dir < 3; dir++)
+        for (int i = 0; auto&& [psi, pos, n, ray_out, ijk, id] : R(dir))
+            logger->info("{},{},{},{},{}",
+                         dir,
+                         i++,
+                         psi,
+                         fmt::join(pos, ", "),
+                         fmt::join(ijk, ", "));
 }
 
 bool mesh::dirichlet_line(const int3& start, int dir, const bcs::Grid& cart_bcs) const

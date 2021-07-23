@@ -2,10 +2,13 @@
 
 #include "derivative.hpp"
 
+#include <spdlog/spdlog.h>
+
 namespace ccs
 {
 class laplacian
 {
+    std::shared_ptr<spdlog::logger> logger;
     derivative dx;
     derivative dy;
     derivative dz;
@@ -15,6 +18,11 @@ public:
     laplacian() = default;
 
     laplacian(const mesh&, const stencil&, const bcs::Grid&, const bcs::Object&);
+    laplacian(const mesh&,
+              const stencil&,
+              const bcs::Grid&,
+              const bcs::Object&,
+              const std::string&);
 
     // when there are no neumann conditions in the problem
     std::function<void(scalar_span)> operator()(scalar_view) const;

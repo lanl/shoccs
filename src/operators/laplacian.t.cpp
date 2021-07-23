@@ -56,6 +56,32 @@ constexpr auto f2_ddz = vs::transform([](auto&& loc) {
     return 2. * (x + y);
 });
 
+// 2D 2nd order polynomial for use with E2
+constexpr auto g2 = vs::transform([](auto&& loc) {
+    auto&& [x, y, _] = loc;
+    return x * x * y + y * y * x + 3 * x * y + x + y + 1;
+});
+
+constexpr auto g2_dx = vs::transform([](auto&& loc) {
+    auto&& [x, y, _] = loc;
+    return 2. * x * y + y * y + 3. * y + 1;
+});
+
+constexpr auto g2_dy = vs::transform([](auto&& loc) {
+    auto&& [x, y, _] = loc;
+    return x * x + 2. * y * x + 3. * x + 1;
+});
+
+constexpr auto g2_ddx = vs::transform([](auto&& loc) {
+    auto&& [_, y, __] = loc;
+    return 2. * y;
+});
+
+constexpr auto g2_ddy = vs::transform([](auto&& loc) {
+    auto&& [x, _, __] = loc;
+    return 2. * x;
+});
+
 TEST_CASE("E2_2 Domain")
 {
     using T = std::vector<real>;
@@ -113,7 +139,7 @@ TEST_CASE("E2_2 Domain")
     }
 }
 
-TEST_CASE("E2 with Objects")
+TEST_CASE("E2 with Dirichlet Objects")
 {
     using T = std::vector<real>;
 
@@ -185,4 +211,158 @@ TEST_CASE("E2 with Objects")
     du = lap(u, nu);
 
     REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));
+}
+
+TEST_CASE("E2 with Floating Objects")
+{
+    using T = std::vector<real>;
+
+    sol::state lua;
+    lua.script(R"(
+        simulation = {
+            mesh = {
+                index_extents = {25, 26, 27},
+                domain_bounds = {
+                    min = {0.1, 0.2, 0.3},
+                    max = {1, 2, 2.2}
+                }
+            },
+            domain_boundaries = {
+                xmin = "dirichlet",
+                ymin = "neumann",
+                ymax = "neumann",
+                zmax = "dirichlet"
+            },
+            shapes = {
+                {
+                    type = "sphere",
+                    center = {0.45, 1.011, 1.31},
+                    radius = 0.25,
+                    boundary_condition = "floating"
+                }
+            },
+            scheme = {
+                order = 2,
+                type = "E2"
+            }
+        }
+    )");
+    // mesh
+    auto m_opt = mesh::from_lua(lua["simulation"]);
+    REQUIRE(!!m_opt);
+    const mesh& m = *m_opt;
+
+    // bcs
+    auto bc_opt = bcs::from_lua(lua["simulation"], m.extents());
+    REQUIRE(!!bc_opt);
+    auto&& [gridBcs, objectBcs] = *bc_opt;
+
+    // scheme
+    auto scheme_opt = stencil::from_lua(lua["simulation"]);
+    REQUIRE(!!scheme_opt);
+    stencil st = *scheme_opt;
+
+    const auto loc = m.xyz;
+
+    // initialize fields
+    scalar<T> u{loc | f2};
+    REQUIRE(rs::size(u | sel::Rx) == m.Rx().size());
+
+    // set the exact du we expect based on zeros assigned to dirichlet locations
+    scalar<T> ex{m.ss()};
+
+    ex | m.fluid_all(objectBcs) = (loc | f2_ddx) + (loc | f2_ddy) + (loc | f2_ddz);
+
+    // zero dirichlet boundaries
+    ex | m.dirichlet(gridBcs, objectBcs) = 0;
+
+    // neumann conditions
+    scalar<T> nu{loc | f2_dy};
+
+    scalar<T> du{m.ss()};
+
+    auto lap = laplacian{m, st, gridBcs, objectBcs};
+    du = lap(u, nu);
+
+    REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));
+    REQUIRE_THAT(get<si::Rx>(ex), Approx(get<si::Rx>(du)));
+    REQUIRE_THAT(get<si::Ry>(ex), Approx(get<si::Ry>(du)));
+    REQUIRE_THAT(get<si::Rz>(ex), Approx(get<si::Rz>(du)));
+}
+
+TEST_CASE("2D E2 with Floating Objects")
+{
+    using T = std::vector<real>;
+
+    sol::state lua;
+    lua.script(R"(
+        simulation = {
+            mesh = {
+                index_extents = {25, 26},
+                domain_bounds = {
+                    min = {0.1, 0.2},
+                    max = {1, 2}
+                }
+            },
+            domain_boundaries = {
+                xmin = "dirichlet",
+                ymin = "neumann",
+                ymax = "neumann",
+            },
+            shapes = {
+                {
+                    type = "sphere",
+                    center = {0.45, 1.011},
+                    radius = 0.25,
+                    boundary_condition = "floating"
+                }
+            },
+            scheme = {
+                order = 2,
+                type = "E2"
+            }
+        }
+    )");
+    // mesh
+    auto m_opt = mesh::from_lua(lua["simulation"]);
+    REQUIRE(!!m_opt);
+    const mesh& m = *m_opt;
+
+    REQUIRE(m.R(2).size() == 0);
+
+    // bcs
+    auto bc_opt = bcs::from_lua(lua["simulation"], m.extents());
+    REQUIRE(!!bc_opt);
+    auto&& [gridBcs, objectBcs] = *bc_opt;
+
+    // scheme
+    auto scheme_opt = stencil::from_lua(lua["simulation"]);
+    REQUIRE(!!scheme_opt);
+    stencil st = *scheme_opt;
+
+    const auto loc = m.xyz;
+
+    // initialize fields
+    scalar<T> u{loc | g2};
+    REQUIRE(rs::size(u | sel::Rx) == m.Rx().size());
+
+    // set the exact du we expect based on zeros assigned to dirichlet locations
+    scalar<T> ex{m.ss()};
+
+    ex | m.fluid_all(objectBcs) = (loc | g2_ddx) + (loc | g2_ddy);
+
+    // zero dirichlet boundaries
+    ex | m.dirichlet(gridBcs, objectBcs) = 0;
+
+    // neumann conditions
+    scalar<T> nu{loc | g2_dy};
+
+    scalar<T> du{m.ss()};
+
+    auto lap = laplacian{m, st, gridBcs, objectBcs, "logs/laplacian.csv"};
+    du = lap(u, nu);
+
+    REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));
+    REQUIRE_THAT(get<si::Rx>(ex), Approx(get<si::Rx>(du)));
+    REQUIRE_THAT(get<si::Ry>(ex), Approx(get<si::Ry>(du)));
 }

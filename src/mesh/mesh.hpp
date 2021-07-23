@@ -7,6 +7,7 @@
 #include "operators/boundaries.hpp"
 
 #include <sol/forward.hpp>
+#include <spdlog/spdlog.h>
 
 namespace ccs
 {
@@ -17,6 +18,7 @@ class mesh
     object_geometry geometry;
     std::array<std::vector<line>, 3> lines_;
     std::vector<index_slice> fluid_slices;
+    std::shared_ptr<spdlog::logger> logger;
 
     template <bcs::type B, int I>
     auto grid_boundaries(const bcs::Grid& g) const

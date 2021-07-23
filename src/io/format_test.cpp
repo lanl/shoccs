@@ -63,4 +63,6 @@ int main()
 
     // msg = fmt::format("U.{:06d}", grid_num);
     fmt::print("U.{:0{}d}\n", grid_num, suffix_length);
+
+    fmt::print("y,{}", fmt::join(vs::repeat_n("Wall,psi", 3), ","));
 }
