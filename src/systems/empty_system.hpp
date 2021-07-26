@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fields/field.hpp"
+#include "io/field_io.hpp"
 #include "temporal/step_controller.hpp"
 #include "types.hpp"
 
@@ -25,7 +26,7 @@ struct empty {
 
     void log(const system_stats& stats, const step_controller& controller);
 
-    std::span<const std::string> names() const;
+    bool write(field_io&, field_view, const step_controller&, real);
 
     real3 summary(const system_stats&) const;
 

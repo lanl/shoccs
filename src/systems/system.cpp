@@ -76,9 +76,10 @@ real3 system::summary(const system_stats& stats) const
     return std::visit([&stats](auto&& s) { return s.summary(stats); }, v);
 }
 
-std::span<const std::string> system::names() const
+bool system::write(field_io& io, field_view f, const step_controller& c, real dt)
 {
-    return std::visit([](auto&& s) { return s.names(); }, v);
+    return std::visit(
+        [&io, f = f, &c, dt = dt](auto&& s) { return s.write(io, f, c, dt); }, v);
 }
 
 system_size system::size() const

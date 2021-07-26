@@ -34,9 +34,12 @@ field_io::field_io(xdmf&& xdmf_w,
 {
 }
 bool field_io::write(std::span<const std::string> names,
-                     const field& f,
+                     field_view f,
                      const step_controller& step,
-                     real dt)
+                     real dt,
+                     tuple<std::span<const mesh_object_info>,
+                           std::span<const mesh_object_info>,
+                           std::span<const mesh_object_info>> r)
 {
     if (!dump_interval(step, dt)) return false;
 
@@ -51,11 +54,17 @@ bool field_io::write(std::span<const std::string> names,
                           }) |
                           rs::to<std::vector<std::string>>();
 
-    xdmf_w.write(n, step, names, xmf_file_names);
+    xdmf_w.write(n, step, names, xmf_file_names, r);
+
+    if (n == 0) {
+        auto file_names = std::vector<std::string>{io / "rx", io / "ry", io / "rz"};
+        field_data_w.write_geom(file_names, r);
+    }
 
     auto data_file_names = xmf_file_names |
                            vs::transform([io](auto&& name) { return io / name; }) |
                            rs::to<std::vector<std::string>>();
+
     field_data_w.write(f, data_file_names);
 
     ++dump_interval;

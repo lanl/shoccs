@@ -31,7 +31,7 @@ void empty::log(const system_stats&, const step_controller&)
 
 real3 empty::summary(const system_stats&) const { return {}; }
 
-std::span<const std::string> empty::names() const { return {}; }
+bool empty::write(field_io&, field_view, const step_controller&, real) { return false; }
 
 system_size empty::size() const { return {}; }
 

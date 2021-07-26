@@ -14,9 +14,8 @@ constexpr auto tuple_sz = std::tuple_size_v<std::remove_cvref_t<T>>;
 
 #define SHOCCS_GEN_OPERATORS(op, acc)                                                    \
     template <NumericTuple U, NumericTuple V>                                            \
-    requires(detail::tuple_sz<U> ==                                                      \
-             detail::tuple_sz<V>) constexpr std::array<real, detail::tuple_sz<U>>        \
-    op(U&& u, V&& v)                                                                     \
+        requires(detail::tuple_sz<U> == detail::tuple_sz<V>)                             \
+    constexpr std::array<real, detail::tuple_sz<U>> op(U&& u, V&& v)                     \
     {                                                                                    \
         return []<auto... Is>(std::index_sequence<Is...>, auto&& a, auto&& b)            \
         {                                                                                \
@@ -55,7 +54,8 @@ SHOCCS_GEN_OPERATORS(operator-, -)
 #undef SHOCCS_GEN_OPERATORS
 
 template <NumericTuple U, NumericTuple V>
-requires(detail::tuple_sz<U> == detail::tuple_sz<V>) constexpr real dot(U&& u, V&& v)
+    requires(detail::tuple_sz<U> == detail::tuple_sz<V>)
+constexpr real dot(U&& u, V&& v)
 {
     return []<auto... Is>(std::index_sequence<Is...>, auto&& a, auto&& b)
     {
@@ -63,6 +63,18 @@ requires(detail::tuple_sz<U> == detail::tuple_sz<V>) constexpr real dot(U&& u, V
         return ((get<Is>(a) * get<Is>(b)) + ...);
     }
     (std::make_index_sequence<detail::tuple_sz<U>>{}, FWD(u), FWD(v));
+}
+
+template <NumericTuple U, Numeric V>
+constexpr auto clamp_lo(U&& u, V v)
+{
+    return [v]<auto... Is>(std::index_sequence<Is...>, auto&& a)
+    {
+        using std::get;
+        return std::array<real, detail::tuple_sz<U>>{
+            (get<Is>(a) > v ? get<Is>(a) : v)...};
+    }
+    (std::make_index_sequence<detail::tuple_sz<U>>{}, FWD(u));
 }
 
 template <NumericTuple U>

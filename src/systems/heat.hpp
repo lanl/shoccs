@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fields/field.hpp"
+#include "io/field_io.hpp"
 #include "mesh/mesh.hpp"
 #include "mms/manufactured_solutions.hpp"
 #include "operators/laplacian.hpp"
@@ -26,10 +27,11 @@ class heat
     real diffusivity;
 
     scalar_real neumann_u;
-
-    std::vector<std::string> io_names = {"U"};
+    scalar_real error;
 
     std::shared_ptr<spdlog::logger> logger;
+
+    std::vector<std::string> io_names = {"U", "Error"};
 
 public:
     heat() = default;
@@ -57,7 +59,7 @@ public:
 
     void log(const system_stats&, const step_controller&);
 
-    std::span<const std::string> names() const;
+    bool write(field_io&, field_view, const step_controller&, real);
 
     real3 summary(const system_stats&) const;
 

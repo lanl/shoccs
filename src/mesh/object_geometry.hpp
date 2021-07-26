@@ -14,16 +14,6 @@
 namespace ccs
 {
 
-// only difference between this and hit_info is the solid_coord.
-struct mesh_object_info {
-    real psi; // 1D cutcell distance
-    real3 position;
-    real3 normal; // outward shape normal
-    bool ray_outside;
-    int3 solid_coord;
-    int shape_id;
-};
-
 class object_geometry
 {
     // mesh / object intersection info for all rays

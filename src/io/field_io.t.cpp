@@ -8,6 +8,9 @@
 
 using namespace ccs;
 
+using U = std::span<const mesh_object_info>;
+using T = tuple<U, U, U>;
+
 TEST_CASE("field_io - default")
 {
     sol::state lua;
@@ -28,7 +31,7 @@ TEST_CASE("field_io - default")
     REQUIRE(!!io_opt);
     auto& io = *io_opt;
 
-    REQUIRE(!io.write(names, f, step, 0.1));
+    REQUIRE(!io.write(names, f, step, 0.1, T{}));
 }
 
 // For this test, one needs to load the output in paraview
@@ -65,5 +68,5 @@ TEST_CASE("field_io - data")
     u | sel::D = vs::iota(0, 24);
     v | sel::D = vs::iota(24, 48);
 
-    REQUIRE(io.write(names, f, step, 0.0));
+    REQUIRE(io.write(names, f, step, 0.0, T{}));
 }

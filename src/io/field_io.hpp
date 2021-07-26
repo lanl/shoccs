@@ -8,6 +8,7 @@
 #include "field_data.hpp"
 #include "fields/field.hpp"
 #include "interval.hpp"
+#include "mesh/mesh_types.hpp"
 #include "types.hpp"
 #include "xdmf.hpp"
 
@@ -38,9 +39,12 @@ public:
              int suffix_length);
 
     bool write(std::span<const std::string>,
-               const field& field,
+               field_view field,
                const step_controller& controller,
-               real dt);
+               real dt,
+               tuple<std::span<const mesh_object_info>,
+                     std::span<const mesh_object_info>,
+                     std::span<const mesh_object_info>>);
 
     static std::optional<field_io> from_lua(const sol::table&);
 };

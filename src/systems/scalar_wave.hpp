@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fields/field.hpp"
+#include "io/field_io.hpp"
 #include "operators/gradient.hpp"
 #include "temporal/step_controller.hpp"
 #include "types.hpp"
@@ -52,7 +53,7 @@ public:
 
     real3 summary(const system_stats&) const;
 
-    std::span<const std::string> names() const;
+    bool write(field_io&, field_view, const step_controller&, real);
 
     void log(const system_stats&, const step_controller&);
 

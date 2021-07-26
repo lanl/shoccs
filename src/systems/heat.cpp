@@ -32,7 +32,8 @@ heat::heat(mesh&& m,
       m_sol{MOVE(m_sol)},
       lap{this->m, st, this->grid_bcs, this->object_bcs, "logs/laplacian.csv"},
       diffusivity{diffusivity},
-      neumann_u{m.ss()}
+      neumann_u{this->m.ss()},
+      error{this->m.ss()}
 {
     assert(!!(this->m_sol));
 
@@ -73,7 +74,7 @@ system_stats heat::stats(const field&, const field& f, const step_controller& st
     auto sol = m.xyz | m_sol(step.simulation_time());
     auto [u_min, u_max] = minmax(u | m.fluid_all(object_bcs));
 
-    real error = max(abs(u - sol) | m.fluid_all(object_bcs));
+    real err = max(abs(u - sol) | m.fluid_all(object_bcs));
     // Extra info for debugging:
     auto linf = abs(u - sol);
     auto fluid_error = linf | m.fluid_all(object_bcs);
@@ -90,7 +91,7 @@ system_stats heat::stats(const field&, const field& f, const step_controller& st
         max_el);
 
     auto&& [d, rx, ry, rz] = err_pairs;
-    return system_stats{.stats = {error,
+    return system_stats{.stats = {err,
                                   u_min,
                                   u_max,
                                   d.first,
@@ -170,7 +171,19 @@ void heat::log(const system_stats& stats, const step_controller& step)
         fmt::format("{},{},{}", (real)step, (int)step, fmt::join(stats.stats, ",")));
 }
 
-std::span<const std::string> heat::names() const { return io_names; }
+bool heat::write(field_io& io, field_view f, const step_controller& c, real dt)
+{
+    auto&& u = f.scalars(scalars::u);
+    auto sol = m.xyz | m_sol(c.simulation_time());
+
+    error = 0;
+    error | m.fluid_all(object_bcs) = abs(u - sol);
+    error | m.dirichlet(grid_bcs, object_bcs) = 0;
+
+    field_view io_view{std::vector<scalar_view>{u, error}, std::vector<vector_view>{}};
+
+    return io.write(io_names, io_view, c, dt, m.R());
+}
 
 //
 // Convert the system statistics into a real3 summary

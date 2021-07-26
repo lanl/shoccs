@@ -147,7 +147,10 @@ void scalar_wave::update_boundary(field_span f, real time)
     u | sel::R = sol;
 }
 
-std::span<const std::string> scalar_wave::names() const { return io_names; }
+bool scalar_wave::write(field_io&, field_view, const step_controller&, real)
+{
+    return false;
+}
 
 void scalar_wave::log(const system_stats& stats, const step_controller& step)
 {

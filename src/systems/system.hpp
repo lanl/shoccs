@@ -81,7 +81,7 @@ public:
 
     real3 summary(const system_stats&) const;
 
-    std::span<const std::string> names() const;
+    bool write(field_io&, field_view, const step_controller&, real);
 
     static std::optional<system> from_lua(const sol::table&);
 

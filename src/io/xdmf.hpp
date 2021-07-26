@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fields/tuple.hpp"
 #include "index_extents.hpp"
 #include "mesh/mesh_types.hpp"
 
@@ -22,7 +23,10 @@ public:
     void write(int grid_number,
                real time,
                std::span<const std::string> var_names,
-               std::span<const std::string> file_names) const;
+               std::span<const std::string> file_names,
+               tuple<std::span<const mesh_object_info>,
+                     std::span<const mesh_object_info>,
+                     std::span<const mesh_object_info>>) const;
 };
 
 } // namespace ccs

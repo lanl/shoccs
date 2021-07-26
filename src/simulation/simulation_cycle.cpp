@@ -27,8 +27,6 @@ real3 simulation_cycle::run()
     field u0{sys(controller)};
     field u1{u0};
 
-    auto names = sys.names();
-
     sys.update_boundary(u0, controller);
 
     system_stats stats = sys.stats(u0, u1, controller);
@@ -36,7 +34,7 @@ real3 simulation_cycle::run()
     sys.log(stats, controller);
 
     // initial write
-    io.write(names, u0, controller, .0);
+    sys.write(io, u0, controller, .0);
 
     while (controller && sys.valid(stats)) {
 
@@ -52,7 +50,7 @@ real3 simulation_cycle::run()
 
         // compute statistics and handle io
         stats = sys.stats(u0, u1, controller);
-        io.write(names, u1, controller, *dt);
+        sys.write(io, u1, controller, *dt);
         sys.log(stats, controller);
 
         spdlog::info("Cycle: time= {}  step={}, dt={}, s0={}",

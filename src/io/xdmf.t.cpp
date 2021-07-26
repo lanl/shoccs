@@ -13,6 +13,8 @@ using namespace ccs;
 TEST_CASE("header")
 {
 
+    using U = std::span<const mesh_object_info>;
+    using T = tuple<U, U, U>;
     std::vector<std::string> var_names{"U", "V"};
     std::vector<std::string> file_names{"U.00000", "V.00000"};
     auto ix = index_extents{.extents = {3, 4, 5}};
@@ -20,9 +22,12 @@ TEST_CASE("header")
     auto tmp = fs::temp_directory_path() / "headertest.xmf";
 
     auto writer = xdmf{tmp, ix, dom};
-    writer.write(0, 0.0, var_names, file_names);
+    T t{};
+    REQUIRE(rs::size(get<0>(t)) == 0);
+
+    writer.write(0, 0.0, var_names, file_names, T{});
 
     file_names[0] = "U.00001";
     file_names[1] = "V.00001";
-    writer.write(1, 0.1, var_names, file_names);
+    writer.write(1, 0.1, var_names, file_names, T{});
 }
