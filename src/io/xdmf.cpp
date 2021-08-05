@@ -53,7 +53,9 @@ void append_xdmf(pugi::xml_document& doc,
         if (sz == 0) return offset;
 
         auto grid = grid_col.append_child("Grid");
-        grid.append_attribute("Name") = fmt::format("{}{}", g_name, step).c_str();
+        //        grid.append_attribute("Name") = fmt::format("{}{}", g_name,
+        //        step).c_str();
+        grid.append_attribute("Name") = g_name.c_str();
         grid.append_attribute("GridType") = "Uniform";
 
         // topology
@@ -85,35 +87,6 @@ void append_xdmf(pugi::xml_document& doc,
     offset = sub_grid(x, "RX", 2, fmt::format("{} 1", rs::size(x)), offset);
     offset = sub_grid(y, "RY", 3, fmt::format("{} 1", rs::size(y)), offset);
     offset = sub_grid(z, "RZ", 4, fmt::format("{} 1", rs::size(z)), offset);
-
-    // Rx
-    // if (auto sz = rs::size(get<0>(t)); sz > 0) {
-    //     auto grid = grid_col.append_child("Grid");
-    //     grid.append_attribute("Name") = fmt::format("Rx{}", step).c_str();
-    //     grid.append_attribute("GridType") = "Uniform";
-
-    //     // topology
-    //     auto topo = grid.append_child("Topology");
-    //     topo.append_attribute("Reference") = "/Xdmf/Domain/Topology[2]";
-    //     // geometry
-    //     auto geom = grid.append_child("Geometry");
-    //     geom.append_attribute("Reference") = "/Xdmf/Domain/Geometry[2]";
-    //     // auto tm = grid.append_child("Time");
-    //     // tm.append_attribute("Value") = time;
-
-    //     for (auto&& [v, f] : vs::zip(var_names, file_names)) {
-    //         auto attr = grid.append_child("Attribute");
-    //         attr.append_attribute("Name") = v.c_str();
-    //         auto item = attr.append_child("DataItem");
-    //         item.append_attribute("Dimensions") = fmt::format("{} 1", sz).c_str();
-    //         item.append_attribute("NumberType") = "Float";
-    //         item.append_attribute("Precision") = "8";
-    //         item.append_attribute("Format") = "Binary";
-    //         item.append_attribute("seek") = offset;
-    //         item.text() = f.c_str();
-    //     }
-    //     offset += sz;
-    // }
 }
 
 std::string header(const int3& i,

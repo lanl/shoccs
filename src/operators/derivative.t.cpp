@@ -20,41 +20,76 @@ using Catch::Matchers::Approx;
 constexpr auto g = []() { return pick(); };
 
 // 2nd order polynomial for use with E2
+// constexpr auto f2 = vs::transform([](auto&& loc) {
+//     auto&& [x, y, z] = loc;
+//     return x * x * (y + z) + y * y * (x + z) + z * z * (x + y) + 3 * x * y * z + x + y
+//     +
+//            z;
+// });
+
+// constexpr auto f2_dx = vs::transform([](auto&& loc) {
+//     auto&& [x, y, z] = loc;
+//     return 2. * x * (y + z) + y * y + z * z + 3. * y * z + 1;
+// });
+
+// constexpr auto f2_dy = vs::transform([](auto&& loc) {
+//     auto&& [x, y, z] = loc;
+//     return x * x + 2. * y * (x + z) + z * z + 3. * x * z + 1;
+// });
+
+// constexpr auto f2_dz = vs::transform([](auto&& loc) {
+//     auto&& [x, y, z] = loc;
+//     return x * x + y * y + 2. * z * (x + y) + 3. * x * y + 1;
+// });
+
+// constexpr auto f2_ddx = vs::transform([](auto&& loc) {
+//     auto&& [_, y, z] = loc;
+//     return 2. * (y + z);
+// });
+
+// constexpr auto f2_ddy = vs::transform([](auto&& loc) {
+//     auto&& [x, _, z] = loc;
+//     return 2. * (x + z);
+// });
+
+// constexpr auto f2_ddz = vs::transform([](auto&& loc) {
+//     auto&& [x, y, _] = loc;
+//     return 2. * (x + y);
+// });
 constexpr auto f2 = vs::transform([](auto&& loc) {
     auto&& [x, y, z] = loc;
-    return x * x * (y + z) + y * y * (x + z) + z * z * (x + y) + 3 * x * y * z + x + y +
-           z;
+    return x * (y + z) + y * (x + z) + z * (x + y) + 3 * x * y * z;
 });
 
 constexpr auto f2_dx = vs::transform([](auto&& loc) {
     auto&& [x, y, z] = loc;
-    return 2. * x * (y + z) + y * y + z * z + 3. * y * z + 1;
+    return 2. * (y + z) + 3. * y * z;
 });
 
 constexpr auto f2_dy = vs::transform([](auto&& loc) {
     auto&& [x, y, z] = loc;
-    return x * x + 2. * y * (x + z) + z * z + 3. * x * z + 1;
+    return 2. * (x + z) + 3. * x * z;
 });
 
 constexpr auto f2_dz = vs::transform([](auto&& loc) {
     auto&& [x, y, z] = loc;
-    return x * x + y * y + 2. * z * (x + y) + 3. * x * y + 1;
+    return 2. * (x + y) + 3. * x * y;
 });
 
-constexpr auto f2_ddx = vs::transform([](auto&& loc) {
-    auto&& [_, y, z] = loc;
-    return 2. * (y + z);
-});
+constexpr auto f2_ddx = vs::transform([](auto&& loc) { return 0.0; });
+constexpr auto f2_ddy = f2_ddx;
+constexpr auto f2_ddz = f2_ddx;
 
-constexpr auto f2_ddy = vs::transform([](auto&& loc) {
-    auto&& [x, _, z] = loc;
-    return 2. * (x + z);
-});
-
-constexpr auto f2_ddz = vs::transform([](auto&& loc) {
-    auto&& [x, y, _] = loc;
-    return 2. * (x + y);
-});
+template <typename... Ix>
+void approx(auto&& u, auto&& v)
+{
+    u += 1;
+    v += 1;
+    for_each([&u, &v]<typename I>(I) { REQUIRE_THAT(get<I>(u), Approx(get<I>(v))); },
+             std::tuple<Ix...>{});
+    u -= 1;
+    v -= 1;
+};
 
 TEST_CASE("E2_Neumann")
 {
@@ -82,12 +117,17 @@ TEST_CASE("E2_Neumann")
 
     auto d = derivative(2, m, stencils::second::E2, gridBcs, objectBcs);
     d(u, nu, du);
-    REQUIRE_THAT(get<si::D>(du), Approx(get<si::D>(ex)));
+    // ofset for approx
+    approx<si::D>(du, ex);
+
+    // since du is zero in this case, add 1 and see if it sticks.
+    du += 1;
 
     d(u, nu, du, plus_eq);
 
-    ex *= 2;
-    REQUIRE_THAT(get<si::D>(du), Approx(get<si::D>(ex)));
+    // ex *= 2;
+    ex += 1;
+    approx<si::D>(du, ex);
 }
 
 TEST_CASE("Identity FFFFFF")
@@ -144,8 +184,8 @@ TEST_CASE("E2_2 FFFFFF")
     for (int i = 0; i < 3; i++) {
         auto d = derivative{i, m, stencils::second::E2, gridBcs, objectBcs};
         d(u, du);
-
-        REQUIRE_THAT(get<si::D>(dd[i]), Approx(get<si::D>(du)));
+        approx<si::D>(dd[i], du);
+        // REQUIRE_THAT(get<si::D>(dd[i]), Approx(get<si::D>(du)));
     }
 }
 
@@ -243,7 +283,8 @@ TEST_CASE("E2 Mixed")
             // zero boundaries
             ex | m.dirichlet(gridBcs) = 0;
 
-            REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));
+            approx<si::D>(ex, du);
+            // REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));
         }
     }
 
@@ -267,7 +308,8 @@ TEST_CASE("E2 Mixed")
             // zero boundaries
             ex | m.dirichlet(gridBcs) = 0;
 
-            REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));
+            approx<si::D>(ex, du);
+            // REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));
         }
     }
 }
@@ -352,22 +394,13 @@ TEST_CASE("E2 with Objects")
     du = 0;
     dx(u, nu, du);
 
-    REQUIRE_THAT(get<si::D>(du), Approx(get<si::D>(du_x)));
-    REQUIRE_THAT(get<si::Rx>(du), Approx(get<si::Rx>(du_x)));
-    REQUIRE_THAT(get<si::Ry>(du), Approx(get<si::Ry>(du_x)));
-    REQUIRE_THAT(get<si::Rz>(du), Approx(get<si::Rz>(du_x)));
+    approx<si::D, si::Rx, si::Ry, si::Rz>(du, du_x);
 
     du = 0;
     dy(u, du);
-    REQUIRE_THAT(get<si::D>(du), Approx(get<si::D>(du_y)));
-    REQUIRE_THAT(get<si::Rx>(du), Approx(get<si::Rx>(du_y)));
-    REQUIRE_THAT(get<si::Ry>(du), Approx(get<si::Ry>(du_y)));
-    REQUIRE_THAT(get<si::Rz>(du), Approx(get<si::Rz>(du_y)));
+    approx<si::D, si::Rx, si::Ry, si::Rz>(du, du_y);
 
     du = 0;
     dz(u, du);
-    REQUIRE_THAT(get<si::D>(du), Approx(get<si::D>(du_z)));
-    REQUIRE_THAT(get<si::Rx>(du), Approx(get<si::Rx>(du_z)));
-    REQUIRE_THAT(get<si::Ry>(du), Approx(get<si::Ry>(du_z)));
-    REQUIRE_THAT(get<si::Rz>(du), Approx(get<si::Rz>(du_z)));
+    approx<si::D, si::Rx, si::Ry, si::Rz>(du, du_z);
 }

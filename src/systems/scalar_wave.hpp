@@ -31,7 +31,9 @@ class scalar_wave
     vector_real grad_G;
     vector_real du;
 
-    std::vector<std::string> io_names = {"U"};
+    scalar_real error;
+
+    std::vector<std::string> io_names = {"U", "Error"};
     std::shared_ptr<spdlog::logger> logger;
 
 public:

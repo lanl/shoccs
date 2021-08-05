@@ -42,24 +42,70 @@ struct E2_1 {
             return {};
         }
     }
+    interp_info query_interp() const { return {2, 3}; }
 
-    interp_info query_interp() const { return {P, 4}; }
+    std::span<const real> interp_interior(real y, std::span<real> c) const
+    {
+        if (y > 0) {
+            c[0] = 1 + -1 * y;
+            c[1] = y;
+        } else {
+            c[0] = -1 * y;
+            c[1] = 1 + y;
+        }
+        return c.subspan(0, 2);
+    }
+
+    std::span<const real>
+    interp_wall(int i, real y, real psi, std::span<real> c, bool right) const
+    {
+        if (right) {
+            const real t6 = 1 + psi;
+            const real t7 = 1.0 / (t6);
+            const real t8 = -1 + y;
+            const real t9 = psi * t8;
+            const real t5 = -1 + psi;
+            const real t12 = -1 * psi * y;
+            const real t20 = 1 + y;
+            switch (i) {
+            case 0:
+                c[0] = (psi + y + psi * y) * t5;
+                c[1] = 1 + t12 + -1 * psi * psi * t20 + y;
+                c[2] = psi * t20;
+                break;
+            case 1:
+                c[0] = (t9 + y) * t5 * t7;
+                c[1] = psi + t12;
+                c[2] = (1 + t9 + y) * t7;
+                break;
+            }
+        } else {
+            const real t8 = -1 + y;
+            const real t11 = psi * y;
+            const real t13 = -1 + psi;
+            const real t17 = 1 + psi;
+            const real t18 = 1.0 / (t17);
+            switch (i) {
+            case 0:
+                c[0] = psi + -1 * psi * y;
+                c[1] = 1 + t11 + psi * psi * t8 + -1 * y;
+                c[2] = (psi * t8 + y) * -1 * t13;
+                break;
+            case 1:
+                c[0] = (-1 + psi + t11 + y) * -1 * t18;
+                c[1] = (1 + y) * psi;
+                c[2] = (psi + t11 + y) * -1 * t13 * t18;
+                break;
+            }
+        }
+        return c.subspan(0, 3);
+    }
 
     void interior(real h, std::span<real> c) const
     {
         c[0] = -1 / (2 * h);
         c[1] = 0;
         c[2] = 1 / (2 * h);
-    }
-
-    std::span<const real> interp_interior(real, std::span<real> c) const
-    {
-        return c.subspan(0, 2 * P + 1);
-    }
-
-    std::span<const real> interp_wall(int, real, real, std::span<real> c, bool) const
-    {
-        return c.subspan(0, 4);
     }
 
     void nbs(real h,

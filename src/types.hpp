@@ -1,11 +1,12 @@
 #pragma once
 
-#include <array>
 #include <concepts>
 #include <limits>
 #include <span>
 #include <tuple>
 #include <vector>
+
+#include "shoccs_config.hpp"
 
 #define FWD(x) static_cast<decltype(x)&&>(x)
 #define MOVE(x) static_cast<std::remove_reference_t<decltype(x)>&&>(x)
@@ -17,12 +18,6 @@ namespace ranges::views
 
 namespace ccs
 {
-using real = double;
-using integer = long; // prefer higher precision than regular int
-using real3 = std::array<real, 3>;
-using real2 = std::array<real, 2>;
-using int3 = std::array<int, 3>;
-using int2 = std::array<int, 2>;
 
 template <typename T>
 using span = std::span<T>;

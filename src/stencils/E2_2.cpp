@@ -29,76 +29,70 @@ struct E2_2 {
         }
     }
 
-    interp_info query_interp() const { return {P, T}; }
+    interp_info query_interp() const { return {2, 3}; }
+
+    std::span<const real> interp_interior(real y, std::span<real> c) const
+    {
+        if (y > 0) {
+            c[0] = 1 + -1 * y;
+            c[1] = y;
+        } else {
+            c[0] = -1 * y;
+            c[1] = 1 + y;
+        }
+        return c.subspan(0, 2);
+    }
+
+    std::span<const real>
+    interp_wall(int i, real y, real psi, std::span<real> c, bool right) const
+    {
+        if (right) {
+            const real t6 = 1 + psi;
+            const real t7 = 1.0 / (t6);
+            const real t8 = -1 + y;
+            const real t9 = psi * t8;
+            const real t5 = -1 + psi;
+            const real t12 = -1 * psi * y;
+            const real t20 = 1 + y;
+            switch (i) {
+            case 0:
+                c[0] = (psi + y + psi * y) * t5;
+                c[1] = 1 + t12 + -1 * psi * psi * t20 + y;
+                c[2] = psi * t20;
+                break;
+            case 1:
+                c[0] = (t9 + y) * t5 * t7;
+                c[1] = psi + t12;
+                c[2] = (1 + t9 + y) * t7;
+                break;
+            }
+        } else {
+            const real t8 = -1 + y;
+            const real t11 = psi * y;
+            const real t13 = -1 + psi;
+            const real t17 = 1 + psi;
+            const real t18 = 1.0 / (t17);
+            switch (i) {
+            case 0:
+                c[0] = psi + -1 * psi * y;
+                c[1] = 1 + t11 + psi * psi * t8 + -1 * y;
+                c[2] = (psi * t8 + y) * -1 * t13;
+                break;
+            case 1:
+                c[0] = (-1 + psi + t11 + y) * -1 * t18;
+                c[1] = (1 + y) * psi;
+                c[2] = (psi + t11 + y) * -1 * t13 * t18;
+                break;
+            }
+        }
+        return c.subspan(0, 3);
+    }
 
     void interior(real h, std::span<real> c) const
     {
         c[0] = 1 / (h * h);
         c[1] = -2 / (h * h);
         c[2] = 1 / (h * h);
-    }
-
-    std::span<const real> interp_interior(real y, std::span<real> c) const
-    {
-        c[0] = (y - 1) * y / 2;
-        c[1] = 1 - y * y;
-        c[2] = (y + 1) * y / 2;
-
-        return c.subspan(0, 2 * P + 1);
-    }
-
-    std::span<const real>
-    interp_wall(int i, real y, real psi, std::span<real> c, bool right) const
-    {
-        real y2 = y * y;
-        real psi2 = psi * psi;
-        real psi3 = psi2 * psi;
-
-        if (right) {
-            switch (i) {
-            case 0:
-                c[0] = -((-1 + psi) * (2 * y * (1 + y) + 2 * psi * (1 + 3 * y + y2) +
-                                       psi2 * (2 + 3 * y + y2))) /
-                       4.;
-                c[1] = -2 * psi * (1 + y) - y * (2 + y) + psi2 * (1 + 3 * y + y2) +
-                       (psi3 * (2 + 3 * y + y2)) / 2.;
-                c[2] = (-2 * psi * (-1 + y + y2) + 2 * (2 + 3 * y + y2) -
-                        psi3 * (2 + 3 * y + y2) - psi2 * (4 + 9 * y + 3 * y2)) /
-                       4.;
-                c[3] = (psi * (2 + 3 * y + y2)) / 2.;
-                break;
-            default:
-                assert(i == 1);
-                c[0] = -(((-1 + psi) * (1 + y) * (psi * (-1 + y) + y)) / (2 + psi));
-                c[1] = (psi * (2 + y) - y * (2 + y) + 2 * psi2 * (-1 + y2)) / (1 + psi);
-                c[2] = psi - psi * y2;
-                c[3] = ((1 + y) * (2 + 2 * psi * (-1 + y) + y)) / (2 + 3 * psi + psi2);
-            }
-        } else {
-            switch (i) {
-            case 0:
-                c[0] = (psi * (2 - 3 * y + y2)) / 2.;
-                c[1] = (psi2 * (-4 + 9 * y - 3 * y2) + psi * (2 + 2 * y - 2 * y2) +
-                        2 * (2 - 3 * y + y2) - psi3 * (2 - 3 * y + y2)) /
-                       4.;
-                c[2] = 2 * psi * (-1 + y) - (-2 + y) * y + psi2 * (1 - 3 * y + y2) +
-                       (psi3 * (2 - 3 * y + y2)) / 2.;
-                c[3] = -((-1 + psi) * (2 * (-1 + y) * y + 2 * psi * (1 - 3 * y + y2) +
-                                       psi2 * (2 - 3 * y + y2))) /
-                       4.;
-                break;
-            default:
-                assert(i == 1);
-                c[0] =
-                    ((-1 + y) * (-2 + y + 2 * psi * (1 + y))) / ((1 + psi) * (2 + psi));
-                c[1] = psi - psi * y2;
-                c[2] =
-                    -((psi * (-2 + y) + (-2 + y) * y - 2 * psi2 * (-1 + y2)) / (1 + psi));
-                c[3] = -(((-1 + psi) * (-1 + y) * (psi + y + psi * y)) / (2 + psi));
-            }
-        }
-
-        return c.subspan(0, T);
     }
 
     void nbs(real h,

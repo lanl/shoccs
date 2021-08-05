@@ -5,6 +5,7 @@
 
 #include <cassert>
 
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
 namespace ccs
@@ -12,6 +13,61 @@ namespace ccs
 
 namespace
 {
+
+struct interp_deriv_info {
+    std::span<const real> c;
+    int offset;
+};
+
+interp_deriv_info interp_deriv_coefficients(int dir,
+                                            int n,
+                                            real h,
+                                            const mesh_object_info& obj,
+                                            bcs::type bc,
+                                            const stencil& st,
+                                            std::span<real> c,
+                                            std::span<real> ex)
+{
+    auto&& [p, r, t, _] = st.query(bc);
+
+    if (std::abs(obj.normal[dir] > 1e-12)) {
+
+        const bool right_interp_wall = obj.normal[dir] < 0.0;
+        // get coefficient for derivative
+        st.nbs(h, bc, 1.0, right_interp_wall, c, ex);
+        // get the line required for the interp point and reorder such that
+        // the first point is the intersection point
+        if (right_interp_wall) {
+            return {c.subspan((r - 1) * t, t), (1 - t)};
+        } else {
+            return {c.subspan(0, t), 0};
+        }
+    } else {
+        // Here we are assuming convex only bodies which means the only
+        // thing to consider here is if the point is near a domain wall
+        auto right_dist = n - obj.solid_coord[dir];
+        auto left_dist = obj.solid_coord[dir];
+        assert(1 + right_dist + left_dist > t);
+
+        if (right_dist >= p && left_dist >= p) {
+            // do an interior stencil
+            st.interior(h, c);
+            return {c.subspan(0, 2 * p + 1), -p};
+        } else {
+            // do a boundary stencil
+            const bool right_interp_wall = right_dist < left_dist;
+            st.nbs(h, bc, 1.0, right_interp_wall, c, ex);
+
+            if (right_interp_wall) {
+                auto q = 1 + right_dist;
+                return {c.subspan((r - q) * t, t), q - t};
+            } else {
+                auto q = left_dist;
+                return {c.subspan(q * t, t), -q};
+            }
+        }
+    }
+}
 
 struct OB_builder {
     matrix::csr::builder O;
@@ -25,10 +81,9 @@ struct OB_builder {
             O.add_point(shape_row, solid_ic + i * stride, v);
     }
 
-    template <rs::random_access_range R>
-    void add_cut_point(integer shape_row, R&& r)
+    void add_cut_point(integer shape_row, real u)
     {
-        B.add_point(shape_row, shape_row, r[0]);
+        B.add_point(shape_row, shape_row, u);
     }
 
     // this routine is currently no good for planar objects which result in interior
@@ -113,7 +168,6 @@ void cut_discretization(int r,
     // allocate maximum amount of memory required by any boundary conditions
     std::vector<real> c(rmax * tmax);
     std::vector<real> interp_c(tmax);
-    std::span<real> c_line;
     std::vector<real> extra(ex_max);
     auto stride = m.stride(dir);
 
@@ -142,27 +196,17 @@ void cut_discretization(int r,
             // nothing to do for dirichlet
             if (bc_t == bcs::Dirichlet) continue;
 
-            const bool right_interp_wall = obj.normal[dir] < 0.0;
-            // get coefficient for derivative
-            auto&& [pObj, rObj, tObj, exObj] = st.query(bc_t);
-            st.nbs(h, bc_t, 1.0, right_interp_wall, c, extra);
-            // get the line required for the interp point and reorder such that
-            // the first point is the intersection point
-            if (right_interp_wall) {
-                c_line = std::span(rs::begin(c) + (rObj - 1) * tObj, tObj);
-                rs::reverse(c_line);
-            } else {
-                c_line = std::span(rs::begin(c), tObj);
-            }
+            auto [c_line, cp_shift] = interp_deriv_coefficients(
+                dir, m.extents()[dir] - 1, h, obj, bc_t, st, c, extra);
+
             // get starting coordinates of closest point
-            int3 cp = [&obj, &r]() {
+            int3 cp = [&obj, r, dir, cp_shift]() {
                 int3 ray = obj.solid_coord;
                 if (obj.psi <= 0.5) ray[r] += 1 - 2 * obj.ray_outside;
+                ray[dir] += cp_shift;
                 return ray;
             }();
-            // The first point for all stencils will be the solid_coord.  Set the shift
-            // accordingly
-            const int cp_shift = right_interp_wall ? -1 : 1;
+
             // Set interp distance y for interp stencils in (i + y) format
             const real y = [&obj]() {
                 real sign = obj.ray_outside ? 1.0 : -1.0;
@@ -174,15 +218,18 @@ void cut_discretization(int r,
             if (logger)
                 msg = fmt::format("{},{},{},{},{}", dir, r, shape_row, y, obj.psi);
 
-            builder.add_cut_point(shape_row, c_line);
-
-            for (int i = 1; i < tObj; i++) {
-                cp[dir] += cp_shift;
-                auto&& [r_stride, left_bounds, right_bounds] = m.interp_line(r, cp);
-                auto&& [interp_v, left, right] =
-                    st.interp(r, cp, y, left_bounds, right_bounds, interp_c);
-                builder.add_interp_row(
-                    shape_row, c_line[i], interp_v, left, right, r_stride, m, msg);
+            for (auto&& v : c_line) {
+                if (cp[dir] == obj.solid_coord[dir]) {
+                    builder.add_cut_point(shape_row, v);
+                } else {
+                    // cp[dir] += cp_shift;
+                    auto&& [r_stride, left_bounds, right_bounds] = m.interp_line(r, cp);
+                    auto&& [interp_v, left, right] =
+                        st.interp(r, cp, y, left_bounds, right_bounds, interp_c);
+                    builder.add_interp_row(
+                        shape_row, v, interp_v, left, right, r_stride, m, msg);
+                }
+                ++cp[dir];
             }
 
             if (logger) logger->info("{}", MOVE(msg));

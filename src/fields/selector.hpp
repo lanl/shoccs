@@ -137,6 +137,9 @@ inline constexpr auto Ry =
     selection_view<mp_list<si::Ry>, mp_list<vi::xRy, vi::yRy, vi::zRy>>;
 inline constexpr auto Rz =
     selection_view<mp_list<si::Rz>, mp_list<vi::xRz, vi::yRz, vi::zRz>>;
+inline constexpr auto xR = selection_view<mp_list<>, mp_list<vi::xRx, vi::xRy, vi::xRz>>;
+inline constexpr auto yR = selection_view<mp_list<>, mp_list<vi::yRx, vi::yRy, vi::yRz>>;
+inline constexpr auto zR = selection_view<mp_list<>, mp_list<vi::zRx, vi::zRy, vi::zRz>>;
 inline constexpr auto D = selection_view<mp_list<si::D>, mp_list<vi::Dx, vi::Dy, vi::Dz>>;
 inline constexpr auto R = selection_view<mp_list<si::Rx, si::Ry, si::Rz>,
                                          mp_list<vi::xRx,

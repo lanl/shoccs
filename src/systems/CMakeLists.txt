@@ -1,6 +1,6 @@
 add_library(shoccs-system
   system.cpp empty_system.cpp scalar_wave.cpp inviscid_vortex.cpp heat.cpp)
-target_include_directories(shoccs-system PUBLIC ..)
+target_include_directories(shoccs-system PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 target_link_libraries(shoccs-system 
   PUBLIC
     fields 
@@ -8,7 +8,8 @@ target_link_libraries(shoccs-system
     shoccs-operators 
     shoccs-bcs 
     shoccs-stencils 
-    mms
+    shoccs-mms
     sol2::sol2 lua spdlog::spdlog fmt::fmt)
 
-  add_unit_test(heat "systems" shoccs-system)
+
+add_unit_test(heat "systems" shoccs-system)

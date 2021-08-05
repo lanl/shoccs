@@ -201,15 +201,18 @@ public:
             const int ic = closest[dir];
             const int lc = left.mesh_coordinate[dir];
             const int rc = right.mesh_coordinate[dir];
+            int st1 = p & 1 ? (p - 1) / 2 : p / 2;
+            int st2 = (p - 1) / 2;
+            if (y > 0) std::swap(st1, st2);
 
             // we use an interior interpolant if the boundaries are further away than p on
             // both sides, or if they are are equal to p and not an object
-            if ((ic - lc > p || (ic - lc == p && !left.object)) &&
-                (rc - ic > p || (rc - ic == p && !right.object))) {
+            if ((ic - lc > st1 || (ic - lc == st1 && !left.object)) &&
+                (rc - ic > st2 || (rc - ic == st2 && !right.object))) {
                 int3 l{closest};
                 int3 r{closest};
-                l[dir] -= p;
-                r[dir] += p;
+                l[dir] -= st1;
+                r[dir] += st2;
 
                 return {s->interp_interior(y, c),
                         boundary{l, std::nullopt},

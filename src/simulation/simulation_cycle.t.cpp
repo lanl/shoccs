@@ -126,7 +126,7 @@ TEST_CASE("cycle - 2D")
                 type = "rk4",                
             },
             step_controller = {
-                max_step = 1,
+                max_step = 5,
             },
             manufactured_solution = {
                 type = "lua",
@@ -159,5 +159,5 @@ TEST_CASE("cycle - 2D")
     REQUIRE(!!cycle_opt);
 
     auto res = cycle_opt->run();
-    REQUIRE_THAT(res[0], Catch::Matchers::WithinAbs(0.0, 1e-13));
+    REQUIRE_THAT(res[0], Catch::Matchers::WithinAbs(0.0, 5e-13));
 }

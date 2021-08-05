@@ -12,9 +12,7 @@
 
 #include "operators/discrete_operator.hpp"
 
-#include <range/v3/algorithm/max.hpp>
-#include <range/v3/algorithm/min.hpp>
-#include <range/v3/algorithm/minmax.hpp>
+#include <range/v3/algorithm/max_element.hpp>
 #include <range/v3/view/transform.hpp>
 
 namespace ccs::systems
@@ -54,23 +52,33 @@ scalar_wave::scalar_wave(mesh&& m_,
     : m{MOVE(m_)},
       grid_bcs{MOVE(grid_bcs)},
       object_bcs{MOVE(object_bcs)},
-      grad{gradient(this->m, st, this->grid_bcs, this->object_bcs)},
+      grad{gradient(this->m, st, this->grid_bcs, this->object_bcs, "logs/gradient.csv")},
       center{center},
       radius{radius},
       grad_G{m.vs()},
-      du{m.vs()}
+      du{m.vs()},
+      error{m.ss()}
 {
 
     // Initialize wave speeds
     grad_G | m.fluid = m.vxyz | tuple{neg_G<0>(center, radius),
                                       neg_G<1>(center, radius),
                                       neg_G<2>(center, radius)};
-    // need to change this for outflow
-    grad_G | sel::R = 0;
+    grad_G | sel::xR = m.vxyz | neg_G<0>(center, radius);
+    grad_G | sel::yR = m.vxyz | neg_G<1>(center, radius);
+    grad_G | sel::zR = m.vxyz | neg_G<2>(center, radius);
+    grad_G | m.dirichlet(this->grid_bcs, this->object_bcs) = 0;
 
-    logger = spdlog::basic_logger_st("system", "logs/system.csv", true);
+    auto sink =
+        std::make_shared<spdlog::sinks::basic_file_sink_st>("logs/system.csv", true);
+    logger = std::make_shared<spdlog::logger>("system", sink);
     logger->set_pattern("%v");
-    logger->info("Date,Time,Step,Linf,Min,Max");
+    // logger->info("Date,Time,Step,Linf,Min,Max");
+    // logger->set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
+    logger->info(
+        "Timestamp,Time,Step,Linf,Min,Max,Domain_Linf,Domain_ic,Rx_Linf,Rx_ic,Ry_"
+        "Linf,Ry_ic,Rz_Linf,Rz_ic");
+
     logger->set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
 }
 
@@ -102,10 +110,41 @@ system_stats
 scalar_wave::stats(const field&, const field& f, const step_controller& c) const
 {
     auto&& u = f.scalars(scalars::u);
+
     auto sol = m.xyz | solution(center, radius, c);
-    auto [min, max] = rs::minmax(u | m.fluid);
-    real error = rs::max(abs(u - sol) | m.fluid);
-    return system_stats{.stats = {error, min, max}};
+    auto [u_min, u_max] = minmax(u | m.fluid_all(object_bcs));
+
+    real err = max(abs(u - sol) | m.fluid_all(object_bcs));
+    // Extra info for debugging:
+    auto linf = abs(u - sol);
+    auto fluid_error = linf | m.fluid_all(object_bcs);
+    auto max_el = transform(rs::max_element, fluid_error);
+    auto err_pairs = transform(
+        [](auto&& rng, auto&& max_el) {
+            if (rs::end(rng) != max_el)
+                return std::pair{
+                    *max_el, (real)rs::distance(rs::begin(rng.base()), max_el.base())};
+            else
+                return std::pair{0.0, (real)0};
+        },
+        fluid_error,
+        max_el);
+
+    auto&& [d, rx, ry, rz] = err_pairs;
+    return system_stats{.stats = {err,
+                                  u_min,
+                                  u_max,
+                                  d.first,
+                                  d.second,
+                                  rx.first,
+                                  rx.second,
+                                  ry.first,
+                                  ry.second,
+                                  rz.first,
+                                  rz.second}};
+    // auto [min, max] = rs::minmax(u | m.fluid);
+    // real error = rs::max(abs(u - sol) | m.fluid);
+    // return system_stats{.stats = {error, min, max}};
 }
 
 //
@@ -142,14 +181,21 @@ void scalar_wave::update_boundary(field_span f, real time)
     auto&& u = f.scalars(scalars::u);
     auto sol = m.xyz | solution(center, radius, time);
 
-    u | m.dirichlet(grid_bcs) = sol;
-    // assumes dirichlet right now
-    u | sel::R = sol;
+    u | m.dirichlet(grid_bcs, object_bcs) = sol;
 }
 
-bool scalar_wave::write(field_io&, field_view, const step_controller&, real)
+bool scalar_wave::write(field_io& io, field_view f, const step_controller& c, real dt)
 {
-    return false;
+    auto&& u = f.scalars(scalars::u);
+    auto sol = m.xyz | solution(center, radius, (real)c);
+
+    error = 0;
+    error | m.fluid_all(object_bcs) = abs(u - sol);
+    error | m.dirichlet(grid_bcs, object_bcs) = 0;
+
+    field_view io_view{std::vector<scalar_view>{u, error}, std::vector<vector_view>{}};
+
+    return io.write(io_names, io_view, c, dt, m.R());
 }
 
 void scalar_wave::log(const system_stats& stats, const step_controller& step)

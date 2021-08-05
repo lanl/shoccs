@@ -29,7 +29,7 @@ struct E4_2 {
         }
     }
 
-    interp_info query_interp() const { return {P, T}; }
+    interp_info query_interp() const { return {2 * P + 1, T}; }
 
     void interior(real h, std::span<real> c) const
     {

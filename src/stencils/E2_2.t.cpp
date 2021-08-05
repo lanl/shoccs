@@ -112,6 +112,180 @@ TEST_CASE("neumann")
     REQUIRE_THAT(extra, Approx(std::vector{0.8, 4.}));
 }
 
+TEST_CASE("interp interior")
+{
+    using T = std::vector<real>;
+    auto st = stencils::make_E2_2();
+
+    T ci(2);
+
+    constexpr auto f = [](auto&& x) { return -10. * x + 0.1; };
+    const real h = 20.0;
+    const auto mesh = vs::linear_distribute(-h / 2, h / 2, ci.size()) | rs::to<T>();
+
+    auto eval = [&](auto&& c) {
+        return rs::inner_product(c, mesh | vs::transform(f), 0.0);
+    };
+
+    {
+        real y = 0.01;
+        auto&& [v, left, right] =
+            st.interp(2,
+                      int3{-10, -10, 0},
+                      y,
+                      boundary{int3{-5000, -5000, -1}, std::nullopt},
+                      boundary{int3{5000, 5000, 2}, std::nullopt},
+                      ci);
+        REQUIRE(!left.object);
+        REQUIRE(!right.object);
+        REQUIRE(eval(v) == Catch::Approx(f(mesh[0] + y * h)));
+    }
+
+    {
+        real y = -0.3;
+        auto&& [v, left, right] =
+            st.interp(1,
+                      int3{-10, -10, 1},
+                      y,
+                      boundary{int3{-5000, -5000, -1}, std::nullopt},
+                      boundary{int3{5000, 5000, 2}, std::nullopt},
+                      ci);
+        REQUIRE(!left.object);
+        REQUIRE(!right.object);
+        REQUIRE(eval(v) == Catch::Approx(f(mesh[1] + y * h)));
+    }
+}
+
+TEST_CASE("interp wall")
+{
+    using T = std::vector<real>;
+    auto st = stencils::make_E2_2();
+
+    T cw(3);
+
+    constexpr auto f = [](auto&& x) { return -10. * x + 0.1; };
+    const real delta = 10.0;
+    const auto mesh = vs::linear_distribute(-delta, delta, cw.size() - 1) | rs::to<T>();
+    const real h = mesh[1] - mesh[0];
+
+    auto eval = [&](auto&& m, auto&& c) {
+        return rs::inner_product(c, m | vs::transform(f), 0.0);
+    };
+
+    {
+        real psi = 0.8;
+        real y = 0.3;
+        auto&& [v, left, right] =
+            st.interp(0,
+                      int3{0, 1, 1},
+                      y,
+                      boundary{int3{0, 1, 1}, object_boundary{0, 1, psi}},
+                      boundary{int3{3, 1, 1}, std::nullopt},
+                      cw);
+        REQUIRE(left.object);
+        REQUIRE(!right.object);
+
+        auto m = vs::concat(vs::single(mesh[0] - psi * h), mesh) | rs::to<T>();
+        // y is relataive to the solid point rather than the cut-location
+        REQUIRE(eval(m, v) == Catch::Approx(f(mesh[0] - h + y * h)));
+    }
+
+    {
+        rs::fill(cw, 0.0);
+        real psi = 1.0;
+        real y = 0.1;
+        auto&& [v, left, right] = st.interp(0,
+                                            int3{0, 1, 1},
+                                            y,
+                                            boundary{int3{0, 1, 1}, std::nullopt},
+                                            boundary{int3{3, 1, 1}, std::nullopt},
+                                            cw);
+        REQUIRE(!left.object);
+        REQUIRE(!right.object);
+
+        REQUIRE(eval(mesh, v) == Catch::Approx(f(mesh[0] + y * h)));
+    }
+
+#if 0
+    {
+        real psi = 0.;
+        real y = -0.4;
+        auto&& [v, left, right] =
+            st.interp(2,
+                      int3{10, 10, 1},
+                      y,
+                      boundary{int3{1, 1, 0}, object_boundary{0, 1, psi}},
+                      boundary{int3{1, 1, 3}, std::nullopt},
+                      cw);
+        REQUIRE(left.object);
+        REQUIRE(!right.object);
+
+        auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
+        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+
+        REQUIRE(r == Catch::Approx(f(-h + y * h)));
+    }
+
+    {
+        real psi = 1.0;
+        real y = -0.2;
+        auto&& [v, left, right] = st.interp(0,
+                                            int3{10, 1, 1},
+                                            y,
+                                            boundary{int3{-10, 1, 1}, std::nullopt},
+                                            boundary{int3{10, 1, 1}, std::nullopt},
+                                            cw);
+        REQUIRE(!left.object);
+        REQUIRE(!right.object);
+
+        auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
+        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+
+        REQUIRE(r == Catch::Approx(f(2 * h + y * h)));
+    }
+
+    {
+        real psi = 0.9;
+        real y = -0.2;
+        auto&& [v, left, right] =
+            st.interp(0,
+                      int3{10, 1, 1},
+                      y,
+                      boundary{int3{-10, 1, 1}, std::nullopt},
+                      boundary{int3{10, 1, 1}, object_boundary{0, 3, psi}},
+                      cw);
+        REQUIRE(!left.object);
+        REQUIRE(right.object);
+
+        auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
+        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+
+        REQUIRE(r == Catch::Approx(f(2 * h + y * h)));
+    }
+
+    {
+        real psi = 0.01;
+        real y = -0.3;
+        auto&& [v, left, right] =
+            st.interp(2,
+                      int3{0, 11, 15},
+                      y,
+                      boundary{int3{-10, 1, 1}, std::nullopt},
+                      boundary{int3{0, 11, 16}, object_boundary{0, 3, psi}},
+                      cw);
+        REQUIRE(!left.object);
+        REQUIRE(right.object);
+
+        auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
+        real r = rs::inner_product(v, m | vs::transform(f), 0.0);
+
+        REQUIRE(r == Catch::Approx(f(h + y * h)));
+    }
+#endif
+}
+
+#if 0
+// test case for quadratic interpolant
 TEST_CASE("interp")
 {
     using T = std::vector<real>;
@@ -122,28 +296,6 @@ TEST_CASE("interp")
     constexpr auto f = [](auto&& x) { return 3. * x * x - 10. * x + 0.1; };
     const real h = 10.0;
     const auto mesh = vs::linear_distribute(-h, h, 3);
-
-    SECTION("interior direct")
-    {
-
-        {
-            auto v = st.interp_interior(0.0, ci);
-            real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
-            REQUIRE(r == Catch::Approx(f(0.0)));
-        }
-
-        {
-            auto v = st.interp_interior(0.5, ci);
-            real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
-            REQUIRE(r == Catch::Approx(f(h / 2)));
-        }
-
-        {
-            auto v = st.interp_interior(-0.3, ci);
-            real r = rs::inner_product(v, mesh | vs::transform(f), 0.0);
-            REQUIRE(r == Catch::Approx(f(-3 * h / 10.)));
-        }
-    }
 
     SECTION("interior driver")
     {
@@ -180,54 +332,6 @@ TEST_CASE("interp")
     }
 
     T cw(4);
-
-    SECTION("wall direct")
-    {
-
-        {
-            real psi = 1.0;
-            real y = 0.1;
-            auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
-            auto v = st.interp_wall(0, y, psi, cw, false);
-            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
-            REQUIRE(r == Catch::Approx(f(-h - psi * h + y * h)));
-        }
-        {
-            real psi = 0.9;
-            real y = 0.0;
-            auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
-            auto v = st.interp_wall(0, 0, psi, cw, false);
-            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
-            REQUIRE(r == Catch::Approx(f(-h - psi * h + y * h)));
-        }
-
-        {
-            real psi = 0.;
-            real y = 0.4;
-            auto m = vs::concat(vs::single(-h - psi * h), mesh) | rs::to<T>();
-            auto v = st.interp_wall(1, y, psi, cw, false);
-            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
-            REQUIRE(r == Catch::Approx(f(-h + y * h)));
-        }
-
-        {
-            real psi = 1.0;
-            real y = -0.2;
-            auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
-            auto v = st.interp_wall(0, y, psi, cw, true);
-            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
-            REQUIRE(r == Catch::Approx(f(h + psi * h + y * h)));
-        }
-
-        {
-            real psi = 0.01;
-            real y = -0.3;
-            auto m = vs::concat(mesh, vs::single(h + psi * h)) | rs::to<T>();
-            auto v = st.interp_wall(1, y, psi, cw, true);
-            real r = rs::inner_product(v, m | vs::transform(f), 0.0);
-            REQUIRE(r == Catch::Approx(f(h + y * h)));
-        }
-    }
 
     SECTION("wall driver")
     {
@@ -346,3 +450,4 @@ TEST_CASE("interp")
         }
     }
 }
+#endif

@@ -3,7 +3,7 @@ target_link_libraries(shoccs-io
  PUBLIC pugixml::pugixml fields fmt::fmt sol2::sol2 lua spdlog::spdlog
  PRIVATE shoccs-mesh
 )
-target_include_directories(shoccs-io PUBLIC ..)
+target_include_directories(shoccs-io PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 
 add_unit_test(interval "shoccs-io" shoccs-io)
 add_unit_test(xdmf "shoccs-io" shoccs-io)

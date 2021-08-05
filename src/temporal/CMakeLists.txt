@@ -1,6 +1,6 @@
 add_library(shoccs-integrate
   integrator.cpp empty_integrator.cpp rk4.cpp euler.cpp step_controller.cpp)
-target_include_directories(shoccs-integrate PUBLIC ..)
+target_include_directories(shoccs-integrate PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 target_link_libraries(shoccs-integrate 
   PUBLIC
     fields shoccs-system sol2::sol2 lua spdlog::spdlog)

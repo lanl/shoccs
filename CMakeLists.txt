@@ -13,11 +13,13 @@ if (SHOCCS_TPL_DIR)
   list(APPEND CMAKE_PREFIX_PATH ${SHOCCS_TPL_DIR})
 endif()
 
-find_package(Lua 5.3 REQUIRED)
+find_package(Lua REQUIRED)
 # make lua a target
 add_library(lua INTERFACE IMPORTED)
 target_include_directories(lua INTERFACE ${LUA_INCLUDE_DIR})
 target_link_libraries(lua INTERFACE ${LUA_LIBRARIES})
+
+include(CTest)
 
 find_package(sol2 REQUIRED)
 find_package(fmt REQUIRED)
@@ -25,25 +27,48 @@ find_package(range-v3 REQUIRED)
 find_package(pugixml 1.10 REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(cxxopts REQUIRED)
-find_package(Catch2 3)
-if (Catch2_FOUND)
-  message(STATUS "Catch2 has been found.  Enabling testing via ctest")
-  enable_testing()
+if (BUILD_TESTING)
+  find_package(Catch2 3 REQUIRED)
 endif()
 find_package(Boost REQUIRED) # for header only mp11
-
 
 
 include(GNUInstallDirs)
 
 # helper function for defining serial tests
-function(add_unit_test test label)
-  add_executable(t-${test} ${test}.t.cpp)
-  target_link_libraries(t-${test} Catch2::Catch2WithMain ${ARGN})
-  add_test(NAME t-${test} COMMAND t-${test})
-  set_tests_properties(t-${test} PROPERTIES LABELS "${label}")
+function(add_unit_test t label)
+  if (BUILD_TESTING)
+    add_executable(t-${t} ${t}.t.cpp)
+    target_link_libraries(t-${t} Catch2::Catch2WithMain ${ARGN})
+    add_test(NAME t-${t} COMMAND t-${t})
+    set_tests_properties(t-${t} PROPERTIES LABELS "${label}")
+  endif()
 endfunction()
 
 add_subdirectory(external)
 add_subdirectory(src)
 add_subdirectory(docs)
+
+
+install(
+    TARGETS
+      fields 
+      shoccs-io 
+      shoccs-matrices 
+      shoccs-mesh 
+      shoccs-mms 
+      shoccs-bcs 
+      shoccs-operators 
+      shoccs-simulation 
+      shoccs-system 
+      shoccs-integrate
+      shoccs-stencils
+      shoccs-utils
+    EXPORT shoccs
+)
+
+install(EXPORT shoccs
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/shoccs
+  NAMESPACE shoccs::
+  FILE shoccsConfig.cmake
+)

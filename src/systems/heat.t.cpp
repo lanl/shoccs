@@ -147,21 +147,32 @@ TEST_CASE("heat - E2 - floating")
                 call = function(time, loc)
                     local x, y, z = loc[1], loc[2], loc[3]
                     return (math.sin(time) + 
+                        x * (y + z) + y * (x + z) + z * (x + y) + 
+                        x + y + z)  
+                    --[[
+                        return (math.sin(time) + 
                         x * x * (y + z) + y * y * (x + z) + z * z * (x + y) + 
                         3 * x * y * z + x + y + z)                     
+                        ]]
                 end,
                 ddt = function(time, loc)
                     return math.cos(time)
                 end,
                 grad = function(time, loc)
                     local x, y, z = loc[1], loc[2], loc[3]
+                    return 2. * (y + z) + 1,
+                           2. * (x + z) + 1,
+                           2. * (x + y) + 1
+                    --[[
                     return 2. * x * (y + z) + y * y + z * z + 3. * y * z + 1,
                             x * x + 2. * y * (x + z) + z * z + 3. * x * z + 1,
                             x * x + y * y + 2. * z * (x + y) + 3. * x * y + 1
+                    ]]
                 end,
                 lap = function(time, loc)
                     local x, y, z = loc[1], loc[2], loc[3]
-                    return 2. * (y + z) + 2. * (x + z) + 2. * (x + y)
+                    return 0.0
+                    --return 2. * (y + z) + 2. * (x + z) + 2. * (x + y)
                 end,
                 div = function(time, loc)
                     return 0.0
@@ -249,21 +260,28 @@ TEST_CASE("2D heat - E2 - floating")
                 type = "lua",
                 call = function(time, loc)
                     local x, y, z = loc[1], loc[2], loc[3]
+                    --[[
                     return (math.sin(time) + 
                         x * x * y + y * y * x + 3 * x * y + x + y)                     
+                    ]]
+                    return (math.sin(time) + x * y + x + y)
                 end,
                 ddt = function(time, loc)
                     return math.cos(time)
                 end,
                 grad = function(time, loc)
                     local x, y, z = loc[1], loc[2], loc[3]
-                    return 2. * x * y + y * y + 3. * y + 1,
+                    return y + 1, x + 1, 0.0
+                    --[[
+                        return 2. * x * y + y * y + 3. * y + 1,
                             x * x + 2. * y * x + 3. * x + 1,
                             0
+                        ]]
                 end,
                 lap = function(time, loc)
                     local x, y, z = loc[1], loc[2], loc[3]
-                    return 2. * y + 2. * x 
+                    --return 2. * y + 2. * x 
+                    return 0.0
                 end,
                 div = function(time, loc)
                     return 0.0

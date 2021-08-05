@@ -3,7 +3,7 @@
 #include <optional>
 #include <sol/forward.hpp>
 
-#include "types.hpp"
+#include "shoccs_config.hpp"
 
 namespace ccs
 {

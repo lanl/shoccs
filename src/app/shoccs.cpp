@@ -3,7 +3,7 @@
 #include <sol/sol.hpp>
 #include <string>
 
-#include "lib/run_from_sol.hpp"
+#include "lib/shoccs.hpp"
 
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>

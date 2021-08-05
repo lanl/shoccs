@@ -1,5 +1,5 @@
 add_library(shoccs-simulation simulation_builder.cpp simulation_cycle.cpp)
-target_include_directories(shoccs-simulation PUBLIC ..)
+target_include_directories(shoccs-simulation PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 target_link_libraries(shoccs-simulation 
     PUBLIC
     lua

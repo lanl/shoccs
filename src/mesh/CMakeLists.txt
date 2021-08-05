@@ -1,6 +1,6 @@
 add_library(shoccs-mesh cartesian.cpp object_geometry.cpp rect.cpp sphere.cpp mesh.cpp)
 
-target_include_directories(shoccs-mesh PUBLIC ..)
+target_include_directories(shoccs-mesh PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 target_link_libraries(shoccs-mesh PUBLIC fields sol2::sol2 lua spdlog::spdlog)
 
 # add_library(mesh_view INTERFACE)
