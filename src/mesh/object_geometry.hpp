@@ -85,7 +85,8 @@ public:
 
     // auto Sxyz() const { return vector_range{Sx(), Sy(), Sz()}; }
 
-    static std::optional<std::vector<shape>> from_lua(const sol::table&);
+    static std::optional<std::vector<shape>>
+    from_lua(const sol::table&, index_extents, const domain_extents&);
 };
 
 } // namespace ccs

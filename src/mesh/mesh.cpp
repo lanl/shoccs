@@ -225,14 +225,13 @@ line mesh::interp_line(int dir, int3 pt) const
 
 std::optional<mesh> mesh::from_lua(const sol::table& tbl)
 {
-    auto shapes_opt = object_geometry::from_lua(tbl);
-    if (!shapes_opt) return std::nullopt;
-
     auto m_opt = cartesian::from_lua(tbl);
     if (!m_opt) return std::nullopt;
-
-    const auto& shapes = *shapes_opt;
     auto&& [n, domain] = *m_opt;
+
+    auto shapes_opt = object_geometry::from_lua(tbl, n, domain);
+    if (!shapes_opt) return std::nullopt;
+    const auto& shapes = *shapes_opt;
 
     return mesh{n, domain, shapes};
     // return std::nullopt;

@@ -35,7 +35,7 @@ struct rect {
         return hit_info{t, p, fluid_normal * r.direction[I] < 0, id};
     }
 
-    real3 normal(const real3& pos) const
+    real3 normal(const real3&) const
     {
         real3 n{};
         n[I] = fluid_normal;

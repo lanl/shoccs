@@ -69,6 +69,8 @@ scalar_wave::scalar_wave(mesh&& m_,
     grad_G | sel::zR = m.vxyz | neg_G<2>(center, radius);
     grad_G | m.dirichlet(this->grid_bcs, this->object_bcs) = 0;
 
+    spdlog::info("-grad_G {}\n", get<vi::xRx>(grad_G)[0]);
+
     auto sink =
         std::make_shared<spdlog::sinks::basic_file_sink_st>("logs/system.csv", true);
     logger = std::make_shared<spdlog::logger>("system", sink);

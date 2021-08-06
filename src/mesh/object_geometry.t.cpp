@@ -31,13 +31,13 @@ TEST_CASE("sphere intersections")
                 }
             }
         )");
-    auto shapes_opt = object_geometry::from_lua(lua["simulation"]);
-    REQUIRE(!!shapes_opt);
-    const auto& shapes = *shapes_opt;
-
     auto m_opt = cartesian::from_lua(lua["simulation"]);
     REQUIRE(!!m_opt);
     auto&& [n, domain] = *m_opt;
+
+    auto shapes_opt = object_geometry::from_lua(lua["simulation"], n, domain);
+    REQUIRE(!!shapes_opt);
+    const auto& shapes = *shapes_opt;
 
     object_geometry g{shapes, cartesian{n.extents, domain.min, domain.max}};
 
@@ -350,16 +350,59 @@ TEST_CASE("rect_intersections")
             }
         )");
 
-    auto shapes_opt = object_geometry::from_lua(lua["simulation"]);
+    auto m_opt = cartesian::from_lua(lua["simulation"]);
+    REQUIRE(!!m_opt);
+    auto&& [n, domain] = *m_opt;
+
+    auto shapes_opt = object_geometry::from_lua(lua["simulation"], n, domain);
     REQUIRE(!!shapes_opt);
     const auto& shapes = *shapes_opt;
+
+    auto m = cartesian(n.extents, domain.min, domain.max);
+    REQUIRE(m.dims() == 2);
+
+    auto g = object_geometry(shapes, m);
+    REQUIRE(g.Rx().size() == 2u);
+    REQUIRE(g.Sx().size() == 2u);
+}
+
+TEST_CASE("1D rect_intersections")
+{
+    sol::state lua;
+    lua.open_libraries(sol::lib::base, sol::lib::math);
+    lua.script(R"(            
+            simulation = {
+                mesh = {
+                    index_extents = {11},
+                    domain_bounds = {1}
+                },
+                shapes = {
+                    {
+                        type = "yz_rect",
+                        psi = 1e-6,
+                        --lower_corner = {loc, -1, -1},
+                        --upper_corner = {loc, 2, 2},
+                        normal = 1
+                    },
+                    {
+                        type = "yz_rect",
+                        psi = 0.99,
+                        normal = -1
+                    }
+                }
+            }
+        )");
 
     auto m_opt = cartesian::from_lua(lua["simulation"]);
     REQUIRE(!!m_opt);
     auto&& [n, domain] = *m_opt;
 
+    auto shapes_opt = object_geometry::from_lua(lua["simulation"], n, domain);
+    REQUIRE(!!shapes_opt);
+    const auto& shapes = *shapes_opt;
+
     auto m = cartesian(n.extents, domain.min, domain.max);
-    REQUIRE(m.dims() == 2);
+    REQUIRE(m.dims() == 1);
 
     auto g = object_geometry(shapes, m);
     REQUIRE(g.Rx().size() == 2u);

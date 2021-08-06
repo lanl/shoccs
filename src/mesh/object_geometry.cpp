@@ -221,7 +221,9 @@ std::span<const int3> object_geometry::Sx() const { return sx_; }
 std::span<const int3> object_geometry::Sy() const { return sy_; }
 std::span<const int3> object_geometry::Sz() const { return sz_; }
 
-std::optional<std::vector<shape>> object_geometry::from_lua(const sol::table& tbl)
+std::optional<std::vector<shape>> object_geometry::from_lua(const sol::table& tbl,
+                                                            index_extents ix,
+                                                            const domain_extents& dom)
 {
     auto t = tbl["shapes"];
     if (!t.valid()) {
@@ -232,6 +234,7 @@ std::optional<std::vector<shape>> object_geometry::from_lua(const sol::table& tb
     std::vector<shape> s{};
     for (int i = 1; t[i].valid(); i++) {
         auto type = t[i]["type"].get_or(std::string{});
+        int id = (int)s.size();
 
         if (type == "sphere") {
 
@@ -239,22 +242,41 @@ std::optional<std::vector<shape>> object_geometry::from_lua(const sol::table& tb
                          t[i]["center"][2].get_or(0.0),
                          t[i]["center"][3].get_or(0.0)};
             real radius = t[i]["radius"].get_or(0.0);
-            s.push_back(make_sphere(i - 1, center, radius));
+            s.push_back(make_sphere(id, center, radius));
 
             spdlog::info("found sphere of radius {} and center {}",
                          radius,
                          fmt::join(center, ", "));
 
         } else if (type == "yz_rect") {
+            auto [lb, ub] = dom;
+            real h = (ub[0] - lb[0]) / (ix[0] - 1);
 
-            real3 lc{t[i]["lower_corner"][1].get_or(0.0),
-                     t[i]["lower_corner"][2].get_or(0.0),
-                     t[i]["lower_corner"][3].get_or(0.0)};
-            real3 uc{t[i]["upper_corner"][1].get_or(0.0),
-                     t[i]["upper_corner"][2].get_or(0.0),
-                     t[i]["upper_corner"][3].get_or(0.0)};
+            real3 lc{t[i]["lower_corner"][1].get_or(lb[0]),
+                     t[i]["lower_corner"][2].get_or(lb[1] - h),
+                     t[i]["lower_corner"][3].get_or(lb[2] - h)};
+            real3 uc{t[i]["upper_corner"][1].get_or(lb[0]),
+                     t[i]["upper_corner"][2].get_or(ub[1] + h),
+                     t[i]["upper_corner"][3].get_or(ub[2] + h)};
             real n = t[i]["normal"].get_or(1.0);
-            s.push_back(make_yz_rect(i - 1, lc, uc, n));
+
+            if (t[i]["psi"].valid()) {
+                real psi = t[i]["psi"];
+                // check for left/right plane
+                if (n > 0.0) {
+                    lc[0] = uc[0] = lb[0] + psi * h;
+                } else {
+                    lc[0] = uc[0] = ub[0] - (1 - psi) * h;
+                }
+            }
+
+            s.push_back(make_yz_rect(id, lc, uc, n));
+
+            spdlog::info("yz_rect [{}] bounded by ({}) - ({}) with normal: {}\n",
+                         id,
+                         fmt::join(lc, ", "),
+                         fmt::join(uc, ", "),
+                         n);
 
         } else {
             spdlog::error("shape type must be one of: sphere, yz_rect ...");
