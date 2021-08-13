@@ -1,24 +1,17 @@
 simulation = {
     mesh = {
-        index_extents = {71, 71},
-        domain_bounds = {2, 2}
+        index_extents = {71},
+        domain_bounds = {2}
     },
     domain_boundaries = {
-        xmin = "dirichlet",
-        ymin = "dirichlet"
+        xmin = "dirichlet"
     },
     shapes = {
         {
-            type = "sphere",
-            center = {0, 0}, --1.053, 0.901},
-            radius = math.pi / 10,
+            type = "yz_rect",
+            psi = 0.1,
+            normal = 1,
             boundary_condition = "dirichlet"
-        },
-        {
-            type = "sphere",
-            center = {2, 2},
-            radius = math.pi / 10,
-            boundary_condition = "floating"
         }
     },
     scheme = {
@@ -27,14 +20,16 @@ simulation = {
         alpha = {-1.47956280234494, 0.261900367793859, -0.145072532538541, -0.224665713988644}
     },
     system = {
-        type = "scalar wave"
+        type = "scalar wave",
+        center = {-1},
+        radius = 0
         -- diffusivity = 1 / 30
     },
     integrator = {
         type = "rk4"
     },
     step_controller = {
-        max_time = 0.2,
+        max_time = 10,
         --max_step = 2,
         cfl = {
             hyperbolic = 0.8,
@@ -42,7 +37,7 @@ simulation = {
         }
     },
     io = {
-        write_every_step = 1
-        --write_every_time = 0.1
+        --write_every_step = 1
+        write_every_time = 0.8
     }
 }

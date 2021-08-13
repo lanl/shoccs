@@ -1,3 +1,5 @@
+dx = 2 / 50
+
 simulation = {
     mesh = {
         index_extents = {51, 51},
@@ -6,15 +8,15 @@ simulation = {
     domain_boundaries = {
         xmin = "dirichlet",
         xmax = "dirichlet",
-        ymin = "neumann",
-        ymax = "neumann"
+        ymin = "dirichlet",
+        ymax = "dirichlet"
     },
     shapes = {
         {
             type = "sphere",
             center = {16 / 17, 25 / 22},
             radius = math.sqrt(3) / 10,
-            boundary_condition = "dirichlet"
+            boundary_condition = "floating"
         }
     },
     scheme = {
@@ -29,14 +31,15 @@ simulation = {
         type = "rk4"
     },
     step_controller = {
-        max_time = 65,
+        max_time = 0.3,
         cfl = {
-            parabolic = 0.2
+            parabolic = 0.5
         }
     },
     manufactured_solution = {
         type = "gaussian",
-        {
+        --[[
+            {
             center = {0.4, 0.5},
             variance = {0.5, 0.2},
             amplitude = 2,
@@ -60,8 +63,15 @@ simulation = {
             amplitude = 3,
             frequency = 0.2
         }
+        ]]
+        {
+            center = {1, 1},
+            variance = {1, 1},
+            amplitude = 2,
+            frequency = 0.5
+        }
     },
     io = {
-        write_every_time = 1.0
+        write_every_time = 0.01
     }
 }
