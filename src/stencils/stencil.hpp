@@ -53,9 +53,9 @@ concept Stencil = requires(const T& st,
         st.query_max()
         } -> std::same_as<info>;
 
-    {st.nbs(h, b, psi, ray_outside, c, extra)};
+    {st.nbs(h, b, psi, ray_outside, c, extra)} -> std::same_as<std::span<const real>>;
 
-    {st.interior(h, c)};
+    {st.interior(h, c)} -> std::same_as<std::span<const real>>;
 };
 
 class stencil
@@ -69,13 +69,13 @@ class stencil
         virtual info query(bcs::type) const = 0;
         virtual info query_max() const = 0;
         virtual interp_info query_interp() const = 0;
-        virtual void nbs(real h,
+        virtual std::span<const real> nbs(real h,
                          bcs::type,
                          real psi,
                          bool ray_outside,
                          std::span<real> coeffs,
                          std::span<real> extra) const = 0;
-        virtual void interior(real c, std::span<real> coeffs) const = 0;
+        virtual std::span<const real> interior(real c, std::span<real> coeffs) const = 0;
         virtual std::span<const real> interp_interior(real, std::span<real>) const = 0;
         virtual std::span<const real>
         interp_wall(int i, real y, real psi, std::span<real> c, bool right) const = 0;
@@ -96,7 +96,7 @@ class stencil
         info query_max() const override { return s.query_max(); }
         interp_info query_interp() const override { return s.query_interp(); }
 
-        void nbs(real h,
+        std::span<const real> nbs(real h,
                  bcs::type b,
                  real psi,
                  bool ray_outside,
@@ -106,7 +106,7 @@ class stencil
             return s.nbs(h, b, psi, ray_outside, c, extra);
         }
 
-        void interior(real h, std::span<real> c) const override
+        std::span<const real> interior(real h, std::span<real> c) const override
         {
             return s.interior(h, c);
         }
@@ -166,7 +166,7 @@ public:
         info query(bcs::type b) const { return s->query(b); }
         info query_max() const { return s->query_max(); }
 
-        void nbs(real h,
+        std::span<const real> nbs(real h,
                  bcs::type b,
                  real psi,
                  bool ray_outside,
@@ -176,7 +176,10 @@ public:
             return s->nbs(h, b, psi, ray_outside, c, ex);
         }
 
-        void interior(real h, std::span<real> c) const { return s->interior(h, c); }
+        std::span<const real> interior(real h, std::span<real> c) const
+        {
+            return s->interior(h, c);
+        }
 
         std::span<const real> interp_interior(real y, std::span<real> c) const
         {
@@ -254,6 +257,8 @@ public:
 stencil make_E2_2();
 stencil make_E4_2();
 stencil make_E2_1(std::span<const real>);
+stencil make_polyE2_1(std::span<const real> floating_alpha,
+                      std::span<const real> dirichlet_alpha);
 
 namespace second
 {

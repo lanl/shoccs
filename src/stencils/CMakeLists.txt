@@ -1,7 +1,8 @@
-add_library(shoccs-stencils 
+add_library(shoccs-stencils
     E2_2.cpp
     E4_2.cpp
     E2_1.cpp
+    polyE2_1.cpp
     stencil.cpp)
 
 target_include_directories(shoccs-stencils PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)

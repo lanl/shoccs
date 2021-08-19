@@ -101,19 +101,21 @@ struct E2_1 {
         return c.subspan(0, 3);
     }
 
-    void interior(real h, std::span<real> c) const
+    std::span<const real> interior(real h, std::span<real> c) const
     {
         c[0] = -1 / (2 * h);
         c[1] = 0;
         c[2] = 1 / (2 * h);
+
+        return c;
     }
 
-    void nbs(real h,
-             bcs::type b,
-             real psi,
-             bool right,
-             std::span<real> c,
-             std::span<real> x) const
+    std::span<const real> nbs(real h,
+                              bcs::type b,
+                              real psi,
+                              bool right,
+                              std::span<real> c,
+                              std::span<real> x) const
     {
         switch (b) {
         case bcs::Floating:
@@ -121,12 +123,13 @@ struct E2_1 {
         case bcs::Dirichlet:
             return nbs_dirichlet(h, psi, c.subspan(0, (R - 1) * T), right);
         default:
+            return c
             // do nothing
             break;
         }
     }
 
-    void nbs_floating(real h, real psi, std::span<real> c, bool right) const
+    std::span<const real> nbs_floating(real h, real psi, std::span<real> c, bool right) const
     {
         double t3 = alpha[0];
         double t5 = alpha[2];
@@ -1308,9 +1311,12 @@ struct E2_1 {
             for (auto&& v : c) v *= -1;
             ranges::reverse(c);
         }
+
+        return c;
     }
 
-    void nbs_dirichlet(real h, real psi, std::span<real> c, bool right) const
+    std::span<const real>
+    nbs_dirichlet(real h, real psi, std::span<real> c, bool right) const
     {
         double t3 = alpha[0];
         double t5 = alpha[2];
@@ -2492,6 +2498,8 @@ struct E2_1 {
             for (auto&& v : c) v *= -1;
             ranges::reverse(c);
         }
+
+        return c;
     }
 
     void nbs_neumann(real, real, std::span<real>, std::span<real>, bool) const {}

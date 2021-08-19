@@ -31,13 +31,15 @@ struct E4_2 {
 
     interp_info query_interp() const { return {2 * P + 1, T}; }
 
-    void interior(real h, std::span<real> c) const
+    std::span<const real> interior(real h, std::span<real> c) const
     {
         c[0] = -1 / (12. * (h * h));
         c[1] = 4 / (3. * (h * h));
         c[2] = -5 / (2. * (h * h));
         c[3] = 4 / (3. * (h * h));
         c[4] = -1 / (12. * (h * h));
+
+        return c;
     }
 
     std::span<const real> interp_interior(real y, std::span<real> c) const
@@ -183,12 +185,12 @@ struct E4_2 {
         return c.subspan(0, T);
     }
 
-    void nbs(real h,
-             bcs::type b,
-             real psi,
-             bool right,
-             std::span<real> c,
-             std::span<real> x) const
+    std::span<const real> nbs(real h,
+                              bcs::type b,
+                              real psi,
+                              bool right,
+                              std::span<real> c,
+                              std::span<real> x) const
     {
         switch (b) {
         case bcs::Floating:
@@ -200,7 +202,8 @@ struct E4_2 {
         }
     }
 
-    void nbs_floating(real h, real psi, std::span<real> c, bool right) const
+    std::span<const real>
+    nbs_floating(real h, real psi, std::span<real> c, bool right) const
     {
         double t6 = -3 * psi;
         double t7 = psi * psi;
@@ -230,9 +233,10 @@ struct E4_2 {
         for (auto&& v : c) v /= (h * h);
 
         if (right) ranges::reverse(c);
+        return c;
     }
 
-    void nbs_dirichlet(real h, real psi, std::span<real> c, bool right) const
+    std::span<const real> nbs_dirichlet(real h, real psi, std::span<real> c, bool right) const
     {
         double t7 = psi * psi;
         double t9 = t7 * psi;
@@ -256,9 +260,11 @@ struct E4_2 {
         for (auto&& v : c) v /= (h * h);
 
         if (right) ranges::reverse(c);
+
+        return c;
     }
 
-    void
+    std::span<const real>
     nbs_neumann(real h, real psi, std::span<real> c, std::span<real> x, bool right) const
     {
         double t7 = psi * psi;
@@ -300,6 +306,8 @@ struct E4_2 {
             ranges::reverse(x);
             for (auto&& v : x) v *= -1;
         }
+
+        return c;
     }
 };
 
