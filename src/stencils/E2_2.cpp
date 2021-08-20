@@ -93,6 +93,8 @@ struct E2_2 {
         c[0] = 1 / (h * h);
         c[1] = -2 / (h * h);
         c[2] = 1 / (h * h);
+
+        return c.subspan(0, 2 * P + 1);
     }
 
     std::span<const real> nbs(real h,
@@ -107,7 +109,7 @@ struct E2_2 {
             return nbs_floating(h, psi, c.subspan(0, R * T), right);
         case bcs::Dirichlet:
             return nbs_dirichlet(h, psi, c.subspan(0, (R - 1) * T), right);
-        case bcs::Neumann:
+        default: // case bcs::Neumann:
             return nbs_neumann(h, psi, c.subspan(0, R * T), x.subspan(0, X), right);
         }
     }

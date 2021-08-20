@@ -14,10 +14,20 @@ std::optional<stencil> stencil::from_lua(const sol::table& tbl)
         return std::nullopt;
     }
 
-    std::vector<real> alpha{};
-    if (auto as = m["alpha"]; as.valid()) {
-        for (int i = 1; as[i].valid(); ++i) alpha.push_back(as[i].get<real>());
-    }
+    // experimenting with different kinds of schemes extends the 'kinds' of
+    // free parameters needed.  If we ever figure out what we're doing then
+    // this should be cleaned up
+    auto read_alpha = [&m](auto&& str, auto& v) {
+        if (auto as = m[str]; as.valid()) {
+            for (int i = 1; as[i].valid(); ++i) v.push_back(as[i].template get<real>());
+        }
+    };
+
+    std::vector<real> alpha{}, floating_alpha{}, dirichlet_alpha{};
+    read_alpha("alpha", alpha);
+    read_alpha("floating_alpha", floating_alpha);
+    read_alpha("dirichlet_alpha", dirichlet_alpha);
+
     int order = m["order"].get_or(1); // default to first derivative schemes
     std::string type = m["type"].get_or(std::string{});
 
@@ -34,6 +44,18 @@ std::optional<stencil> stencil::from_lua(const sol::table& tbl)
         if (type == "E2") {
             spdlog::info("E2 first scheme chosen");
             return make_E2_1(alpha);
+        }
+        if (type == "E2-poly") {
+            spdlog::info("E2-poly scheme chosen");
+            if (alpha.size() > 0) {
+                // make the dubious assumption that the user specified the floating +
+                // dirichlet alpha in the single array - useful for the optimizer
+                // interface
+                auto a = std::span{alpha};
+                return make_polyE2_1(a.subspan(0, 6), a.subspan(6));
+            } else {
+                return make_polyE2_1(floating_alpha, dirichlet_alpha);
+            }
         }
     }
 

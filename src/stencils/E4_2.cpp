@@ -197,7 +197,7 @@ struct E4_2 {
             return nbs_floating(h, psi, c.subspan(0, R * T), right);
         case bcs::Dirichlet:
             return nbs_dirichlet(h, psi, c.subspan(0, (R - 1) * T), right);
-        case bcs::Neumann:
+        default: // case bcs::Neumann:
             return nbs_neumann(h, psi, c.subspan(0, R * T), x.subspan(0, X), right);
         }
     }
@@ -236,7 +236,8 @@ struct E4_2 {
         return c;
     }
 
-    std::span<const real> nbs_dirichlet(real h, real psi, std::span<real> c, bool right) const
+    std::span<const real>
+    nbs_dirichlet(real h, real psi, std::span<real> c, bool right) const
     {
         double t7 = psi * psi;
         double t9 = t7 * psi;

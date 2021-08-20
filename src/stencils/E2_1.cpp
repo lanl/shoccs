@@ -107,7 +107,7 @@ struct E2_1 {
         c[1] = 0;
         c[2] = 1 / (2 * h);
 
-        return c;
+        return c.subspan(0, 2 * P + 1);
     }
 
     std::span<const real> nbs(real h,
@@ -123,13 +123,12 @@ struct E2_1 {
         case bcs::Dirichlet:
             return nbs_dirichlet(h, psi, c.subspan(0, (R - 1) * T), right);
         default:
-            return c
-            // do nothing
-            break;
+            return c;
         }
     }
 
-    std::span<const real> nbs_floating(real h, real psi, std::span<real> c, bool right) const
+    std::span<const real>
+    nbs_floating(real h, real psi, std::span<real> c, bool right) const
     {
         double t3 = alpha[0];
         double t5 = alpha[2];

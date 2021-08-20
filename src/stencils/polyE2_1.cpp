@@ -55,7 +55,9 @@ struct polyE2_1 {
     std::span<const real> interior(real h, std::span<real> c) const
     {
         c = c.subspan(0, 2 * 1 + 1);
-
+        c[0] = -0.5;
+        c[1] = 0;
+        c[2] = 0.5;
         for (auto&& v : c) v /= h;
         return c;
     }
