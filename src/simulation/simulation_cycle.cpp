@@ -68,9 +68,10 @@ real3 simulation_cycle::run()
         spdlog::info("simulation ended prematurely at time/step  {} / {}",
                      (real)controller,
                      (int)controller);
-        return {null_v<real>}; //, time};
+        return {(real)controller, null_v<real>, null_v<real>};
     } else {
-        return sys.summary(stats);
+        auto&& [e, umin, umax] = sys.summary(stats);
+        return {(real)controller, e, e};
     }
 }
 

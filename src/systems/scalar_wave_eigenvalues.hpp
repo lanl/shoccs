@@ -12,42 +12,26 @@
 namespace ccs::systems
 {
 
-// the system of pdes to solve is in this class
-class scalar_wave
+class scalar_wave_eigenvalues
 {
     mesh m;
     bcs::Grid grid_bcs;
     bcs::Object object_bcs;
 
-    gradient grad;
-
-    // required data
-    // std::vector<double> grad_c;
-    // std::vector<double> grad_u;
+    gradient grad; // field operator
 
     real3 center; // center of the circular wave
     real radius;
 
     vector_real grad_G;
-    vector_real du;
 
-    scalar_real error;
-
-    real max_error;
-
-    std::vector<std::string> io_names = {"U", "Error"};
     std::shared_ptr<spdlog::logger> logger;
 
 public:
-    scalar_wave() = default;
+    scalar_wave_eigenvalues() = default;
 
-    scalar_wave(mesh&&,
-                bcs::Grid&&,
-                bcs::Object&&,
-                stencil,
-                real3 center,
-                real radius,
-                real max_error = 100.0);
+    scalar_wave_eigenvalues(
+        mesh&&, bcs::Grid&&, bcs::Object&&, stencil, real3 center, real radius);
 
     void operator()(field& s, const step_controller&);
 
@@ -61,15 +45,14 @@ public:
 
     void update_boundary(field_span, real time);
 
-    real3 summary(const system_stats&) const;
+    void log(const system_stats& stats, const step_controller& controller);
 
     bool write(field_io&, field_view, const step_controller&, real);
 
-    void log(const system_stats&, const step_controller&);
+    real3 summary(const system_stats&) const;
 
     system_size size() const;
 
-    static std::optional<scalar_wave> from_lua(const sol::table&);
+    static std::optional<scalar_wave_eigenvalues> from_lua(const sol::table&);
 };
-
 } // namespace ccs::systems

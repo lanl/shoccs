@@ -352,6 +352,7 @@ void domain_discretization(int dir,
             leftMat = matrix::dense{rLeft, tLeft, left};
             if (grid_bcs[dir].left == bcs::Dirichlet) {
                 sub.remove_left_row();
+                leftMat.flags(ldd);
             } else if (grid_bcs[dir].left == bcs::Neumann) {
                 // add data to N matrix
                 for (int row = 0; row < exLeft; row++) {
@@ -395,6 +396,7 @@ void domain_discretization(int dir,
             rightMat = matrix::dense{rRight, tRight, right};
             if (grid_bcs[dir].right == bcs::Dirichlet) {
                 sub.remove_right_row();
+                rightMat.flags(rdd);
             } else if (grid_bcs[dir].right == bcs::Neumann) {
                 for (int row = 0; row < exRight; row++) {
                     N_builder.add_point(

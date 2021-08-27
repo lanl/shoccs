@@ -1,5 +1,7 @@
 #pragma once
 
+#include "matrix_visitor.hpp"
+
 #include "common.hpp"
 
 namespace ccs::matrix
@@ -23,6 +25,8 @@ public:
 
     template <typename Op = eq_t>
     void operator()(std::span<const real> x, std::span<real> b, Op op = {}) const;
+
+    void visit(visitor& v) const { return v.visit(*this); }
 };
 
 } // namespace ccs::matrix

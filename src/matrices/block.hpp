@@ -33,6 +33,11 @@ public:
         for (auto&& block : blocks) { block(x, b, op); }
     }
 
+    void visit(visitor& v) const
+    {
+        for (auto&& block : blocks) { block.visit(v); }
+    }
+
     struct builder;
 };
 
@@ -44,11 +49,8 @@ struct block::builder {
     builder(integer n) { b.reserve(n); }
 
     template <typename... Args>
-    requires std::constructible_from<inner_block, Args...> void
-    add_inner_block(Args&&... args)
-    {
-        b.emplace_back(std::forward<Args>(args)...);
-    }
+        requires std::constructible_from<inner_block, Args...>
+    void add_inner_block(Args&&... args) { b.emplace_back(std::forward<Args>(args)...); }
 
     block to_block() && { return block{MOVE(b)}; }
 };

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "matrix_visitor.hpp"
+
 #include "circulant.hpp"
 #include "dense.hpp"
 
@@ -37,5 +39,12 @@ public:
 
     template <typename Op = eq_t>
     void operator()(std::span<const real> x, std::span<real> b, Op op = {}) const;
+
+    void visit(visitor& v) const
+    {
+        v.visit(left_boundary);
+        v.visit(interior);
+        v.visit(right_boundary);
+    }
 };
 } // namespace ccs::matrix

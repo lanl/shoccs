@@ -29,14 +29,18 @@ struct identity {
         return c;
     }
 
-    void interior(real, std::span<real> c) const { c[0] = 1; }
+    std::span<const real> interior(real, std::span<real> c) const
+    {
+        c[0] = 1;
+        return c.subspan(0, 1);
+    }
 
-    void nbs(real,
-             bcs::type b,
-             real psi,
-             bool right_wall,
-             std::span<real> c,
-             std::span<real> x) const
+    std::span<const real> nbs(real,
+                              bcs::type b,
+                              real psi,
+                              bool right_wall,
+                              std::span<real> c,
+                              std::span<real> x) const
     {
         assert(0 <= psi && psi <= 1);
         switch (b) {
@@ -62,7 +66,7 @@ struct identity {
                 c[4] = 1;
                 c[5] = 0;
             }
-            break;
+            return c.subspan(0, 6);
         case (bcs::Floating):
             if (right_wall) {
                 c[0] = 0;
@@ -79,7 +83,7 @@ struct identity {
                 c[4] = 1;
                 c[5] = 0;
             }
-            break;
+            return c.subspan(0, 6);
         default:
             if (right_wall) {
                 c[0] = 0;
@@ -92,6 +96,7 @@ struct identity {
                 c[2] = 0;
                 c[3] = 0;
             }
+            return c.subspan(0, 4);
         }
     }
 };

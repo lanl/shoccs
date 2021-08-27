@@ -48,12 +48,16 @@ std::optional<stencil> stencil::from_lua(const sol::table& tbl)
         if (type == "E2-poly") {
             spdlog::info("E2-poly scheme chosen");
             if (alpha.size() > 0) {
+                spdlog::info("alpha = {}", fmt::join(alpha, ", "));
                 // make the dubious assumption that the user specified the floating +
                 // dirichlet alpha in the single array - useful for the optimizer
                 // interface
                 auto a = std::span{alpha};
                 return make_polyE2_1(a.subspan(0, 6), a.subspan(6));
             } else {
+                spdlog::info("floating alpha = {}", fmt::join(floating_alpha, ", "));
+                spdlog::info("dirichlet alpha = {}", fmt::join(dirichlet_alpha, ", "));
+
                 return make_polyE2_1(floating_alpha, dirichlet_alpha);
             }
         }

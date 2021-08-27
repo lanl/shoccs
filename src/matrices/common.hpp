@@ -2,6 +2,28 @@
 
 #include "types.hpp"
 
+namespace ccs
+{
+// need to capture any boundary conditions associated with the matrix
+// this info is needed by matrix visitors (i.e. the eigenvalue visitor)
+using flag = uint8_t;
+
+namespace detail
+{
+constexpr flag right = 1;
+constexpr flag dirichlet = 2;
+constexpr flag domain = 4;
+} // namespace detail
+
+constexpr flag ldd = 1;
+constexpr flag rdd = 2;
+
+constexpr bool is_ldd(flag f) { return f == ldd; }
+
+constexpr bool is_rdd(flag f) { return f == rdd; }
+
+} // namespace ccs
+
 namespace ccs::matrix
 {
 

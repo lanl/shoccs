@@ -48,7 +48,8 @@ scalar_wave::scalar_wave(mesh&& m_,
                          bcs::Object&& object_bcs,
                          stencil st,
                          real3 center,
-                         real radius)
+                         real radius,
+                         real max_error)
     : m{MOVE(m_)},
       grid_bcs{MOVE(grid_bcs)},
       object_bcs{MOVE(object_bcs)},
@@ -57,7 +58,8 @@ scalar_wave::scalar_wave(mesh&& m_,
       radius{radius},
       grad_G{m.vs()},
       du{m.vs()},
-      error{m.ss()}
+      error{m.ss()},
+      max_error{max_error}
 {
 
     // Initialize wave speeds
@@ -155,7 +157,7 @@ scalar_wave::stats(const field&, const field& f, const step_controller& c) const
 bool scalar_wave::valid(const system_stats& stats) const
 {
     const auto& v = stats.stats[0];
-    return std::isfinite(v) && std::abs(v) <= 1e6;
+    return std::isfinite(v) && std::abs(v) <= max_error;
 }
 
 //
@@ -211,6 +213,7 @@ system_size scalar_wave::size() const { return {1, 0, m.ss()}; }
 
 std::optional<scalar_wave> scalar_wave::from_lua(const sol::table& tbl)
 {
+    real max_error = tbl["system"]["max_error"].get_or(100.0);
     // assume we can only get here if simulation.system.type == "scalar_wave" so check
     // for the rest
     real3 center;
@@ -259,7 +262,8 @@ std::optional<scalar_wave> scalar_wave::from_lua(const sol::table& tbl)
                            MOVE(bc_opt->second),
                            *st_opt,
                            center,
-                           radius};
+                           radius,
+                           max_error};
     }
 
     return std::nullopt;
