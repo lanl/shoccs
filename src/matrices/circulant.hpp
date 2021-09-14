@@ -27,6 +27,8 @@ public:
     void operator()(std::span<const real> x, std::span<real> b, Op op = {}) const;
 
     void visit(visitor& v) const { return v.visit(*this); }
+
+    std::span<const real> data() const { return v; }
 };
 
 } // namespace ccs::matrix

@@ -1,6 +1,7 @@
 #pragma once
 
-#include "types.hpp"
+#include "common.hpp"
+#include "matrix_visitor.hpp"
 
 #include <compare>
 #include <range/v3/range/concepts.hpp>
@@ -14,19 +15,22 @@ class csr
     std::vector<real> w;    // values
     std::vector<integer> v; // column indices
     std::vector<integer> u; // starting column index for rows
+    flag f;
 
 public:
     csr() = default;
 
     template <ranges::input_range W, ranges::input_range V, ranges::input_range U>
-    csr(W&& w, V&& v, U&& u)
+    csr(W&& w, V&& v, U&& u, flag row_col_space = 0)
         : w(rs::begin(w), rs::end(w)),
           v(rs::begin(v), rs::end(v)),
-          u(rs::begin(u), rs::end(u))
+          u(rs::begin(u), rs::end(u)),
+          f{row_col_space}
     {
     }
 
     integer rows() const { return u.size() ? u.size() - 1 : 0; }
+    std::span<const integer> column_indices(integer row) const;
 
     // number of non-zero entries
     integer size() const { return (integer)w.size(); }
@@ -34,6 +38,10 @@ public:
     void operator()(std::span<const real> x, std::span<real> b) const;
 
     struct builder;
+
+    flag flags() const { return f; }
+    void flags(flag f_) { f = f_; }
+    void visit(visitor& v) const { v.visit(*this); }
 };
 
 struct csr::builder {

@@ -13,14 +13,31 @@ namespace detail
 constexpr flag right = 1;
 constexpr flag dirichlet = 2;
 constexpr flag domain = 4;
+
+constexpr flag rx = 1;
+constexpr flag ry = 2;
+constexpr flag rz = 4;
 } // namespace detail
 
 constexpr flag ldd = 1;
 constexpr flag rdd = 2;
 
+constexpr flag row_shift = 3;
+constexpr flag rowspace_rx = detail::rx << row_shift;
+constexpr flag rowspace_ry = detail::ry << row_shift;
+constexpr flag rowspace_rz = detail::rz << row_shift;
+constexpr flag colspace_rx = detail::rx;
+constexpr flag colspace_ry = detail::ry;
+constexpr flag colspace_rz = detail::rz;
+constexpr flag colspace_r = colspace_rx | colspace_ry | colspace_rz;
+
 constexpr bool is_ldd(flag f) { return f == ldd; }
 
 constexpr bool is_rdd(flag f) { return f == rdd; }
+
+constexpr bool is_rx(flag f) { return f & detail::rx; }
+constexpr bool is_ry(flag f) { return f & detail::ry; }
+constexpr bool is_rz(flag f) { return f & detail::rz; }
 
 } // namespace ccs
 

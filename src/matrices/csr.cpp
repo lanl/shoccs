@@ -36,4 +36,11 @@ void csr::operator()(std::span<const real> x, std::span<real> b) const
         for (integer i = u[row]; i < u[row + 1]; i++) b[row] += w[i] * x[v[i]];
 }
 
+std::span<const integer> csr::column_indices(integer row) const
+{
+    integer r0 = u[row];
+    integer r1 = u[row + 1];
+    return std::span(v.data() + r0, r1 - r0);
+}
+
 } // namespace ccs::matrix

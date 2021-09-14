@@ -1,5 +1,6 @@
 #include "unit_stride_visitor.hpp"
 #include "circulant.hpp"
+#include "csr.hpp"
 #include "dense.hpp"
 #include "inner_block.hpp"
 
@@ -15,31 +16,6 @@
 using namespace ccs;
 using Catch::Matchers::Approx;
 using T = std::vector<real>;
-
-TEST_CASE("no boundary no holes")
-{
-    T imat(25);
-
-    const auto mat = matrix::dense{5, 5, imat};
-
-    auto v = matrix::unit_stride_visitor(5, 5);
-
-    mat.visit(v);
-
-    REQUIRE(rs::equal(v.mapped(0, 5, 0, 5), vs::iota(0ul, imat.size())));
-    REQUIRE(rs::equal(v.mapped(4, 1, 0, 5), vs::iota(20, 25)));
-
-    const auto mat2 = matrix::dense{5, 5, 5, 5, 1, imat};
-    mat2.visit(v);
-
-    REQUIRE(rs::equal(v.mapped(0, 2, 0, 3), std::vector{0, 1, 2, 10, 11, 12}));
-
-    const auto mat3 = matrix::dense{5, 6, 10, 9, 1, imat};
-    mat3.visit(v);
-
-    REQUIRE(rs::equal(v.mapped(1, 2, 1, 3), std::vector{16, 17, 18, 31, 32, 33}));
-    REQUIRE(rs::equal(v.mapped(14, 1, 0, 15), vs::iota(15 * 14, 15 * 15)));
-}
 
 TEST_CASE("no boundary with holes")
 {
@@ -107,4 +83,59 @@ TEST_CASE("inner_block")
     REQUIRE(rs::equal(vis.mapped(1, 2, 1, 2), std::vector{0, 1, 9, 10}));
     REQUIRE(rs::equal(vis.mapped(3, 1, 2, 3), std::vector{19, 20, 21}));
     REQUIRE(rs::equal(vis.mapped(8, 2, 7, 3), std::vector{69, 70, 71, 78, 79, 80}));
+}
+
+TEST_CASE("csr")
+{
+    int3 nxyz{10, 1, 1};
+    // support an objects on the left/right with dirichlet/floating bcs, resp.
+    auto vis = matrix::unit_stride_visitor(
+        nxyz, std::vector<bool>{true, false}, std::vector<bool>{}, std::vector<bool>{});
+
+    auto t = T(3, 0);
+    auto u = vs::repeat(0.0);
+
+    auto x = matrix::inner_block(8,
+                                 1,
+                                 1,
+                                 1,
+                                 matrix::dense{2, 2, u},
+                                 matrix::circulant(4, t),
+                                 matrix::dense{2, 2, u});
+
+    x.visit(vis);
+
+    // B: rowspace: f; colspace rx
+    auto B_ = matrix::csr::builder();
+    // left dirichlet boundary
+    B_.add_point(1, 0, 0.);
+    B_.add_point(2, 0, 0.);
+    // right floating boundary
+    B_.add_point(7, 1, 0.);
+    B_.add_point(8, 1, 0.);
+
+    auto B = B_.to_csr(nxyz[0]);
+    B.flags(colspace_rx);
+
+    // Bfx: rowspace: rx; colspace f
+    auto Bf_ = matrix::csr::builder();
+    // right floating boundary
+    Bf_.add_point(1, 7, 0.);
+    Bf_.add_point(1, 8, 0.);
+
+    auto Bf = Bf_.to_csr(2);
+    Bf.flags(rowspace_rx);
+
+    // Brx: rowspace: rx; colspace rx
+    auto Br_ = matrix::csr::builder();
+    Br_.add_point(1, 1, 0.);
+
+    auto Br = Br_.to_csr(2);
+    Br.flags(rowspace_rx | colspace_rx);
+
+    B.visit(vis);
+    Bf.visit(vis);
+    Br.visit(vis);
+
+    REQUIRE(vis.mapped_size() == 9 * 9);
 }

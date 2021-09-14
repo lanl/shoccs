@@ -6,12 +6,12 @@ namespace ccs::matrix
 {
 class dense;
 class circulant;
-class inner_block;
+class csr;
 
 struct visitor {
 
     virtual void visit(const dense&) = 0;
     virtual void visit(const circulant&) = 0;
-    //  virtual void visit(const inner_block&) = 0;
+    virtual void visit(const csr&) = 0;
 };
 } // namespace ccs::matrix

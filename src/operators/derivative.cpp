@@ -134,10 +134,25 @@ struct OB_builder {
         }
     }
 
-    void to_csr(matrix::csr& O_matrix, matrix::csr& B_matrix, integer rows)
+    void to_csr(integer r, matrix::csr& O_matrix, matrix::csr& B_matrix, integer rows)
     {
         O_matrix = MOVE(O.to_csr(rows));
         B_matrix = MOVE(B.to_csr(rows));
+
+        // adjust row/col space flags
+        // rowspace for both:
+        // r = 0 -> rx == 1
+        // r = 1 -> ry == 2
+        // r = 2 -> rz == 4
+        flag row = 1u << r;
+
+        // colspace for O is fluid
+
+        // colspace for B is same as rowspace
+        flag col_b = row;
+
+        O_matrix.flags(row << row_shift);
+        B_matrix.flags((row << row_shift) | col_b);
     }
 };
 
@@ -237,8 +252,7 @@ void cut_discretization(int r,
     }
 
     // construct ray in 'dir` emanative from R(r)
-
-    builder.to_csr(O, B, sz);
+    builder.to_csr(r, O, B, sz);
 }
 
 struct submatrix_size {
@@ -418,6 +432,12 @@ void domain_discretization(int dir,
     O = MOVE(O_builder).to_block();
     B = MOVE(B_builder.to_csr(m.size()));
     N = MOVE(N_builder.to_csr(m.size()));
+
+    // col_space of B is `R{dir}`
+    // 0 -> rx == 1
+    // 1 -> ry == 2
+    // 2 -> rz == 4
+    B.flags(1u << dir);
 }
 } // namespace
 
