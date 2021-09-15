@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common.hpp"
 #include "fields/tuple_fwd.hpp"
 #include "matrix_visitor.hpp"
 
@@ -22,6 +23,10 @@ class unit_stride_visitor : public visitor
     void add_rows(integer, integer);
     void add_cols(integer, integer);
     void add_cols(integer, std::span<const integer>);
+
+    // I don't think these routines make a lot of sense as memebers of this class
+    std::array<flag, 2> csr_flags(const csr&) const;
+    std::array<integer, 2> csr_offsets(const csr&) const;
 
 public:
     unit_stride_visitor() = default;
@@ -61,8 +66,12 @@ public:
 
     integer mapped_size() const { return nrows_out * ncols_out; }
 
+    // for dense and circulant matrices
     std::span<const integer>
     mapped(integer first_row, integer rows, integer first_col, integer cols) const;
+
+    // for csr matrices - offset calculations can be handled internally for ease of use
+    std::span<const integer> mapped(integer row, const csr&) const;
 };
 
 } // namespace ccs::matrix

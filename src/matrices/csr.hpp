@@ -31,6 +31,7 @@ public:
 
     integer rows() const { return u.size() ? u.size() - 1 : 0; }
     std::span<const integer> column_indices(integer row) const;
+    std::span<const real> column_coefficients(integer row) const;
 
     // number of non-zero entries
     integer size() const { return (integer)w.size(); }

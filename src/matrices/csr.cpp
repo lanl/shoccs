@@ -43,4 +43,11 @@ std::span<const integer> csr::column_indices(integer row) const
     return std::span(v.data() + r0, r1 - r0);
 }
 
+std::span<const real> csr::column_coefficients(integer row) const
+{
+    integer r0 = u[row];
+    integer r1 = u[row + 1];
+    return std::span(w.data() + r0, r1 - r0);
+}
+
 } // namespace ccs::matrix

@@ -3,11 +3,6 @@
 #include "csr.hpp"
 #include "dense.hpp"
 
-#include <fmt/core.h>
-#include <fmt/ranges.h>
-
-#include <range/v3/view/repeat.hpp>
-
 namespace ccs::matrix
 {
 
@@ -63,7 +58,6 @@ void unit_stride_visitor::visit(const dense& mat)
     adjust_size(r_n, r_off, c_n, c_off);
 
     add_rows(r_off, r_off + r_n);
-    fmt::print("rows_out: {}\n", fmt::join(rows_out, ", "));
 
     if (auto f = mat.flags(); is_ldd(f)) {
         add_cols(c_off + 1, c_off + c_n);
@@ -72,7 +66,6 @@ void unit_stride_visitor::visit(const dense& mat)
     } else {
         add_cols(c_off, c_off + c_n);
     }
-    fmt::print("cols_out: {}\n", fmt::join(cols_out, ", "));
 }
 
 void unit_stride_visitor::visit(const circulant& mat)
@@ -89,20 +82,20 @@ void unit_stride_visitor::visit(const circulant& mat)
     adjust_size(r_n, r_off, c_n, c_off);
 
     add_rows(r_off, r_off + r_n);
-    fmt::print("rows_out: {}\n", fmt::join(rows_out, ", "));
 
     add_cols(c_off, c_off + c_n);
-
-    fmt::print("cols_out: {}\n", fmt::join(cols_out, ", "));
 }
 
-void unit_stride_visitor::visit(const csr& mat)
+std::array<flag, 2> unit_stride_visitor::csr_flags(const csr& mat) const
 {
-    const auto col_flags = (colspace_rx | colspace_ry | colspace_rz) & mat.flags();
-    const auto row_flags =
-        ((rowspace_rx | rowspace_ry | rowspace_rz) & mat.flags()) >> row_shift;
+    return {
+        (flag)(((rowspace_rx | rowspace_ry | rowspace_rz) & mat.flags()) >> row_shift),
+        (flag)((colspace_rx | colspace_ry | colspace_rz) & mat.flags())};
+}
 
-    // fmt::print("row/col flags {} / {}\n", row_flags, col_flags);
+std::array<integer, 2> unit_stride_visitor::csr_offsets(const csr& mat) const
+{
+    const auto [row_flags, col_flags] = csr_flags(mat);
 
     const integer row_offset =
         !!row_flags *
@@ -111,7 +104,13 @@ void unit_stride_visitor::visit(const csr& mat)
         !!col_flags *
         (base_in + !is_rx(col_flags) * (rx.size() + !is_ry(col_flags) * ry.size()));
 
-    // fmt::print("row/col offsets {} / {}\n", row_offset, col_offset);
+    return {row_offset, col_offset};
+}
+
+void unit_stride_visitor::visit(const csr& mat)
+{
+    const auto [row_flags, col_flags] = csr_flags(mat);
+    const auto [row_offset, col_offset] = csr_offsets(mat);
 
     std::vector<bool> empty{};
     // here we make explicit use of rx=1, ry=2, rz=4.  would probably be better to do this
@@ -122,9 +121,6 @@ void unit_stride_visitor::visit(const csr& mat)
 
     const bool check_row = rs::size(row_skip) > 0;
     const bool check_col = rs::size(col_skip) > 0;
-
-    // if (check_row) fmt::print("row selector: {}\n", fmt::join(row_skip, ", "));
-    // if (check_col) fmt::print("col selector: {}\n", fmt::join(col_skip, ", "));
 
     for (integer row = 0; row < mat.rows(); row++) {
         // skip if dirichlet row
@@ -155,9 +151,6 @@ void unit_stride_visitor::visit(const csr& mat)
             if (rows_out[row_i] == -1) rows_out[row_i] = nrows_out++;
         }
     }
-
-    fmt::print("csr rows_out: {}\n", fmt::join(rows_out, ", "));
-    fmt::print("csr cols_out: {}\n", fmt::join(cols_out, ", "));
 }
 
 std::span<const integer> unit_stride_visitor::mapped(integer first_row,
@@ -171,12 +164,34 @@ std::span<const integer> unit_stride_visitor::mapped(integer first_row,
         for (integer c = 0; c < cols; c++) {
             auto r_in = first_row + r;
             auto c_in = first_col + c;
-            assert(rows_out[r_in] != -1);
-            assert(cols_out[c_in] != -1);
-            ic_[r * cols + c] = rows_out[r_in] * ncols_out + cols_out[c_in];
+            auto r_out = rows_out[r_in];
+            auto c_out = cols_out[c_in];
+            // assert(rows_out[r_in] != -1);
+            // assert(cols_out[c_in] != -1);
+            ic_[r * cols + c] =
+                (r_out == -1 || c_out == -1) ? -1 : r_out * ncols_out + c_out;
         }
 
     return std::span(ic_.begin(), rows * cols);
+}
+
+std::span<const integer> unit_stride_visitor::mapped(integer row, const csr& mat) const
+{
+    auto cols = mat.column_indices(row);
+
+    if (cols.size() > ic_.size()) ic_.resize(cols.size());
+
+    const auto [row_offset, col_offset] = csr_offsets(mat);
+    auto r_in = row + row_offset;
+    auto r_out = rows_out[r_in];
+
+    for (integer c = 0; c < (integer)cols.size(); c++) {
+        auto c_in = cols[c] + col_offset;
+        auto c_out = cols_out[c_in];
+        ic_[c] = (r_out == -1 || c_out == -1) ? -1 : r_out * ncols_out + c_out;
+    }
+
+    return std::span(ic_.begin(), cols.size());
 }
 
 } // namespace ccs::matrix

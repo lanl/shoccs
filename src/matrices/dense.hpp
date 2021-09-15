@@ -47,7 +47,7 @@ public:
     template <typename Op = eq_t>
     void operator()(std::span<const real> x, std::span<real> b, Op op = {}) const;
 
-    const auto& data() const { return v; }
+    std::span<const real> data() const { return v; }
     flag flags() const { return f; }
     void flags(flag f_) { f = f_; }
     void visit(visitor& v) const { v.visit(*this); };
