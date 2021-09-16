@@ -6,6 +6,7 @@
 #include "fields/scalar.hpp"
 #include "matrices/block.hpp"
 #include "matrices/csr.hpp"
+#include "matrices/matrix_visitor.hpp"
 #include "mesh/mesh.hpp"
 #include "stencils/stencil.hpp"
 
@@ -35,6 +36,15 @@ public:
                const bcs::Grid& grid_bcs,
                const bcs::Object& object_bcs,
                std::shared_ptr<spdlog::logger> = {});
+
+    void visit(matrix::visitor& v) const
+    {
+        // Assumes 1d
+        O.visit(v);
+        B.visit(v);
+        Bfx.visit(v);
+        Brx.visit(v);
+    }
 
     // operator for when neumann conditions are not needed
     template <typename Op = eq_t>

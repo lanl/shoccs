@@ -3,10 +3,17 @@ target_include_directories(shoccs-bcs PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_S
 target_link_libraries(shoccs-bcs PUBLIC sol2::sol2 lua spdlog::spdlog)
 add_unit_test(boundaries "bcs" shoccs-bcs)
 
-#add_library(operators directional.cpp derivative.cpp gradient.cpp divergence.cpp)
-add_library(shoccs-operators gradient.cpp laplacian.cpp derivative.cpp)
-#target_link_libraries(operators PUBLIC geometry mesh range-v3::range-v3 matrices fields)
-target_link_libraries(shoccs-operators PUBLIC shoccs-mesh shoccs-matrices)
+add_library(shoccs-operators
+    gradient.cpp
+    laplacian.cpp
+    derivative.cpp
+    eigenvalue_visitor.cpp)
+
+target_link_libraries(shoccs-operators
+    PUBLIC 
+        shoccs-mesh shoccs-matrices
+    PRIVATE
+        MKL::MKL)
 target_include_directories(shoccs-operators PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 
 
@@ -17,3 +24,4 @@ add_unit_test(derivative "operators" shoccs-operators shoccs-random shoccs-stenc
 
 add_unit_test(gradient "operators" shoccs-operators shoccs-stencils shoccs-bcs)
 add_unit_test(laplacian "operators" shoccs-operators shoccs-stencils shoccs-bcs)
+add_unit_test(eigenvalue_visitor "operators" shoccs-operators shoccs-stencils shoccs-bcs)

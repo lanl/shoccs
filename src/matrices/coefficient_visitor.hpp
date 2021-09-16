@@ -22,5 +22,8 @@ public:
     void visit(const csr&) override;
 
     std::span<const real> matrix() const { return m; }
+
+    const real* data() const { return m.data(); }
+    real* data() { return m.data(); }
 };
 } // namespace ccs::matrix

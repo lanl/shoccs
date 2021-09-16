@@ -64,6 +64,7 @@ public:
     void visit(const circulant&) override;
     void visit(const csr&) override;
 
+    std::array<integer, 2> mapped_dims() const { return {nrows_out, ncols_out}; }
     integer mapped_size() const { return nrows_out * ncols_out; }
 
     // for dense and circulant matrices
