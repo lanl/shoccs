@@ -27,8 +27,8 @@ std::optional<integrator> integrator::from_lua(const sol::table& tbl)
 
     auto m = tbl["integrator"];
     if (!m.valid()) {
-        spdlog::error("simulation.integrator must be specified");
-        return std::nullopt;
+        spdlog::warn("simulation.integrator not specified.  Defaulting to empty");
+        return integrator{integrators::empty{}};
     }
 
     auto type = m["type"].get_or(std::string{});
@@ -40,7 +40,7 @@ std::optional<integrator> integrator::from_lua(const sol::table& tbl)
         spdlog::info("building euler integrator");
         return integrator{integrators::euler{}};
     } else {
-        spdlog::error("integrator.type must be one of: rk4");
+        spdlog::error("integrator.type must be one of: [rk4, euler]");
         return std::nullopt;
     }
 }
