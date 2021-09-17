@@ -28,6 +28,46 @@ constexpr real ymin = -1.;
 constexpr real ymax = 5.;
 using T = std::vector<real>;
 
+TEST_CASE("dirichlet coeffs")
+{
+    sol::state lua;
+    lua.open_libraries(sol::lib::base, sol::lib::math);
+    lua.script(R"(
+        simulation = {
+            scheme = {
+                order = 1,
+                type = "E2-poly",
+                floating_alpha = {13/100, 7/50, 3/20, 4/25, 17/100, 9/50},
+                dirichlet_alpha = {3/25, 13/100, 7/50}
+            }
+        }
+    )");
+
+    auto st_opt = stencil::from_lua(lua["simulation"]);
+    REQUIRE(!!st_opt);
+    const auto& st = *st_opt;
+
+    auto [p, r, t, x] = st.query(bcs::Dirichlet);
+    REQUIRE(r == 2);
+    REQUIRE(t == 4);
+
+    T c(r * t);
+    T ex(x);
+    real h = 1.0;
+    real psi = 0.001;
+
+    T exact{-0.4395604395604396,
+            -0.4166369491239419,
+            0.7128343378083233,
+            0.14336305087605816,
+            -0.4295704295704296,
+            -0.435,
+            0.7295704295704296,
+            0.135};
+    st.nbs(h, bcs::Dirichlet, psi, false, c, ex);
+    REQUIRE_THAT(c, Approx(exact));
+}
+
 TEST_CASE("interior")
 {
     sol::state lua;

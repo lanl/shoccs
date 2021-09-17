@@ -31,6 +31,7 @@ if (BUILD_TESTING)
   find_package(Catch2 3 REQUIRED)
 endif()
 find_package(Boost REQUIRED) # for header only mp11
+find_package(MKL REQUIRED)
 
 
 include(GNUInstallDirs)
@@ -66,7 +67,6 @@ install(
       shoccs-utils
     EXPORT shoccs
 )
-
 install(EXPORT shoccs
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/shoccs
   NAMESPACE shoccs::

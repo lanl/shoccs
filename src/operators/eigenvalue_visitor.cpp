@@ -21,19 +21,16 @@ void eigenvalue_visitor::visit(const derivative& d)
     eigs_real.resize(rows);
     eigs_imag.resize(rows);
 
-    fmt::print("Matrix sz: [{} x {}]\n", rows, cols);
-
     // canabalize the unit_stride_visitor to construct our coefficient_visitor
     v = matrix::coefficient_visitor{MOVE(u)};
     d.visit(v);
-    for (auto&& [i, rng] : vs::enumerate(v.matrix() | vs::chunk(cols))) {
-        fmt::print("{:2d}|\t{}\n", i, fmt::join(rng, ", "));
-    }
 
     // compute eigenvalues given our now dense matrix
     real vl, vr;
     MKL_INT lda = rows;
     MKL_INT n = rows;
+    // according to the docs I should be able to leave ldvl and ldvr as 1 since
+    // jobl=jobr='N', but then I get an error in the dgeev_work routine.
     MKL_INT ldvl = n;
     MKL_INT ldvr = n;
 

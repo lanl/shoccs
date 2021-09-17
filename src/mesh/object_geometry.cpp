@@ -264,7 +264,7 @@ std::optional<std::vector<shape>> object_geometry::from_lua(const sol::table& tb
                 real psi = t[i]["psi"];
                 // check for left/right plane
                 if (n > 0.0) {
-                    lc[0] = uc[0] = lb[0] + psi * h;
+                    lc[0] = uc[0] = lb[0] + (1 - psi) * h;
                 } else {
                     lc[0] = uc[0] = ub[0] - (1 - psi) * h;
                 }

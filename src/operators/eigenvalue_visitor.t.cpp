@@ -111,5 +111,5 @@ TEST_CASE("e2-poly")
     auto eigs = to<T>(v.eigenvalues_real());
     REQUIRE(eigs.size() == 20u);
 
-    REQUIRE(rs::max(eigs) == Catch::Approx(0.19642194054742698));
+    REQUIRE(rs::max(eigs) == Catch::Approx(0.19628372852526094));
 }
