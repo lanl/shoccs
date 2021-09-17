@@ -12,7 +12,7 @@
 namespace ccs::systems
 {
 
-class scalar_wave_eigenvalues
+class hyperbolic_eigenvalues
 {
     mesh m;
     bcs::Grid grid_bcs;
@@ -20,18 +20,12 @@ class scalar_wave_eigenvalues
 
     gradient grad; // field operator
 
-    real3 center; // center of the circular wave
-    real radius;
-
-    vector_real grad_G;
-
     std::shared_ptr<spdlog::logger> logger;
 
 public:
-    scalar_wave_eigenvalues() = default;
+    hyperbolic_eigenvalues() = default;
 
-    scalar_wave_eigenvalues(
-        mesh&&, bcs::Grid&&, bcs::Object&&, stencil, real3 center, real radius);
+    hyperbolic_eigenvalues(mesh&&, bcs::Grid&&, bcs::Object&&, stencil);
 
     void operator()(field& s, const step_controller&);
 
@@ -53,6 +47,6 @@ public:
 
     system_size size() const;
 
-    static std::optional<scalar_wave_eigenvalues> from_lua(const sol::table&);
+    static std::optional<hyperbolic_eigenvalues> from_lua(const sol::table&);
 };
 } // namespace ccs::systems

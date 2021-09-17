@@ -107,6 +107,10 @@ std::optional<system> system::from_lua(const sol::table& tbl)
     } else if (type == "inviscid vortex") {
         spdlog::info("building inviscid_vortex system");
         return system(systems::inviscid_vortex{});
+    } else if (type == "eigenvalues") {
+        spdlog::info("building hyperbolic_eigenvalues system");
+        if (auto opt = systems::hyperbolic_eigenvalues::from_lua(tbl); opt)
+            return system(MOVE(*opt));
     } else {
         spdlog::error("unrecognized system.type");
     }

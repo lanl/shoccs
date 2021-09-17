@@ -1,9 +1,12 @@
 #pragma once
 
+// systems
 #include "empty_system.hpp"
 #include "heat.hpp"
+#include "hyperbolic_eigenvalues.hpp"
 #include "inviscid_vortex.hpp"
 #include "scalar_wave.hpp"
+
 #include "temporal/step_controller.hpp"
 #include "types.hpp"
 #include <sol/forward.hpp>
@@ -51,7 +54,8 @@ class system
     std::variant<systems::empty,
                  systems::scalar_wave,
                  systems::inviscid_vortex,
-                 systems::heat>
+                 systems::heat,
+                 systems::hyperbolic_eigenvalues>
         v;
     using v_t = decltype(v);
 
