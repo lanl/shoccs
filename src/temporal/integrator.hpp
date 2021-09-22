@@ -8,6 +8,7 @@
 #include "empty_integrator.hpp"
 #include "euler.hpp"
 #include "fields/field.hpp"
+#include "io/logging.hpp"
 #include "rk4.hpp"
 #include "types.hpp"
 
@@ -31,7 +32,7 @@ public:
     std::function<void(field_span)>
     operator()(system&, const field&, const step_controller&, real dt);
 
-    static std::optional<integrator> from_lua(const sol::table&);
+    static std::optional<integrator> from_lua(const sol::table&, const logs& = {});
 };
 
 } // namespace ccs

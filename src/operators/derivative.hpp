@@ -10,7 +10,7 @@
 #include "mesh/mesh.hpp"
 #include "stencils/stencil.hpp"
 
-#include <spdlog/spdlog.h>
+#include "io/logging.hpp"
 
 namespace ccs
 {
@@ -35,7 +35,7 @@ public:
                const stencil& st,
                const bcs::Grid& grid_bcs,
                const bcs::Object& object_bcs,
-               std::shared_ptr<spdlog::logger> = {});
+               const logs& = {});
 
     void visit(matrix::visitor& v) const
     {

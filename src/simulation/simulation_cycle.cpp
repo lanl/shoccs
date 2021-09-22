@@ -1,7 +1,7 @@
 #include "simulation_cycle.hpp"
 
+#include "io/logging.hpp"
 #include <sol/sol.hpp>
-#include <spdlog/spdlog.h>
 
 #include <iostream>
 
@@ -11,17 +11,19 @@ namespace ccs
 simulation_cycle::simulation_cycle(system&& sys,
                                    step_controller&& controller,
                                    integrator&& integrate,
-                                   field_io&& io)
+                                   field_io&& io,
+                                   bool enable_logging)
     : sys{MOVE(sys)},
       controller{MOVE(controller)},
       integrate{MOVE(integrate)},
-      io{MOVE(io)}
+      io{MOVE(io)},
+      logger{enable_logging, "cycle"}
 {
 }
 
 real3 simulation_cycle::run()
 {
-    spdlog::info("begin time stepping");
+    logger(spdlog::level::info, "begin time stepping");
     // a non-zero time would typically correspond to some kind of restart
     // functionality
     field u0{sys(controller)};
@@ -40,7 +42,7 @@ real3 simulation_cycle::run()
 
         const std::optional<real> dt = sys.timestep_size(u0, controller);
         if (!dt) {
-            spdlog::info("required timestep too small");
+            logger(spdlog::level::info, "required timestep too small");
             return {null_v<real>}; //{huge<double>, time};
         }
         u1 = integrate(sys, u0, controller, *dt);
@@ -53,11 +55,12 @@ real3 simulation_cycle::run()
         sys.write(io, u1, controller, *dt);
         sys.log(stats, controller);
 
-        spdlog::info("Cycle: time= {}  step={}, dt={}, s0={}",
-                     (real)controller,
-                     (int)controller,
-                     *dt,
-                     stats.stats[0]);
+        logger(spdlog::level::info,
+               "time= {}  step={}, dt={}, s0={}",
+               (real)controller,
+               (int)controller,
+               *dt,
+               stats.stats[0]);
         // prepare for next iteration to overwrite u0
         using std::swap;
         swap(u0, u1);
@@ -65,9 +68,10 @@ real3 simulation_cycle::run()
 
     // only return Linf if system ends in a valid state
     if (controller) {
-        spdlog::info("simulation ended prematurely at time/step  {} / {}",
-                     (real)controller,
-                     (int)controller);
+        logger(spdlog::level::info,
+               "simulation ended prematurely at time/step  {} / {}",
+               (real)controller,
+               (int)controller);
         return {(real)controller, null_v<real>, null_v<real>};
     } else {
         auto&& [e, umin, umax] = sys.summary(stats);
@@ -77,14 +81,18 @@ real3 simulation_cycle::run()
 
 std::optional<simulation_cycle> simulation_cycle::from_lua(const sol::table& tbl)
 {
-    auto sys_opt = system::from_lua(tbl);
-    auto it_opt = integrator::from_lua(tbl);
-    auto st_opt = step_controller::from_lua(tbl);
-    auto io_opt = field_io::from_lua(tbl);
+    bool enable_logging = tbl["logging"].get_or(true);
+
+    logs l{enable_logging, "builder"};
+
+    auto sys_opt = system::from_lua(tbl, l);
+    auto it_opt = integrator::from_lua(tbl, l);
+    auto st_opt = step_controller::from_lua(tbl, l);
+    auto io_opt = field_io::from_lua(tbl, l);
 
     if (sys_opt && it_opt && st_opt && io_opt) {
         return simulation_cycle{
-            MOVE(*sys_opt), MOVE(*st_opt), MOVE(*it_opt), MOVE(*io_opt)};
+            MOVE(*sys_opt), MOVE(*st_opt), MOVE(*it_opt), MOVE(*io_opt), l};
     } else {
         return std::nullopt;
     }

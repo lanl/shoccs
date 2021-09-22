@@ -10,8 +10,6 @@
 #include <range/v3/range/conversion.hpp>
 #include <range/v3/view/transform.hpp>
 
-#include <spdlog/spdlog.h>
-
 #include <sol/sol.hpp>
 
 using namespace std::literals;
@@ -25,12 +23,14 @@ field_io::field_io(xdmf&& xdmf_w,
                    field_data&& field_data_w,
                    d_interval&& dump_interval,
                    std::string&& io_dir,
-                   int suffix_length)
+                   int suffix_length,
+                   bool enable_logging)
     : xdmf_w{MOVE(xdmf_w)},
       field_data_w{MOVE(field_data_w)},
       dump_interval{MOVE(dump_interval)},
       io_dir{MOVE(io_dir)},
-      suffix_length{suffix_length}
+      suffix_length{suffix_length},
+      logger{enable_logging, "field_io"}
 {
 }
 bool field_io::write(std::span<const std::string> names,
@@ -54,7 +54,7 @@ bool field_io::write(std::span<const std::string> names,
                           }) |
                           rs::to<std::vector<std::string>>();
 
-    xdmf_w.write(n, step, names, xmf_file_names, r);
+    xdmf_w.write(n, step, names, xmf_file_names, r, logger);
 
     if (n == 0) {
         auto file_names = std::vector<std::string>{io / "rx", io / "ry", io / "rz"};
@@ -71,7 +71,7 @@ bool field_io::write(std::span<const std::string> names,
     return true;
 }
 
-std::optional<field_io> field_io::from_lua(const sol::table& tbl)
+std::optional<field_io> field_io::from_lua(const sol::table& tbl, const logs& logger)
 {
     auto cart_opt = cartesian::from_lua(tbl);
     if (!cart_opt) return std::nullopt;
@@ -86,11 +86,14 @@ std::optional<field_io> field_io::from_lua(const sol::table& tbl)
     std::string xmf_base = io["xdmf_filename"].get_or("view.xmf"s);
 
     if (write_every_step) {
-        spdlog::info("field io will write every {} steps", *write_every_step);
+        logger(
+            spdlog::level::info, "field io will write every {} steps", *write_every_step);
     } else if (write_every_time) {
-        spdlog::info("field io will write every {} time interval", *write_every_time);
+        logger(spdlog::level::info,
+               "field io will write every {} time interval",
+               *write_every_time);
     } else {
-        spdlog::info("field io will not output data");
+        logger(spdlog::level::info, "field io will not output data");
     }
 
     auto d = fs::path{dir};
@@ -102,6 +105,7 @@ std::optional<field_io> field_io::from_lua(const sol::table& tbl)
     auto step = write_every_step ? interval<int>{*write_every_step} : interval<int>{};
     auto time = write_every_time ? interval<real>{*write_every_time} : interval<real>{};
 
-    return field_io{MOVE(xdmf_w), MOVE(data_w), d_interval{step, time}, MOVE(dir), len};
+    return field_io{
+        MOVE(xdmf_w), MOVE(data_w), d_interval{step, time}, MOVE(dir), len, logger};
 }
 } // namespace ccs

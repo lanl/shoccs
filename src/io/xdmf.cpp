@@ -5,7 +5,6 @@
 
 #include <fmt/core.h>
 #include <fmt/ranges.h>
-#include <spdlog/spdlog.h>
 
 #include "real3_operators.hpp"
 #include "xdmf.hpp"
@@ -141,7 +140,8 @@ void xdmf::write(int grid_number,
                  std::span<const std::string> file_names,
                  tuple<std::span<const mesh_object_info>,
                        std::span<const mesh_object_info>,
-                       std::span<const mesh_object_info>> tp) const
+                       std::span<const mesh_object_info>> tp,
+                 const logs& logger) const
 {
 
     // if initial write then we need to generate the file with an outline
@@ -175,8 +175,11 @@ void xdmf::write(int grid_number,
 
     doc.save_file(xmf_filename.c_str());
 
-    spdlog::info(
-        "Update xdmf file: {}, with grid {} at time {}", xmf_filename, grid_number, time);
+    logger(spdlog::level::info,
+           "Update xdmf file: {}, with grid {} at time {}",
+           xmf_filename,
+           grid_number,
+           time);
 }
 
 } // namespace ccs

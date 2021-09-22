@@ -1,5 +1,6 @@
 #pragma once
 
+#include "io/logging.hpp"
 #include "mesh/mesh_types.hpp"
 #include "operators/boundaries.hpp"
 #include "types.hpp"
@@ -53,9 +54,13 @@ concept Stencil = requires(const T& st,
         st.query_max()
         } -> std::same_as<info>;
 
-    {st.nbs(h, b, psi, ray_outside, c, extra)} -> std::same_as<std::span<const real>>;
+    {
+        st.nbs(h, b, psi, ray_outside, c, extra)
+        } -> std::same_as<std::span<const real>>;
 
-    {st.interior(h, c)} -> std::same_as<std::span<const real>>;
+    {
+        st.interior(h, c)
+        } -> std::same_as<std::span<const real>>;
 };
 
 class stencil
@@ -70,11 +75,11 @@ class stencil
         virtual info query_max() const = 0;
         virtual interp_info query_interp() const = 0;
         virtual std::span<const real> nbs(real h,
-                         bcs::type,
-                         real psi,
-                         bool ray_outside,
-                         std::span<real> coeffs,
-                         std::span<real> extra) const = 0;
+                                          bcs::type,
+                                          real psi,
+                                          bool ray_outside,
+                                          std::span<real> coeffs,
+                                          std::span<real> extra) const = 0;
         virtual std::span<const real> interior(real c, std::span<real> coeffs) const = 0;
         virtual std::span<const real> interp_interior(real, std::span<real>) const = 0;
         virtual std::span<const real>
@@ -97,11 +102,11 @@ class stencil
         interp_info query_interp() const override { return s.query_interp(); }
 
         std::span<const real> nbs(real h,
-                 bcs::type b,
-                 real psi,
-                 bool ray_outside,
-                 std::span<real> c,
-                 std::span<real> extra) const override
+                                  bcs::type b,
+                                  real psi,
+                                  bool ray_outside,
+                                  std::span<real> c,
+                                  std::span<real> extra) const override
         {
             return s.nbs(h, b, psi, ray_outside, c, extra);
         }
@@ -167,11 +172,11 @@ public:
         info query_max() const { return s->query_max(); }
 
         std::span<const real> nbs(real h,
-                 bcs::type b,
-                 real psi,
-                 bool ray_outside,
-                 std::span<real> c,
-                 std::span<real> ex) const
+                                  bcs::type b,
+                                  real psi,
+                                  bool ray_outside,
+                                  std::span<real> c,
+                                  std::span<real> ex) const
         {
             return s->nbs(h, b, psi, ray_outside, c, ex);
         }
@@ -251,7 +256,7 @@ public:
             }
         }
 
-        static std::optional<stencil> from_lua(const sol::table&);
+        static std::optional<stencil> from_lua(const sol::table&, const logs& = {});
 };
 
 stencil make_E2_2();

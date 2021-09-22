@@ -8,8 +8,6 @@
 #include "temporal/step_controller.hpp"
 #include <sol/forward.hpp>
 
-#include <spdlog/spdlog.h>
-
 namespace ccs::systems
 {
 //
@@ -29,7 +27,7 @@ class heat
     scalar_real neumann_u;
     scalar_real error;
 
-    std::shared_ptr<spdlog::logger> logger;
+    logs logger;
 
     std::vector<std::string> io_names = {"U", "Error"};
 
@@ -41,9 +39,10 @@ public:
          bcs::Object&& object_bcs,
          manufactured_solution&& m_sol,
          stencil st,
-         real diffusivity);
+         real diffusivity,
+         bool enable_logging = false);
 
-    static std::optional<heat> from_lua(const sol::table&);
+    static std::optional<heat> from_lua(const sol::table&, const logs& = {});
 
     void operator()(field&, const step_controller&);
 

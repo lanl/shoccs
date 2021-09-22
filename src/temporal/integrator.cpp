@@ -1,7 +1,7 @@
 #include "integrator.hpp"
 #include "systems/system.hpp"
+
 #include <sol/sol.hpp>
-#include <spdlog/spdlog.h>
 
 namespace ccs
 {
@@ -22,25 +22,26 @@ std::function<void(field_span)> integrator::operator()(system& s,
         v);
 }
 
-std::optional<integrator> integrator::from_lua(const sol::table& tbl)
+std::optional<integrator> integrator::from_lua(const sol::table& tbl, const logs& logger)
 {
 
     auto m = tbl["integrator"];
     if (!m.valid()) {
-        spdlog::warn("simulation.integrator not specified.  Defaulting to empty");
+        logger(spdlog::level::warn,
+               "simulation.integrator not specified.  Defaulting to empty");
         return integrator{integrators::empty{}};
     }
 
     auto type = m["type"].get_or(std::string{});
 
     if (type == "rk4") {
-        spdlog::info("building rk4 integrator");
+        logger(spdlog::level::info, "building rk4 integrator");
         return integrator{integrators::rk4{}};
     } else if (type == "euler") {
-        spdlog::info("building euler integrator");
+        logger(spdlog::level::info, "building euler integrator");
         return integrator{integrators::euler{}};
     } else {
-        spdlog::error("integrator.type must be one of: [rk4, euler]");
+        logger(spdlog::level::err, "integrator.type must be one of: [rk4, euler]");
         return std::nullopt;
     }
 }

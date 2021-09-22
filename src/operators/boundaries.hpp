@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "index_extents.hpp"
+#include "io/logging.hpp"
 
 #include <sol/forward.hpp>
 
@@ -46,6 +47,7 @@ constexpr auto fd = Line{type::F, type::D};
 constexpr auto fn = Line{type::F, type::N};
 constexpr auto nf = Line{type::N, type::F};
 
-extern std::optional<std::pair<Grid, Object>> from_lua(const sol::table&, index_extents);
+extern std::optional<std::pair<Grid, Object>>
+from_lua(const sol::table&, index_extents, const logs& = {});
 
 } // namespace ccs::bcs

@@ -1,8 +1,8 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "io/logging.hpp"
 #include <sol/sol.hpp>
-#include <spdlog/spdlog.h>
 
 #include "system.hpp"
 
@@ -44,7 +44,7 @@ TEST_CASE("hyperbolic_eigenvalues")
         }
     )");
 
-    auto sys_opt = system::from_lua(lua["simulation"]);
+    auto sys_opt = system::from_lua(lua["simulation"], logs{});
     REQUIRE(!!sys_opt);
     auto& sys = *sys_opt;
     step_controller step{};

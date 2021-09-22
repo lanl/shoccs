@@ -17,11 +17,16 @@ class simulation_cycle
     step_controller controller;
     integrator integrate;
     field_io io;
+    logs logger;
 
 public:
     simulation_cycle() = default;
 
-    simulation_cycle(system&&, step_controller&&, integrator&&, field_io&&);
+    simulation_cycle(system&&,
+                     step_controller&&,
+                     integrator&&,
+                     field_io&&,
+                     bool enable_logging = false);
 
     static std::optional<simulation_cycle> from_lua(const sol::table&);
 

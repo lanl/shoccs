@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fields/tuple_utils.hpp"
+#include "io/logging.hpp"
 #include <array>
 #include <cassert>
 #include <concepts>
@@ -129,8 +130,8 @@ public:
 
         explicit operator bool() const { return s != nullptr; }
 
-        static std::optional<manufactured_solution> from_lua(const sol::table&,
-                                                             int dims = 3);
+        static std::optional<manufactured_solution>
+        from_lua(const sol::table&, int dims = 3, const logs& = {});
 
         real operator()(real time, const real3& loc) const
         {

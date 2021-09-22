@@ -7,9 +7,6 @@
 
 #include <sol/sol.hpp>
 
-#include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/spdlog.h>
-
 #include "operators/discrete_operator.hpp"
 
 #include <range/v3/algorithm/max_element.hpp>
@@ -25,28 +22,26 @@ heat::heat(mesh&& m,
            bcs::Object&& object_bcs,
            manufactured_solution&& m_sol,
            stencil st,
-           real diffusivity)
+           real diffusivity,
+           bool enable_logging)
     : m{MOVE(m)},
       grid_bcs{MOVE(grid_bcs)},
       object_bcs{MOVE(object_bcs)},
       m_sol{MOVE(m_sol)},
-      lap{this->m, st, this->grid_bcs, this->object_bcs, "logs/laplacian.csv"},
+      lap{this->m, st, this->grid_bcs, this->object_bcs, enable_logging},
       diffusivity{diffusivity},
       neumann_u{this->m.ss()},
-      error{this->m.ss()}
+      error{this->m.ss()},
+      logger{enable_logging, "system", "logs/system.csv"}
 {
     assert(!!(this->m_sol));
 
-    auto sink =
-        std::make_shared<spdlog::sinks::basic_file_sink_st>("logs/system.csv", true);
-    logger = std::make_shared<spdlog::logger>("system", sink);
-    logger->set_pattern("%v");
-    // logger->info("Timestamp,Step,Linf,Min,Max");
-    logger->info(
-        "Timestamp,Time,Step,Linf,Min,Max,Domain_Linf,Domain_ic,Rx_Linf,Rx_ic,Ry_"
-        "Linf,Ry_ic,Rz_Linf,Rz_ic");
+    logger.set_pattern("%v");
+    logger(spdlog::level::info,
+           "Timestamp,Time,Step,Linf,Min,Max,Domain_Linf,Domain_ic,Rx_Linf,Rx_ic,Ry_"
+           "Linf,Ry_ic,Rz_Linf,Rz_ic");
 
-    logger->set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
+    logger.set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
 }
 
 //
@@ -165,10 +160,11 @@ void heat::update_boundary(field_span f, real time)
 
 void heat::log(const system_stats& stats, const step_controller& step)
 {
-    if (!logger) return;
-
-    logger->info(
-        fmt::format("{},{},{}", (real)step, (int)step, fmt::join(stats.stats, ",")));
+    logger(spdlog::level::info,
+           "{},{},{}",
+           (real)step,
+           (int)step,
+           fmt::join(stats.stats, ","));
 }
 
 bool heat::write(field_io& io, field_view f, const step_controller& c, real dt)
@@ -193,20 +189,20 @@ real3 heat::summary(const system_stats& stats) const
     return {stats.stats[0], stats.stats[1], stats.stats[2]};
 }
 
-std::optional<heat> heat::from_lua(const sol::table& tbl)
+std::optional<heat> heat::from_lua(const sol::table& tbl, const logs& logger)
 {
     // assume we can only get here if simulation.system.type == "heat" so check
     // for the rest
     real diff = tbl["system"]["diffusivity"].get_or(1.0);
 
-    auto mesh_opt = mesh::from_lua(tbl);
+    auto mesh_opt = mesh::from_lua(tbl, logger);
     if (!mesh_opt) return std::nullopt;
 
-    auto bc_opt = bcs::from_lua(tbl, mesh_opt->extents());
-    auto st_opt = stencil::from_lua(tbl);
+    auto bc_opt = bcs::from_lua(tbl, mesh_opt->extents(), logger);
+    auto st_opt = stencil::from_lua(tbl, logger);
 
     if (bc_opt && st_opt) {
-        auto ms_opt = manufactured_solution::from_lua(tbl, mesh_opt->dims());
+        auto ms_opt = manufactured_solution::from_lua(tbl, mesh_opt->dims(), logger);
         auto t = ms_opt ? MOVE(*ms_opt) : manufactured_solution{};
 
         return heat{MOVE(*mesh_opt),
@@ -214,7 +210,8 @@ std::optional<heat> heat::from_lua(const sol::table& tbl)
                     MOVE(bc_opt->second),
                     MOVE(t),
                     *st_opt,
-                    diff};
+                    diff,
+                    logger};
     }
 
     return std::nullopt;

@@ -5,9 +5,6 @@
 
 #include <cassert>
 
-#include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/spdlog.h>
-
 namespace ccs
 {
 
@@ -165,7 +162,7 @@ void cut_discretization(int r,
                         matrix::csr& O,
                         matrix::csr& B,
                         std::span<const real> interior,
-                        std::shared_ptr<spdlog::logger> logger)
+                        const logs& logger)
 {
     const auto shapes = m.R(r);
     const auto sz = shapes.size();
@@ -247,7 +244,7 @@ void cut_discretization(int r,
                 ++cp[dir];
             }
 
-            if (logger) logger->info("{}", MOVE(msg));
+            logger(spdlog::level::info, msg);
         }
     }
 
@@ -446,7 +443,7 @@ derivative::derivative(int dir,
                        const stencil& st,
                        const bcs::Grid& grid_bcs,
                        const bcs::Object& obj_bcs,
-                       std::shared_ptr<spdlog::logger> logger)
+                       const logs& logger)
     : dir{dir}
 {
     if (m.extents()[dir] < 2) return;

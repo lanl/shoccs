@@ -2,12 +2,12 @@
 
 #include "cartesian.hpp"
 #include "fields/selector.hpp"
+#include "io/logging.hpp"
 #include "mesh_types.hpp"
 #include "object_geometry.hpp"
 #include "operators/boundaries.hpp"
 
 #include <sol/forward.hpp>
-#include <spdlog/spdlog.h>
 
 namespace ccs
 {
@@ -164,7 +164,7 @@ public:
         return grid_boundaries<bcs::Neumann, I>(g);
     }
 
-    static std::optional<mesh> from_lua(const sol::table&);
+    static std::optional<mesh> from_lua(const sol::table&, const logs& = {});
 
     sel::xmin_t xmin;
     sel::xmax_t xmax;

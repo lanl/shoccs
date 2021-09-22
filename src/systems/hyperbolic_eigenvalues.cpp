@@ -3,7 +3,6 @@
 #include <sol/sol.hpp>
 
 #include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/spdlog.h>
 
 #include "operators/discrete_operator.hpp"
 #include "operators/eigenvalue_visitor.hpp"
@@ -16,21 +15,18 @@ namespace ccs::systems
 hyperbolic_eigenvalues::hyperbolic_eigenvalues(mesh&& m,
                                                bcs::Grid&& grid_bcs,
                                                bcs::Object&& object_bcs,
-                                               stencil st)
+                                               stencil st,
+                                               bool enable_logging)
     : m{MOVE(m)},
       grid_bcs{MOVE(grid_bcs)},
       object_bcs{MOVE(object_bcs)},
-      grad{gradient(this->m, st, this->grid_bcs, this->object_bcs, "logs/gradient.csv")}
+      grad{gradient(this->m, st, this->grid_bcs, this->object_bcs, enable_logging)},
+      logger{enable_logging, "system", "logs/system.csv"}
 {
-    auto sink =
-        std::make_shared<spdlog::sinks::basic_file_sink_st>("logs/system.csv", true);
-    logger = std::make_shared<spdlog::logger>("system", sink);
-    logger->set_pattern("%v");
-    // logger->info("Date,Time,Step,Linf,Min,Max");
-    // logger->set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
-    logger->info("Timestamp,MaxEigen");
 
-    logger->set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
+    logger.set_pattern("%v");
+    logger(spdlog::level::info, "Timestamp,MaxEigen");
+    logger.set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
 }
 
 //
@@ -56,24 +52,23 @@ real3 hyperbolic_eigenvalues::summary(const system_stats& stats) const
 
 void hyperbolic_eigenvalues::log(const system_stats& stats, const step_controller&)
 {
-    if (!logger) return;
-    logger->info(fmt::format("{}", stats.stats[0]));
+    logger(spdlog::level::info, "{}", stats.stats[0]);
 }
 
 system_size hyperbolic_eigenvalues::size() const { return {0, 0, m.ss()}; }
 
 std::optional<hyperbolic_eigenvalues>
-hyperbolic_eigenvalues::from_lua(const sol::table& tbl)
+hyperbolic_eigenvalues::from_lua(const sol::table& tbl, const logs& logger)
 {
-    auto mesh_opt = mesh::from_lua(tbl);
+    auto mesh_opt = mesh::from_lua(tbl, logger);
     if (!mesh_opt) return std::nullopt;
 
-    auto bc_opt = bcs::from_lua(tbl, mesh_opt->extents());
-    auto st_opt = stencil::from_lua(tbl);
+    auto bc_opt = bcs::from_lua(tbl, mesh_opt->extents(), logger);
+    auto st_opt = stencil::from_lua(tbl, logger);
 
     if (bc_opt && st_opt)
         return hyperbolic_eigenvalues{
-            MOVE(*mesh_opt), MOVE(bc_opt->first), MOVE(bc_opt->second), *st_opt};
+            MOVE(*mesh_opt), MOVE(bc_opt->first), MOVE(bc_opt->second), *st_opt, logger};
     else
         return std::nullopt;
 }

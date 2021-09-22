@@ -7,7 +7,6 @@
 #include "types.hpp"
 
 #include <sol/forward.hpp>
-#include <spdlog/spdlog.h>
 
 namespace ccs::systems
 {
@@ -35,8 +34,8 @@ class scalar_wave
 
     real max_error;
 
+    logs logger;
     std::vector<std::string> io_names = {"U", "Error"};
-    std::shared_ptr<spdlog::logger> logger;
 
 public:
     scalar_wave() = default;
@@ -47,7 +46,8 @@ public:
                 stencil,
                 real3 center,
                 real radius,
-                real max_error = 100.0);
+                real max_error = 100.0,
+                bool enable_logging = false);
 
     void operator()(field& s, const step_controller&);
 
@@ -69,7 +69,7 @@ public:
 
     system_size size() const;
 
-    static std::optional<scalar_wave> from_lua(const sol::table&);
+    static std::optional<scalar_wave> from_lua(const sol::table&, const logs& = {});
 };
 
 } // namespace ccs::systems

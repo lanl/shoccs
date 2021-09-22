@@ -87,32 +87,33 @@ system_size system::size() const
     return std::visit([](auto&& current_system) { return current_system.size(); }, v);
 }
 
-std::optional<system> system::from_lua(const sol::table& tbl)
+std::optional<system> system::from_lua(const sol::table& tbl, const logs& logger)
 {
     auto m = tbl["system"];
     if (!m.valid()) {
-        spdlog::error("simulation.system must be specified");
+        logger(spdlog::level::err, "simulation.system must be specified");
         return std::nullopt;
     }
 
     auto type = m["type"].get_or(std::string{});
 
     if (type == "heat") {
-        spdlog::info("building heat system");
-        if (auto opt = systems::heat::from_lua(tbl); opt) return system(MOVE(*opt));
+        logger(spdlog::level::info, "building heat system");
+        if (auto opt = systems::heat::from_lua(tbl, logger); opt)
+            return system(MOVE(*opt));
     } else if (type == "scalar wave") {
-        spdlog::info("building scalar_wave system");
-        if (auto opt = systems::scalar_wave::from_lua(tbl); opt)
+        logger(spdlog::level::info, "building scalar_wave system");
+        if (auto opt = systems::scalar_wave::from_lua(tbl, logger); opt)
             return system(MOVE(*opt));
     } else if (type == "inviscid vortex") {
-        spdlog::info("building inviscid_vortex system");
+        logger(spdlog::level::info, "building inviscid_vortex system");
         return system(systems::inviscid_vortex{});
     } else if (type == "eigenvalues") {
-        spdlog::info("building hyperbolic_eigenvalues system");
-        if (auto opt = systems::hyperbolic_eigenvalues::from_lua(tbl); opt)
+        logger(spdlog::level::info, "building hyperbolic_eigenvalues system");
+        if (auto opt = systems::hyperbolic_eigenvalues::from_lua(tbl, logger); opt)
             return system(MOVE(*opt));
     } else {
-        spdlog::error("unrecognized system.type");
+        logger(spdlog::level::err, "unrecognized system.type");
     }
     return std::nullopt;
 }

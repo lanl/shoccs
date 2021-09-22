@@ -8,6 +8,7 @@
 #include "field_data.hpp"
 #include "fields/field.hpp"
 #include "interval.hpp"
+#include "logging.hpp"
 #include "mesh/mesh_types.hpp"
 #include "types.hpp"
 #include "xdmf.hpp"
@@ -28,6 +29,7 @@ class field_io
     d_interval dump_interval;
     std::string io_dir;
     int suffix_length;
+    logs logger;
 
 public:
     field_io() = default;
@@ -36,7 +38,8 @@ public:
              field_data&& fied_data_w,
              d_interval&& dump_interval,
              std::string&& io_dir,
-             int suffix_length);
+             int suffix_length,
+             bool enable_logging = false);
 
     bool write(std::span<const std::string>,
                field_view field,
@@ -46,7 +49,7 @@ public:
                      std::span<const mesh_object_info>,
                      std::span<const mesh_object_info>>);
 
-    static std::optional<field_io> from_lua(const sol::table&);
+    static std::optional<field_io> from_lua(const sol::table&, const logs& = {});
 };
 
 } // namespace ccs

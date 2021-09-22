@@ -1,16 +1,15 @@
 #include "stencil.hpp"
 
 #include <sol/sol.hpp>
-#include <spdlog/spdlog.h>
 
 namespace ccs::stencils
 {
-std::optional<stencil> stencil::from_lua(const sol::table& tbl)
+std::optional<stencil> stencil::from_lua(const sol::table& tbl, const logs& logger)
 {
 
     auto m = tbl["scheme"];
     if (!m.valid()) {
-        spdlog::error("simulation.scheme must be specified");
+        logger(spdlog::level::err, "simulation.scheme must be specified");
         return std::nullopt;
     }
 
@@ -33,37 +32,41 @@ std::optional<stencil> stencil::from_lua(const sol::table& tbl)
 
     if (order == 2) {
         if (type == "E2") {
-            spdlog::info("E2 scheme chosen");
+            logger(spdlog::level::info, "E2 scheme chosen");
             return second::E2;
         }
         if (type == "E4") {
-            spdlog::info("E4 scheme chosen");
+            logger(spdlog::level::info, "E4 scheme chosen");
             return second::E4;
         }
     } else if (order == 1) {
         if (type == "E2") {
-            spdlog::info("E2 first scheme chosen");
+            logger(spdlog::level::info, "E2 first scheme chosen");
             return make_E2_1(alpha);
         }
         if (type == "E2-poly") {
-            spdlog::info("E2-poly scheme chosen");
+            logger(spdlog::level::info, "E2-poly scheme chosen");
             if (alpha.size() > 0) {
-                spdlog::info("alpha = {}", fmt::join(alpha, ", "));
+                logger(spdlog::level::info, "alpha = {}", fmt::join(alpha, ", "));
                 // make the dubious assumption that the user specified the floating +
                 // dirichlet alpha in the single array - useful for the optimizer
                 // interface
                 auto a = std::span{alpha};
                 return make_polyE2_1(a.subspan(0, 6), a.subspan(6));
             } else {
-                spdlog::info("floating alpha = {}", fmt::join(floating_alpha, ", "));
-                spdlog::info("dirichlet alpha = {}", fmt::join(dirichlet_alpha, ", "));
+                logger(spdlog::level::info,
+                       "floating alpha = {}",
+                       fmt::join(floating_alpha, ", "));
+                logger(spdlog::level::info,
+                       "dirichlet alpha = {}",
+                       fmt::join(dirichlet_alpha, ", "));
 
                 return make_polyE2_1(floating_alpha, dirichlet_alpha);
             }
         }
     }
 
-    spdlog::error("scheme.order/type = {} / {} not recognized", order, type);
+    logger(spdlog::level::err, "scheme.order/type = {} / {} not recognized", order, type);
     return std::nullopt;
 }
 } // namespace ccs::stencils

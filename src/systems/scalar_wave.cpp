@@ -7,9 +7,6 @@
 
 #include <sol/sol.hpp>
 
-#include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/spdlog.h>
-
 #include "operators/discrete_operator.hpp"
 
 #include <range/v3/algorithm/max_element.hpp>
@@ -49,17 +46,19 @@ scalar_wave::scalar_wave(mesh&& m_,
                          stencil st,
                          real3 center,
                          real radius,
-                         real max_error)
+                         real max_error,
+                         bool enable_logging)
     : m{MOVE(m_)},
       grid_bcs{MOVE(grid_bcs)},
       object_bcs{MOVE(object_bcs)},
-      grad{gradient(this->m, st, this->grid_bcs, this->object_bcs, "logs/gradient.csv")},
+      grad{gradient(this->m, st, this->grid_bcs, this->object_bcs, enable_logging)},
       center{center},
       radius{radius},
       grad_G{m.vs()},
       du{m.vs()},
       error{m.ss()},
-      max_error{max_error}
+      max_error{max_error},
+      logger{enable_logging, "system", "logs/system.csv"}
 {
 
     // Initialize wave speeds
@@ -71,19 +70,13 @@ scalar_wave::scalar_wave(mesh&& m_,
     grad_G | sel::zR = m.vxyz | neg_G<2>(center, radius);
     grad_G | m.dirichlet(this->grid_bcs, this->object_bcs) = 0;
 
-    spdlog::info("-grad_G {}\n", get<vi::xRx>(grad_G)[0]);
+    spdlog::debug("-grad_G {}\n", get<vi::xRx>(grad_G)[0]);
 
-    auto sink =
-        std::make_shared<spdlog::sinks::basic_file_sink_st>("logs/system.csv", true);
-    logger = std::make_shared<spdlog::logger>("system", sink);
-    logger->set_pattern("%v");
-    // logger->info("Date,Time,Step,Linf,Min,Max");
-    // logger->set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
-    logger->info(
-        "Timestamp,Time,Step,Linf,Min,Max,Domain_Linf,Domain_ic,Rx_Linf,Rx_ic,Ry_"
-        "Linf,Ry_ic,Rz_Linf,Rz_ic");
-
-    logger->set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
+    logger.set_pattern("%v");
+    logger(spdlog::level::info,
+           "Timestamp,Time,Step,Linf,Min,Max,Domain_Linf,Domain_ic,Rx_Linf,Rx_ic,Ry_"
+           "Linf,Ry_ic,Rz_Linf,Rz_ic");
+    logger.set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
 }
 
 real scalar_wave::timestep_size(const field&, const step_controller& step) const
@@ -146,9 +139,6 @@ scalar_wave::stats(const field&, const field& f, const step_controller& c) const
                                   ry.second,
                                   rz.first,
                                   rz.second}};
-    // auto [min, max] = rs::minmax(u | m.fluid);
-    // real error = rs::max(abs(u - sol) | m.fluid);
-    // return system_stats{.stats = {error, min, max}};
 }
 
 //
@@ -204,14 +194,17 @@ bool scalar_wave::write(field_io& io, field_view f, const step_controller& c, re
 
 void scalar_wave::log(const system_stats& stats, const step_controller& step)
 {
-    if (!logger) return;
-    logger->info(
-        fmt::format("{},{},{}", (real)step, (int)step, fmt::join(stats.stats, ",")));
+    logger(spdlog::level::info,
+           "{},{},{}",
+           (real)step,
+           (int)step,
+           fmt::join(stats.stats, ","));
 }
 
 system_size scalar_wave::size() const { return {1, 0, m.ss()}; }
 
-std::optional<scalar_wave> scalar_wave::from_lua(const sol::table& tbl)
+std::optional<scalar_wave> scalar_wave::from_lua(const sol::table& tbl,
+                                                 const logs& logger)
 {
     real max_error = tbl["system"]["max_error"].get_or(100.0);
     // assume we can only get here if simulation.system.type == "scalar_wave" so check
@@ -240,20 +233,21 @@ std::optional<scalar_wave> scalar_wave::from_lua(const sol::table& tbl)
             }
         }
         if (!found) {
-            spdlog::error("No valid spheres found in simulation.shapes for scalar_wave");
+            logger(spdlog::level::err,
+                   "No valid spheres found in simulation.shapes for scalar_wave");
             return std::nullopt;
         }
     } else {
-        spdlog::error(
-            "a system.center / system.radius must be specified for scalar_wave");
+        logger(spdlog::level::err,
+               "a system.center / system.radius must be specified for scalar_wave");
         return std::nullopt;
     }
 
-    auto mesh_opt = mesh::from_lua(tbl);
+    auto mesh_opt = mesh::from_lua(tbl, logger);
     if (!mesh_opt) return std::nullopt;
 
-    auto bc_opt = bcs::from_lua(tbl, mesh_opt->extents());
-    auto st_opt = stencil::from_lua(tbl);
+    auto bc_opt = bcs::from_lua(tbl, mesh_opt->extents(), logger);
+    auto st_opt = stencil::from_lua(tbl, logger);
 
     if (bc_opt && st_opt) {
 
@@ -263,7 +257,8 @@ std::optional<scalar_wave> scalar_wave::from_lua(const sol::table& tbl)
                            *st_opt,
                            center,
                            radius,
-                           max_error};
+                           max_error,
+                           logger};
     }
 
     return std::nullopt;

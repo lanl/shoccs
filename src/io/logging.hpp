@@ -1,61 +1,37 @@
 #pragma once
 
-#include <fstream>
-#include <optional>
-#include <string>
-#include <unordered_map>
-#include <utility>
-#include <vector>
+#include <fmt/core.h>
+#include <spdlog/spdlog.h>
 
-namespace pdg
+namespace ccs
 {
-class logger
-{
-        std::ofstream stream_;
+struct logs {
+private:
+    bool enable;
 
-    public:
-        logger() = default;
+    mutable std::shared_ptr<spdlog::logger> logger;
 
-        logger(std::string filename, const std::vector<std::string>& header)
-            : stream_{filename}
-        {
-                auto first = header.begin();
-                auto last = header.end();
-                if (first == last)
-                        return;
+public:
+    logs() = default;
+    logs(bool enable, const std::string& name);
+    logs(bool enable, const std::string& looger_name, const std::string& file_name);
 
-                stream_ << *first++;
+    void set_pattern(const std::string& pat);
 
-                while (first != last) { stream_ << ", " << *first++; }
-                stream_ << "\n";
-        }
+    operator bool() const { return enable; }
 
-        template <typename U, typename... V>
-        void write(const U& u, const V&... v)
-        {
-                // variadic write of csv data
-                stream_ << u;
+    void operator()(spdlog::level::level_enum lvl, const std::string& msg) const
+    {
+        if (*this) logger->log(lvl, msg);
+    }
 
-                if (sizeof...(V) == 0) {
-                        stream_ << "\n";
-                        return;
-                }
-
-                ((stream_ << "," << v), ...);
-                stream_ << "\n";
-        }
-
-        template <typename T>
-        void write_vector(const std::vector<T>& v)
-        {
-                auto first = v.begin();
-                auto last = v.end();
-
-                while (first != last) { stream_ << *first++ << "\n"; }
-        }
-
-        void flush() { stream_.flush(); }
+    template <typename... Args>
+    void operator()(spdlog::level::level_enum lvl,
+                    fmt::format_string<Args...> fmt_str,
+                    Args&&... args) const
+    {
+        if (*this) logger->log(lvl, fmt_str, std::forward<Args>(args)...);
+    }
 };
 
-using loggers = std::unordered_map<std::string, std::optional<logger>>;
-} // namespace pdg
+} // namespace ccs

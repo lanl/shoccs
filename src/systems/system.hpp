@@ -7,6 +7,7 @@
 #include "inviscid_vortex.hpp"
 #include "scalar_wave.hpp"
 
+#include "io/logging.hpp"
 #include "temporal/step_controller.hpp"
 #include "types.hpp"
 #include <sol/forward.hpp>
@@ -87,7 +88,7 @@ public:
 
     bool write(field_io&, field_view, const step_controller&, real);
 
-    static std::optional<system> from_lua(const sol::table&);
+    static std::optional<system> from_lua(const sol::table&, const logs& logger);
 
     system_size size() const;
 };

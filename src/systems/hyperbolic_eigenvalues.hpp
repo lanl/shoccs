@@ -2,12 +2,12 @@
 
 #include "fields/field.hpp"
 #include "io/field_io.hpp"
+#include "io/logging.hpp"
 #include "operators/gradient.hpp"
 #include "temporal/step_controller.hpp"
 #include "types.hpp"
 
 #include <sol/forward.hpp>
-#include <spdlog/spdlog.h>
 
 namespace ccs::systems
 {
@@ -20,12 +20,13 @@ class hyperbolic_eigenvalues
 
     gradient grad; // field operator
 
-    std::shared_ptr<spdlog::logger> logger;
+    logs logger;
 
 public:
     hyperbolic_eigenvalues() = default;
 
-    hyperbolic_eigenvalues(mesh&&, bcs::Grid&&, bcs::Object&&, stencil);
+    hyperbolic_eigenvalues(
+        mesh&&, bcs::Grid&&, bcs::Object&&, stencil, bool enable_logging = false);
 
     void operator()(field& s, const step_controller&);
 
@@ -47,6 +48,6 @@ public:
 
     system_size size() const;
 
-    static std::optional<hyperbolic_eigenvalues> from_lua(const sol::table&);
+    static std::optional<hyperbolic_eigenvalues> from_lua(const sol::table&, const logs&);
 };
 } // namespace ccs::systems

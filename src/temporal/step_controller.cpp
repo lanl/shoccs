@@ -1,14 +1,14 @@
 #include "step_controller.hpp"
 
 #include <sol/sol.hpp>
-#include <spdlog/spdlog.h>
 
 namespace ccs
 {
-std::optional<step_controller> step_controller::from_lua(const sol::table& tbl)
+std::optional<step_controller> step_controller::from_lua(const sol::table& tbl,
+                                                         const logs& logger)
 {
     if (!tbl["step_controller"].valid()) {
-        spdlog::info("step_controller not specified.  using default");
+        logger(spdlog::level::info, "step_controller not specified.  using default");
         return step_controller{};
     }
 

@@ -3,7 +3,6 @@
 #include "manufactured_solutions.hpp"
 
 #include <sol/sol.hpp>
-#include <spdlog/spdlog.h>
 
 #include <string>
 
@@ -33,11 +32,11 @@ manufactured_solution build_ms_gauss(int dims,
 }
 
 std::optional<manufactured_solution>
-manufactured_solution::from_lua(const sol::table& tbl, int dims)
+manufactured_solution::from_lua(const sol::table& tbl, int dims, const logs& logger)
 {
     auto ms = tbl["manufactured_solution"];
     if (!ms.valid()) {
-        spdlog::info("manufactured_solution not specified.");
+        logger(spdlog::level::info, "manufactured_solution not specified.");
         return std::nullopt;
     }
 
@@ -45,7 +44,7 @@ manufactured_solution::from_lua(const sol::table& tbl, int dims)
                        rs::action::transform([](auto c) { return std::tolower(c); });
 
     if (ms_t == "gaussian") {
-        spdlog::info("building gaussian manufactured solution");
+        logger(spdlog::level::info, "building gaussian manufactured solution");
         std::vector<real3> center{};
         std::vector<real3> variance{};
         std::vector<real> amplitude{};
@@ -67,7 +66,7 @@ manufactured_solution::from_lua(const sol::table& tbl, int dims)
             return build_ms_gauss(dims, center, variance, amplitude, frequency);
 
     } else if (ms_t == "lua") {
-        spdlog::info("building lua manufactured solution");
+        logger(spdlog::level::info, "building lua manufactured solution");
         sol::optional<std::function<real(real, const real3&)>> call;
         sol::optional<std::function<real(real, const real3&)>> ddt;
         sol::optional<std::function<real3(real, const real3&)>> grad;
@@ -83,14 +82,16 @@ manufactured_solution::from_lua(const sol::table& tbl, int dims)
         if (call && ddt && grad && div && lap) {
             return lua_mms::from_lua(ms);
         } else {
-            spdlog::error("`lua` manufactured solution requires call, ddt, grad, div, "
-                          "lap functions");
+            logger(spdlog::level::err,
+                   "`lua` manufactured solution requires call, ddt, grad, div, "
+                   "lap functions");
         }
 
     } else {
-        spdlog::error("Got manufactured_solution.type = `{}`.  Expected one of: `{}`",
-                      ms_t,
-                      "gaussian, lua");
+        logger(spdlog::level::err,
+               "Got manufactured_solution.type = `{}`.  Expected one of: `{}`",
+               ms_t,
+               "gaussian, lua");
     }
 
     return std::nullopt;

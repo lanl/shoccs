@@ -4,14 +4,11 @@
 #include "fields/vector.hpp"
 #include "operator_visitor.hpp"
 
-#include <spdlog/spdlog.h>
-
 namespace ccs
 {
 
 class gradient
 {
-    std::shared_ptr<spdlog::logger> logger;
     derivative dx;
     derivative dy;
     derivative dz;
@@ -20,12 +17,11 @@ class gradient
 public:
     gradient() = default;
 
-    gradient(const mesh&, const stencil&, const bcs::Grid&, const bcs::Object&);
     gradient(const mesh&,
              const stencil&,
              const bcs::Grid&,
              const bcs::Object&,
-             const std::string&);
+             bool enable_logging = false);
 
     std::function<void(vector_span)> operator()(scalar_view) const;
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "io/logging.hpp"
 #include "types.hpp"
 #include "utils/bounded.hpp"
 #include <optional>
@@ -46,6 +47,6 @@ public:
     real parabolic_cfl() const { return p_cfl; }
     real hyperbolic_cfl() const { return h_cfl; }
 
-    static std::optional<step_controller> from_lua(const sol::table&);
+    static std::optional<step_controller> from_lua(const sol::table&, const logs& = {});
 };
 } // namespace ccs

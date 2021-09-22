@@ -3,7 +3,6 @@
 #include <sol/sol.hpp>
 
 #include <spdlog/sinks/basic_file_sink.h>
-#include <spdlog/spdlog.h>
 
 namespace ccs
 {
@@ -223,13 +222,13 @@ line mesh::interp_line(int dir, int3 pt) const
     return {stride(dir), start, end};
 }
 
-std::optional<mesh> mesh::from_lua(const sol::table& tbl)
+std::optional<mesh> mesh::from_lua(const sol::table& tbl, const logs& logger)
 {
-    auto m_opt = cartesian::from_lua(tbl);
+    auto m_opt = cartesian::from_lua(tbl, logger);
     if (!m_opt) return std::nullopt;
     auto&& [n, domain] = *m_opt;
 
-    auto shapes_opt = object_geometry::from_lua(tbl, n, domain);
+    auto shapes_opt = object_geometry::from_lua(tbl, n, domain, logger);
     if (!shapes_opt) return std::nullopt;
     const auto& shapes = *shapes_opt;
 

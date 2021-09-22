@@ -4,7 +4,6 @@
 
 #include <fmt/core.h>
 #include <sol/sol.hpp>
-#include <spdlog/spdlog.h>
 
 namespace ccs
 {
@@ -36,23 +35,23 @@ cartesian::cartesian(span<const int> n, span<const real> min, span<const real> m
 }
 
 std::optional<std::pair<index_extents, domain_extents>>
-cartesian::from_lua(const sol::table& tbl)
+cartesian::from_lua(const sol::table& tbl, const logs& logger)
 {
     auto m = tbl["mesh"];
     if (!m.valid()) {
-        spdlog::error("simulation.mesh is required");
+        logger(spdlog::level::err, "simulation.mesh is required");
         return std::nullopt;
     }
 
     auto ie = m["index_extents"];
     if (!ie.valid()) {
-        spdlog::error("simulation.mesh.index_extents is required");
+        logger(spdlog::level::err, "simulation.mesh.index_extents is required");
         return std::nullopt;
     }
 
     auto db = m["domain_bounds"];
     if (!db.valid()) {
-        spdlog::error("simulation.mesh.domain_bounds is required");
+        logger(spdlog::level::err, "simulation.mesh.domain_bounds is required");
         return std::nullopt;
     }
 
@@ -64,7 +63,8 @@ cartesian::from_lua(const sol::table& tbl)
     if (auto x = db["min"]; x.valid()) {
         lb = real3{x[1].get_or(0.0), x[2].get_or(0.0), x[3].get_or(0.0)};
     } else {
-        spdlog::info("No explicit domain lower bound set.  Assuming (0, 0, 0)");
+        logger(spdlog::level::info,
+               "No explicit domain lower bound set.  Assuming (0, 0, 0)");
     }
 
     if (auto x = db["max"]; x.valid()) {
@@ -72,8 +72,8 @@ cartesian::from_lua(const sol::table& tbl)
     } else if (db[1].valid()) {
         ub = real3{db[1].get_or(lb[0]), db[2].get_or(lb[1]), db[3].get_or(lb[2])};
     } else {
-        spdlog::error(
-            "domain_bounds.max = {...} or domain_bounds = {...} must be specified");
+        logger(spdlog::level::err,
+               "domain_bounds.max = {...} or domain_bounds = {...} must be specified");
         return std::nullopt;
     }
 

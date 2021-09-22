@@ -5,7 +5,7 @@
 #include <iostream>
 
 #include <sol/sol.hpp>
-#include <spdlog/spdlog.h>
+
 //
 // Somewhere in here is where we should form the vector of pairs of wall info
 // that will be used to characterize the domain and build discretization stencils
@@ -223,11 +223,12 @@ std::span<const int3> object_geometry::Sz() const { return sz_; }
 
 std::optional<std::vector<shape>> object_geometry::from_lua(const sol::table& tbl,
                                                             index_extents ix,
-                                                            const domain_extents& dom)
+                                                            const domain_extents& dom,
+                                                            const logs& logger)
 {
     auto t = tbl["shapes"];
     if (!t.valid()) {
-        spdlog::info("No cut-cell shapes specified");
+        logger(spdlog::level::info, "No cut-cell shapes specified");
         return std::vector<shape>{};
     }
 
@@ -244,9 +245,10 @@ std::optional<std::vector<shape>> object_geometry::from_lua(const sol::table& tb
             real radius = t[i]["radius"].get_or(0.0);
             s.push_back(make_sphere(id, center, radius));
 
-            spdlog::info("found sphere of radius {} and center {}",
-                         radius,
-                         fmt::join(center, ", "));
+            logger(spdlog::level::info,
+                   "found sphere of radius {} and center {}",
+                   radius,
+                   fmt::join(center, ", "));
 
         } else if (type == "yz_rect") {
             auto [lb, ub] = dom;
@@ -272,14 +274,15 @@ std::optional<std::vector<shape>> object_geometry::from_lua(const sol::table& tb
 
             s.push_back(make_yz_rect(id, lc, uc, n));
 
-            spdlog::info("yz_rect [{}] bounded by ({}) - ({}) with normal: {}\n",
-                         id,
-                         fmt::join(lc, ", "),
-                         fmt::join(uc, ", "),
-                         n);
+            logger(spdlog::level::info,
+                   "yz_rect [{}] bounded by ({}) - ({}) with normal: {}\n",
+                   id,
+                   fmt::join(lc, ", "),
+                   fmt::join(uc, ", "),
+                   n);
 
         } else {
-            spdlog::error("shape type must be one of: sphere, yz_rect ...");
+            logger(spdlog::level::err, "shape type must be one of: sphere, yz_rect ...");
             return std::nullopt;
         }
     }

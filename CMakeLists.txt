@@ -22,10 +22,10 @@ target_link_libraries(lua INTERFACE ${LUA_LIBRARIES})
 include(CTest)
 
 find_package(sol2 REQUIRED)
-find_package(fmt REQUIRED)
+find_package(fmt 8 REQUIRED)
 find_package(range-v3 REQUIRED)
 find_package(pugixml 1.10 REQUIRED)
-find_package(spdlog REQUIRED)
+find_package(spdlog 1.9 REQUIRED)
 find_package(cxxopts REQUIRED)
 if (BUILD_TESTING)
   find_package(Catch2 3 REQUIRED)
@@ -54,6 +54,7 @@ add_subdirectory(docs)
 install(
     TARGETS
       fields 
+      shoccs-logging
       shoccs-io 
       shoccs-matrices 
       shoccs-mesh 

@@ -2,6 +2,7 @@
 
 #include "fields/tuple.hpp"
 #include "index_extents.hpp"
+#include "logging.hpp"
 #include "mesh/mesh_types.hpp"
 
 namespace ccs
@@ -26,7 +27,8 @@ public:
                std::span<const std::string> file_names,
                tuple<std::span<const mesh_object_info>,
                      std::span<const mesh_object_info>,
-                     std::span<const mesh_object_info>>) const;
+                     std::span<const mesh_object_info>>,
+               const logs& logger) const;
 };
 
 } // namespace ccs

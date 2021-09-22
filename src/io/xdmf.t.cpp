@@ -20,14 +20,15 @@ TEST_CASE("header")
     auto ix = index_extents{.extents = {3, 4, 5}};
     auto dom = domain_extents{.min = {0.1, 0.2, 0.3}, .max = {1.1, 1.2, 1.3}};
     auto tmp = fs::temp_directory_path() / "headertest.xmf";
+    auto logger = logs{true, "field_io"};
 
     auto writer = xdmf{tmp, ix, dom};
     T t{};
     REQUIRE(rs::size(get<0>(t)) == 0);
 
-    writer.write(0, 0.0, var_names, file_names, T{});
+    writer.write(0, 0.0, var_names, file_names, T{}, logger);
 
     file_names[0] = "U.00001";
     file_names[1] = "V.00001";
-    writer.write(1, 0.1, var_names, file_names, T{});
+    writer.write(1, 0.1, var_names, file_names, T{}, logger);
 }

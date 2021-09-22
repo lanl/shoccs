@@ -1,7 +1,6 @@
 #include "laplacian.hpp"
 
-#include <spdlog/sinks/basic_file_sink.h>
-
+#include "io/logging.hpp"
 #include <fmt/ranges.h>
 #include <range/v3/view/repeat_n.hpp>
 
@@ -11,29 +10,17 @@ namespace ccs
 laplacian::laplacian(const mesh& m,
                      const stencil& st,
                      const bcs::Grid& grid_bcs,
-                     const bcs::Object& obj_bcs)
-    : dx{0, m, st, grid_bcs, obj_bcs},
-      dy{1, m, st, grid_bcs, obj_bcs},
-      dz{2, m, st, grid_bcs, obj_bcs},
-      ex{m.extents()}
-{
-}
-
-laplacian::laplacian(const mesh& m,
-                     const stencil& st,
-                     const bcs::Grid& grid_bcs,
                      const bcs::Object& obj_bcs,
-                     const std::string& logger_filename)
+                     bool enable_logging)
 
 {
-    auto sink =
-        std::make_shared<spdlog::sinks::basic_file_sink_st>(logger_filename, true);
-    logger = std::make_shared<spdlog::logger>("laplacian", sink);
-    logger->set_pattern("%v");
+    logs logger{enable_logging, "laplacian", "logs/laplacian.csv"};
+    logger.set_pattern("%v");
     auto st_info = st.query_max();
-    logger->info(fmt::format("timestamp,deriv,interp_dir,ic,y,psi,{}",
-                             fmt::join(vs::repeat_n("wall,psi", st_info.t - 1), ",")));
-    logger->set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
+    logger(spdlog::level::info,
+           "timestamp,deriv,interp_dir,ic,y,psi,{}",
+           fmt::join(vs::repeat_n("wall,psi", st_info.t - 1), ","));
+    logger.set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
 
     dx = derivative{0, m, st, grid_bcs, obj_bcs, logger};
     dy = derivative{1, m, st, grid_bcs, obj_bcs, logger};
