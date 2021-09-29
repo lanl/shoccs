@@ -1,6 +1,6 @@
 add_library(shoccs-bcs boundaries.cpp)
 target_include_directories(shoccs-bcs PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
-target_link_libraries(shoccs-bcs PUBLIC sol2::sol2 lua spdlog::spdlog)
+target_link_libraries(shoccs-bcs PUBLIC sol2::sol2 lua shoccs-logging)
 add_unit_test(boundaries "bcs" shoccs-bcs)
 
 add_library(shoccs-operators
@@ -11,7 +11,7 @@ add_library(shoccs-operators
 
 target_link_libraries(shoccs-operators
     PUBLIC 
-        shoccs-mesh shoccs-matrices
+        shoccs-mesh shoccs-matrices shoccs-logging
     PRIVATE
         MKL::MKL)
 target_include_directories(shoccs-operators PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)

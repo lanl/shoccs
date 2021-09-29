@@ -359,7 +359,7 @@ TEST_CASE("2D E2 with Floating Objects")
 
     scalar<T> du{m.ss()};
 
-    auto lap = laplacian{m, st, gridBcs, objectBcs, "logs/laplacian.csv"};
+    auto lap = laplacian{m, st, gridBcs, objectBcs, true};
     du = lap(u, nu);
 
     REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));

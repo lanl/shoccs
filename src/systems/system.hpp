@@ -88,7 +88,7 @@ public:
 
     bool write(field_io&, field_view, const step_controller&, real);
 
-    static std::optional<system> from_lua(const sol::table&, const logs& logger);
+    static std::optional<system> from_lua(const sol::table&, const logs& = {});
 
     system_size size() const;
 };
