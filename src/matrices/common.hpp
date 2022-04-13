@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include "types.hpp"
 
 namespace ccs
