@@ -2,7 +2,7 @@
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_floating.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
 #include <fmt/core.h>
@@ -51,7 +51,7 @@ TEST_CASE("floating")
 {
     sol::state lua;
     lua.open_libraries(sol::lib::base, sol::lib::math);
-    lua.script(R"(           
+    lua.script(R"(
             simulation = {
                 scheme = {
                     order = 2,

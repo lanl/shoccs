@@ -1,6 +1,6 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_floating.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <sol/sol.hpp>
 #include <spdlog/spdlog.h>
@@ -26,7 +26,7 @@ TEST_CASE("integrator - euler")
                 }
             },
             domain_boundaries = {
-                xmin = "dirichlet",              
+                xmin = "dirichlet",
                 ymin = "neumann",
                 ymax = "neumann",
                 zmax = "dirichlet"
@@ -48,7 +48,7 @@ TEST_CASE("integrator - euler")
                 diffusivity = 1.0
             },
             integrator = {
-                type = "euler",                
+                type = "euler",
             },
             step_controller = {
                 max_step = 1,
@@ -58,9 +58,9 @@ TEST_CASE("integrator - euler")
                 call = function(time, loc)
                     local x, y, z = loc[1], loc[2], loc[3]
                     -- return time + x * x * (y + z) + x - 1
-                    return (time + 
-                        x * x * (y + z) + y * y * (x + z) + z * z * (x + y) + 
-                        3 * x * y * z + x + y + z)                     
+                    return (time +
+                        x * x * (y + z) + y * y * (x + z) + z * z * (x + y) +
+                        3 * x * y * z + x + y + z)
                 end,
                 ddt = function(time, loc)
                     return 1.0
@@ -70,7 +70,7 @@ TEST_CASE("integrator - euler")
                     return 2. * x * (y + z) + y * y + z * z + 3. * y * z + 1,
                             x * x + 2. * y * (x + z) + z * z + 3. * x * z + 1,
                             x * x + y * y + 2. * z * (x + y) + 3. * x * y + 1
-                    
+
                 end,
                 lap = function(time, loc)
                     local x, y, z = loc[1], loc[2], loc[3]

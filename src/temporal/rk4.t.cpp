@@ -1,6 +1,6 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_floating.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <sol/sol.hpp>
 #include <spdlog/spdlog.h>
@@ -48,7 +48,7 @@ TEST_CASE("integrator - rk4")
                 diffusivity = 1.0
             },
             integrator = {
-                type = "rk4",                
+                type = "rk4",
             },
             step_controller = {
                 max_step = 1,
@@ -57,9 +57,9 @@ TEST_CASE("integrator - rk4")
                 type = "lua",
                 call = function(time, loc)
                     local x, y, z = loc[1], loc[2], loc[3]
-                    return (time + 
-                        x * x * (y + z) + y * y * (x + z) + z * z * (x + y) + 
-                        3 * x * y * z + x + y + z)                     
+                    return (time +
+                        x * x * (y + z) + y * y * (x + z) + z * z * (x + y) +
+                        3 * x * y * z + x + y + z)
                 end,
                 ddt = function(time, loc)
                     return 1.0
