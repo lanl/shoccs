@@ -46,6 +46,10 @@ function(add_unit_test t label)
   endif()
 endfunction()
 
+if(NOT APPLE)
+  set(CMAKE_INSTALL_RPATH $ORIGIN)
+endif()
+
 add_subdirectory(external)
 add_subdirectory(src)
 add_subdirectory(docs)
@@ -53,23 +57,30 @@ add_subdirectory(docs)
 
 install(
     TARGETS
-      fields 
+      fields
       shoccs-logging
-      shoccs-io 
-      shoccs-matrices 
-      shoccs-mesh 
-      shoccs-mms 
-      shoccs-bcs 
-      shoccs-operators 
-      shoccs-simulation 
-      shoccs-system 
+      shoccs-io
+      shoccs-matrices
+      shoccs-mesh
+      shoccs-mms
+      shoccs-bcs
+      shoccs-operators
+      shoccs-simulation
+      shoccs-system
       shoccs-integrate
       shoccs-stencils
       shoccs-utils
     EXPORT shoccs
 )
 install(EXPORT shoccs
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/shoccs
   NAMESPACE shoccs::
-  FILE shoccsConfig.cmake
-)
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/shoccs
+  FILE shoccsTargets.cmake
+  )
+
+configure_file(${PROJECT_SOURCE_DIR}/config/shoccsConfig.cmake.in
+  ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/shoccsConfig.cmake @ONLY)
+
+install(
+  FILES ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/shoccsConfig.cmake
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/shoccs)
