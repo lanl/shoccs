@@ -119,16 +119,20 @@ void init_slices(std::vector<index_slice>& fluid_slices,
 }
 } // namespace
 
-mesh::mesh(const index_extents& extents, const domain_extents& bounds)
-    : mesh{extents, bounds, std::vector<shape>{}}
+mesh::mesh(const index_extents& extents,
+           const domain_extents& bounds,
+           bool enable_logging)
+    : mesh{extents, bounds, std::vector<shape>{}, enable_logging}
 {
 }
 
 mesh::mesh(const index_extents& extents,
            const domain_extents& bounds,
-           const std::vector<shape>& shapes)
+           const std::vector<shape>& shapes,
+           bool enable_logging)
     : cart{extents.extents, bounds.min, bounds.max},
       geometry{shapes, cart},
+      logger{enable_logging, "geometry", "logs/geometry.csv"},
       xmin{sel::xmin(extents)},
       xmax{sel::xmax(extents)},
       ymin{sel::ymin(extents)},
@@ -150,21 +154,19 @@ mesh::mesh(const index_extents& extents,
     init_slices(fluid_slices, lines_[i], extents);
     fluid = sel::multi_slice(fluid_slices);
 
-    auto sink =
-        std::make_shared<spdlog::sinks::basic_file_sink_st>("logs/geometry.csv", true);
-    logger = std::make_shared<spdlog::logger>("geometry", sink);
-    logger->set_pattern("%v");
-    logger->info("Timestamp,direction,ic,psi,x,y,z,i,j,k");
-    logger->set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
+    logger.set_pattern("%v");
+    logger(spdlog::level::info, "Timestamp,direction,ic,psi,x,y,z,i,j,k");
+    logger.set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
 
     for (int dir = 0; dir < 3; dir++)
         for (int i = 0; auto&& [psi, pos, n, ray_out, ijk, id] : R(dir))
-            logger->info("{},{},{},{},{}",
-                         dir,
-                         i++,
-                         psi,
-                         fmt::join(pos, ", "),
-                         fmt::join(ijk, ", "));
+            logger(spdlog::level::info,
+                   "{},{},{},{},{}",
+                   dir,
+                   i++,
+                   psi,
+                   fmt::join(pos, ", "),
+                   fmt::join(ijk, ", "));
 }
 
 bool mesh::dirichlet_line(const int3& start, int dir, const bcs::Grid& cart_bcs) const
@@ -232,7 +234,7 @@ std::optional<mesh> mesh::from_lua(const sol::table& tbl, const logs& logger)
     if (!shapes_opt) return std::nullopt;
     const auto& shapes = *shapes_opt;
 
-    return mesh{n, domain, shapes};
+    return mesh{n, domain, shapes, logger};
     // return std::nullopt;
 }
 
