@@ -37,7 +37,7 @@ TEST_CASE("dirichlet coeffs")
             scheme = {
                 order = 1,
                 type = "E2-poly",
-                floating_alpha = {13/100, 7/50, 3/20, 4/25, 17/100, 9/50},
+                floating_alpha = {},
                 dirichlet_alpha = {3/25, 13/100, 7/50}
             }
         }
@@ -77,8 +77,8 @@ TEST_CASE("interior")
             scheme = {
                 order = 1,
                 type = "E2-poly",
-                floating_alpha = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6},
-                dirichlet_alpha = {-0.1, -0.2, -0.3}
+                floating_alpha = {},
+                dirichlet_alpha = {}
             }
         }
     )");
@@ -111,7 +111,7 @@ TEST_CASE("floating")
                 order = 1,
                 type = "E2-poly",
                 floating_alpha = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6},
-                dirichlet_alpha = {-0.1, -0.2, -0.3}
+                dirichlet_alpha = {}
             }
         }
     )");
@@ -206,5 +206,135 @@ TEST_CASE("dirichlet")
             REQUIRE(rs::inner_product(c | vs::drop(i * t) | vs::take_exactly(t),
                                       m | bt,
                                       0.) == Catch::Approx(b_dx(m[t - r - 1 + i])));
+    }
+}
+
+TEST_CASE("interp interior")
+{
+    sol::state lua;
+    lua.open_libraries(sol::lib::base, sol::lib::math);
+    lua.script(R"(
+        simulation = {
+            scheme = {
+                order = 1,
+                type = "E2-poly"
+            }
+        }
+    )");
+
+    auto st_opt = stencil::from_lua(lua["simulation"]);
+    REQUIRE(!!st_opt);
+    const auto& st = *st_opt;
+
+    auto p = st.query_max().p;
+    auto w = 2 * p + 1;
+
+    T c(w);
+    T mesh = vs::linear_distribute(ymin, ymax, w) | rs::to<T>();
+    real h = mesh[1] - mesh[0];
+
+    for (auto&& y : vs::linear_distribute(-0.45, 0.45, 11)) {
+
+        auto&& [v, l, r] = st.interp(2,
+                                     int3{1, 2, p},
+                                     y,
+                                     boundary(int3{1, 2, 0}, std::nullopt),
+                                     boundary(int3{1, 2, 2 * p + 1}, std::nullopt),
+                                     c);
+
+        REQUIRE(!l.object);
+        REQUIRE(!r.object);
+        real yi = rs::inner_product(v, mesh | gt, 0.);
+        REQUIRE(yi == Catch::Approx(gf(mesh[p] + y * h)));
+    }
+}
+
+TEST_CASE("interp wall")
+{
+    sol::state lua;
+    lua.open_libraries(sol::lib::base, sol::lib::math);
+    lua.script(R"(
+        f = math.random
+        simulation = {
+            scheme = {
+                order = 1,
+                type = "E2-poly",
+                floating_alpha = {f(), f(), f(), f(), f(), f()},
+                interpolant_alpha = {f(), f(), f(), f()}
+            }
+        }
+    )");
+
+    auto st_opt = stencil::from_lua(lua["simulation"]);
+    REQUIRE(!!st_opt);
+    const auto& st = *st_opt;
+
+    auto t = st.query_max().t;
+
+    T c(t);
+    T mesh = vs::linear_distribute(ymin, ymax, t - 1) | rs::to<T>();
+    const real h = mesh[1] - mesh[0];
+
+    // left 0
+    {
+        const real psi = 0.8, y = 0.3;
+        auto m = vs::concat(vs::single(ymin - psi * h), mesh) | rs::to<T>();
+        auto&& [v, l, r] = st.interp(0,
+                                     int3{8, 4, 5},
+                                     y,
+                                     boundary{int3{8, 4, 5}, object_boundary{0, 1, psi}},
+                                     boundary{int3{50, 4, 5}, std::nullopt},
+                                     c);
+        REQUIRE(l.object);
+        REQUIRE(!r.object);
+        real yi = rs::inner_product(v, m | bt, 0.);
+        REQUIRE(yi == Catch::Approx(bf(ymin - h + y * h)));
+    }
+    // left 1
+    {
+        const real psi = 0.8, y = -0.2;
+        auto m = vs::concat(vs::single(ymin - psi * h), mesh) | rs::to<T>();
+        auto&& [v, l, r] = st.interp(0,
+                                     int3{9, 4, 5},
+                                     y,
+                                     boundary{int3{8, 4, 5}, object_boundary{0, 1, psi}},
+                                     boundary{int3{50, 4, 5}, std::nullopt},
+                                     c);
+        REQUIRE(l.object);
+        REQUIRE(!r.object);
+        real yi = rs::inner_product(v, m | bt, 0.);
+        REQUIRE(yi == Catch::Approx(bf(ymin + y * h)));
+    }
+
+    // right 0
+    {
+        const real psi = 0.9, y = -0.3;
+        auto m = vs::concat(mesh, vs::single(ymax + psi * h)) | rs::to<T>();
+        auto&& [v, l, r] = st.interp(1,
+                                     int3{8, 9, 5},
+                                     y,
+                                     boundary{int3{8, 0, 5}, std::nullopt},
+                                     boundary{int3{8, 9, 5}, object_boundary{0, 0, psi}},
+                                     c);
+        REQUIRE(!l.object);
+        REQUIRE(r.object);
+        real yi = rs::inner_product(v, m | bt, 0.);
+        REQUIRE(yi == Catch::Approx(bf(ymax + h + y * h)));
+    }
+
+    // right 1
+    {
+        const real psi = 0.9, y = 0.3;
+        auto m = vs::concat(mesh, vs::single(ymax + psi * h)) | rs::to<T>();
+        auto&& [v, l, r] = st.interp(1,
+                                     int3{8, 8, 5},
+                                     y,
+                                     boundary{int3{8, 0, 5}, std::nullopt},
+                                     boundary{int3{8, 9, 5}, object_boundary{0, 0, psi}},
+                                     c);
+        REQUIRE(!l.object);
+        REQUIRE(r.object);
+        real yi = rs::inner_product(v, m | bt, 0.);
+        REQUIRE(yi == Catch::Approx(bf(ymax + y * h)));
     }
 }

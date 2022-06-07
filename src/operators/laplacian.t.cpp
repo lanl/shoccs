@@ -56,30 +56,30 @@ constexpr auto f2_ddz = vs::transform([](auto&& loc) {
     return 2. * (x + y);
 });
 
-// 2D 2nd order polynomial for use with E2
+// 2D 1st order polynomial for use with E2
 constexpr auto g2 = vs::transform([](auto&& loc) {
     auto&& [x, y, _] = loc;
-    return x * x * y + y * y * x + 3 * x * y + x + y + 1;
+    return 3 * x * y + x + y + 1;
 });
 
 constexpr auto g2_dx = vs::transform([](auto&& loc) {
     auto&& [x, y, _] = loc;
-    return 2. * x * y + y * y + 3. * y + 1;
+    return 3. * y + 1;
 });
 
 constexpr auto g2_dy = vs::transform([](auto&& loc) {
     auto&& [x, y, _] = loc;
-    return x * x + 2. * y * x + 3. * x + 1;
+    return 3. * x + 1;
 });
 
 constexpr auto g2_ddx = vs::transform([](auto&& loc) {
     auto&& [_, y, __] = loc;
-    return 2. * y;
+    return 0;
 });
 
 constexpr auto g2_ddy = vs::transform([](auto&& loc) {
     auto&& [x, _, __] = loc;
-    return 2. * x;
+    return 0;
 });
 
 TEST_CASE("E2_2 Domain")
@@ -361,6 +361,9 @@ TEST_CASE("2D E2 with Floating Objects")
 
     auto lap = laplacian{m, st, gridBcs, objectBcs, true};
     du = lap(u, nu);
+
+    ex += 1;
+    du += 1;
 
     REQUIRE_THAT(get<si::D>(ex), Approx(get<si::D>(du)));
     REQUIRE_THAT(get<si::Rx>(ex), Approx(get<si::Rx>(du)));

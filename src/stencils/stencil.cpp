@@ -22,10 +22,11 @@ std::optional<stencil> stencil::from_lua(const sol::table& tbl, const logs& logg
         }
     };
 
-    std::vector<real> alpha{}, floating_alpha{}, dirichlet_alpha{};
+    std::vector<real> alpha{}, floating_alpha{}, dirichlet_alpha{}, interpolant_alpha{};
     read_alpha("alpha", alpha);
     read_alpha("floating_alpha", floating_alpha);
     read_alpha("dirichlet_alpha", dirichlet_alpha);
+    read_alpha("interpolant_alpha", interpolant_alpha);
 
     int order = m["order"].get_or(1); // default to first derivative schemes
     std::string type = m["type"].get_or(std::string{});
@@ -52,7 +53,7 @@ std::optional<stencil> stencil::from_lua(const sol::table& tbl, const logs& logg
                 // dirichlet alpha in the single array - useful for the optimizer
                 // interface
                 auto a = std::span{alpha};
-                return make_polyE2_1(a.subspan(0, 6), a.subspan(6));
+                return make_polyE2_1(a.subspan(0, 6), a.subspan(6, 9), a.subspan(9, 13));
             } else {
                 logger(spdlog::level::info,
                        "floating alpha = {}",
@@ -60,8 +61,11 @@ std::optional<stencil> stencil::from_lua(const sol::table& tbl, const logs& logg
                 logger(spdlog::level::info,
                        "dirichlet alpha = {}",
                        fmt::join(dirichlet_alpha, ", "));
+                logger(spdlog::level::info,
+                       "interpolant alpha = {}",
+                       fmt::join(interpolant_alpha, ", "));
 
-                return make_polyE2_1(floating_alpha, dirichlet_alpha);
+                return make_polyE2_1(floating_alpha, dirichlet_alpha, interpolant_alpha);
             }
         }
     }

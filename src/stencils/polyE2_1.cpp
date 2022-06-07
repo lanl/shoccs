@@ -21,12 +21,16 @@ struct polyE2_1 {
 
     std::array<real, 6> fa;
     std::array<real, 3> da;
+    std::array<real, 4> ia;
 
     polyE2_1() = default;
-    polyE2_1(std::span<const real> fa_, std::span<const real> da_)
+    polyE2_1(std::span<const real> fa_,
+             std::span<const real> da_,
+             std::span<const real> ia_)
     {
         rs::copy(vs::concat(fa_, vs::repeat(0.0)) | vs::take(fa.size()), rs::begin(fa));
         rs::copy(vs::concat(da_, vs::repeat(0.0)) | vs::take(da.size()), rs::begin(da));
+        rs::copy(vs::concat(ia_, vs::repeat(0.0)) | vs::take(ia.size()), rs::begin(ia));
     }
 
     info query_max() const { return {P, R, T, X}; }
@@ -43,13 +47,97 @@ struct polyE2_1 {
             return {};
         }
     }
-    interp_info query_interp() const { return {}; }
+    interp_info query_interp() const { return {2 * 1 + 1, 4}; }
 
-    std::span<const real> interp_interior(real, std::span<real> c) const { return c; }
-
-    std::span<const real> interp_wall(int, real, real, std::span<real> c, bool) const
+    std::span<const real> interp_interior(real y, std::span<real> c) const
     {
-        return c;
+        c[0] = (-1 + y) * 0.5 * y;
+        c[1] = 1 + -1 * y * y;
+        c[2] = (1 + y) * 0.5 * y;
+        return c.subspan(0, 2 * 1 + 1);
+    }
+
+    std::span<const real>
+    interp_wall(int i, real y, real psi, std::span<real> c, bool right) const
+    {
+        if (right) {
+            const real t5 = fa[2];
+            const real t6 = t5 * y;
+            const real t9 = ia[2];
+            const real t13 = -1 * y;
+            const real t7 = fa[3];
+            const real t10 = ia[3];
+            const real t16 = 1 + psi;
+            const real t17 = 1.0 / (t16);
+            const real t8 = t7 * y;
+            const real t30 = fa[0];
+            const real t31 = t30 * y;
+            const real t34 = ia[0];
+            const real t32 = fa[1];
+            const real t35 = ia[1];
+            const real t33 = t32 * y;
+            switch (i) {
+            case 0:
+                c[0] = (t31 + t33 + t34 + t35) * 0.5;
+                c[1] = (-1 * psi + t13 + (t31 + t34) * -2 +
+                        (t13 + -2 * t35 + -1 * psi * t35 + -2 * t32 * y +
+                         -1 * psi * t32 * y) *
+                            t17) *
+                       0.5;
+                c[2] = (1 + psi + t31 + t34 + y) * 0.5;
+                c[3] = (1 + psi + t33 + t35 + y) * 0.5 * t17;
+                break;
+            case 1:
+                c[0] = (t10 + t6 + t8 + t9) * 0.5;
+                c[1] = (t13 + (t6 + t9) * -2 +
+                        (psi + -2 * t10 + -1 * psi * t10 + t13 + -2 * t7 * y +
+                         -1 * psi * t7 * y) *
+                            t17) *
+                       0.5;
+                c[2] = (1 + t6 + t9 + y) * 0.5;
+                c[3] = (1 + t10 + t8 + y) * 0.5 * t17;
+                break;
+            }
+        } else {
+            const real t7 = -1 * y;
+            const real t13 = fa[0];
+            const real t14 = t13 * y;
+            const real t15 = ia[0];
+            const real t5 = 1 + psi;
+            const real t6 = 1.0 / (t5);
+            const real t8 = fa[1];
+            const real t10 = ia[1];
+            const real t9 = t8 * y;
+            const real t36 = fa[2];
+            const real t37 = t36 * y;
+            const real t38 = ia[2];
+            const real t31 = fa[3];
+            const real t33 = ia[3];
+            const real t32 = t31 * y;
+            switch (i) {
+            case 0:
+                c[0] = (1 + psi + t10 + t7 + t9) * 0.5 * t6;
+                c[1] = (1 + psi + t14 + t15 + t7) * 0.5;
+                c[2] =
+                    (-1 * psi + (t14 + t15) * -2 + y +
+                     (-2 * t10 + -1 * psi * t10 + y + -2 * t8 * y + -1 * psi * t8 * y) *
+                         t6) *
+                    0.5;
+                c[3] = (t10 + t14 + t15 + t9) * 0.5;
+                break;
+            case 1:
+                c[0] = (1 + t32 + t33 + t7) * 0.5 * t6;
+                c[1] = (1 + t37 + t38 + t7) * 0.5;
+                c[2] = ((t37 + t38) * -2 + y +
+                        (psi + -2 * t33 + -1 * psi * t33 + y + -2 * t31 * y +
+                         -1 * psi * t31 * y) *
+                            t6) *
+                       0.5;
+                c[3] = (t32 + t33 + t37 + t38) * 0.5;
+                break;
+            }
+        }
+        return c.subspan(0, 4);
     }
 
     std::span<const real> interior(real h, std::span<real> c) const
@@ -171,9 +259,10 @@ struct polyE2_1 {
     }
 };
 
-stencil make_polyE2_1(std::span<const real> fa, std::span<const real> da)
+stencil make_polyE2_1(std::span<const real> fa,
+                      std::span<const real> da,
+                      std::span<const real> ia)
 {
-    return polyE2_1{fa, da};
+    return polyE2_1{fa, da, ia};
 }
-
 } // namespace ccs::stencils
