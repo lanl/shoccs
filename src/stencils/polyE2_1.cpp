@@ -47,14 +47,18 @@ struct polyE2_1 {
             return {};
         }
     }
-    interp_info query_interp() const { return {2 * 1 + 1, 4}; }
+    interp_info query_interp() const { return {2, 4}; }
 
     std::span<const real> interp_interior(real y, std::span<real> c) const
     {
-        c[0] = (-1 + y) * 0.5 * y;
-        c[1] = 1 + -1 * y * y;
-        c[2] = (1 + y) * 0.5 * y;
-        return c.subspan(0, 2 * 1 + 1);
+        if (y > 0) {
+            c[0] = 1 + -1 * y;
+            c[1] = y;
+        } else {
+            c[0] = -1 * y;
+            c[1] = 1 + y;
+        }
+        return c.subspan(0, 2);
     }
 
     std::span<const real>

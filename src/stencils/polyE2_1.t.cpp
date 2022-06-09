@@ -226,26 +226,27 @@ TEST_CASE("interp interior")
     REQUIRE(!!st_opt);
     const auto& st = *st_opt;
 
-    auto p = st.query_max().p;
-    auto w = 2 * p + 1;
+    auto p = st.query_interp().p;
 
-    T c(w);
-    T mesh = vs::linear_distribute(ymin, ymax, w) | rs::to<T>();
+    T c(p);
+    T mesh = vs::linear_distribute(ymin, ymax, p) | rs::to<T>();
     real h = mesh[1] - mesh[0];
 
     for (auto&& y : vs::linear_distribute(-0.45, 0.45, 11)) {
 
+        int center = 1 - (y > 0);
+
         auto&& [v, l, r] = st.interp(2,
-                                     int3{1, 2, p},
+                                     int3{1, 2, center},
                                      y,
-                                     boundary(int3{1, 2, 0}, std::nullopt),
-                                     boundary(int3{1, 2, 2 * p + 1}, std::nullopt),
+                                     boundary(int3{1, 2, -10}, std::nullopt),
+                                     boundary(int3{1, 2, 10}, std::nullopt),
                                      c);
 
         REQUIRE(!l.object);
         REQUIRE(!r.object);
-        real yi = rs::inner_product(v, mesh | gt, 0.);
-        REQUIRE(yi == Catch::Approx(gf(mesh[p] + y * h)));
+        real yi = rs::inner_product(v, mesh | bt, 0.);
+        REQUIRE(yi == Catch::Approx(bf(mesh[center] + y * h)));
     }
 }
 

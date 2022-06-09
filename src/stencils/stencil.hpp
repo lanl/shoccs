@@ -55,6 +55,10 @@ concept Stencil = requires(const T& st,
         } -> std::same_as<info>;
 
     {
+        st.query_interp()
+        } -> std::same_as<interp_info>;
+
+    {
         st.nbs(h, b, psi, ray_outside, c, extra)
         } -> std::same_as<std::span<const real>>;
 
@@ -170,6 +174,7 @@ public:
 
         info query(bcs::type b) const { return s->query(b); }
         info query_max() const { return s->query_max(); }
+        interp_info query_interp() const { return s->query_interp(); }
 
         std::span<const real> nbs(real h,
                                   bcs::type b,
