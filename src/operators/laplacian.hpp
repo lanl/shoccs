@@ -19,7 +19,7 @@ public:
               const stencil&,
               const bcs::Grid&,
               const bcs::Object&,
-              bool enable_logging = false);
+              const logs& logger = {});
 
     // when there are no neumann conditions in the problem
     std::function<void(scalar_span)> operator()(scalar_view) const;

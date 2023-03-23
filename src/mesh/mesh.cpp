@@ -121,18 +121,18 @@ void init_slices(std::vector<index_slice>& fluid_slices,
 
 mesh::mesh(const index_extents& extents,
            const domain_extents& bounds,
-           bool enable_logging)
-    : mesh{extents, bounds, std::vector<shape>{}, enable_logging}
+           const logs& build_logger)
+    : mesh{extents, bounds, std::vector<shape>{}, build_logger}
 {
 }
 
 mesh::mesh(const index_extents& extents,
            const domain_extents& bounds,
            const std::vector<shape>& shapes,
-           bool enable_logging)
+           const logs& build_logger)
     : cart{extents.extents, bounds.min, bounds.max},
       geometry{shapes, cart},
-      logger{enable_logging, "geometry", "logs/geometry.csv"},
+      logger{build_logger, "geometry", "geometry.csv"},
       xmin{sel::xmin(extents)},
       xmax{sel::xmax(extents)},
       ymin{sel::ymin(extents)},

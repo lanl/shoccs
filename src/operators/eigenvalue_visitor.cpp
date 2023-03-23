@@ -1,12 +1,9 @@
 #include "eigenvalue_visitor.hpp"
 #include "gradient.hpp"
 
-#include <mkl.h>
+#include <cstdint>
+#include <lapack.hh>
 
-#include <fmt/core.h>
-#include <fmt/ranges.h>
-#include <range/v3/view/chunk.hpp>
-#include <range/v3/view/enumerate.hpp>
 
 namespace ccs
 {
@@ -27,26 +24,31 @@ void eigenvalue_visitor::visit(const derivative& d)
 
     // compute eigenvalues given our now dense matrix
     real vl, vr;
-    MKL_INT lda = rows;
-    MKL_INT n = rows;
+    int64_t lda = rows;
+    int64_t n = rows;
     // according to the docs I should be able to leave ldvl and ldvr as 1 since
     // jobl=jobr='N', but then I get an error in the dgeev_work routine.
-    MKL_INT ldvl = n;
-    MKL_INT ldvr = n;
+    int64_t ldvl = n;
+    int64_t ldvr = n;
 
-    auto ret = LAPACKE_dgeev(LAPACK_ROW_MAJOR,
-                             'N',
-                             'N',
-                             n,
-                             v.data(),
-                             lda,
-                             eigs_real.data(),
-                             eigs_imag.data(),
-                             &vl,
-                             ldvl,
-                             &vr,
-                             ldvr);
+    std::vector<std::complex<double>> W(eigs_real.size());
+
+    auto ret = lapack::geev(lapack::Job::NoVec,
+                            lapack::Job::NoVec,
+                            n,
+                            v.data(),
+                            lda,
+                            W.data(),
+                            &vl,
+                            ldvl,
+                            &vr,
+                            ldvr);
     assert(ret == 0);
+
+    for (int i = 0; i < (int)W.size(); i++) {
+        eigs_real[i] = W[i].real();
+        eigs_imag[i] = W[i].imag();
+    }
 }
 
 std::span<const real> eigenvalue_visitor::eigenvalues_real() const { return eigs_real; }

@@ -14,7 +14,7 @@ TEST_CASE("logging")
     REQUIRE(!l);
     l(spdlog::level::info, "this message shant be seen");
 
-    l = logs{true, "builder"};
+    l = logs{"", true, "builder"};
     REQUIRE(l);
 
     l(spdlog::level::info, "building!");

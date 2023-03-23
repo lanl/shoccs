@@ -47,18 +47,18 @@ scalar_wave::scalar_wave(mesh&& m_,
                          real3 center,
                          real radius,
                          real max_error,
-                         bool enable_logging)
+                         const logs& build_logger)
     : m{MOVE(m_)},
       grid_bcs{MOVE(grid_bcs)},
       object_bcs{MOVE(object_bcs)},
-      grad{gradient(this->m, st, this->grid_bcs, this->object_bcs, enable_logging)},
+      grad{gradient(this->m, st, this->grid_bcs, this->object_bcs, build_logger)},
       center{center},
       radius{radius},
       grad_G{m.vs()},
       du{m.vs()},
       error{m.ss()},
       max_error{max_error},
-      logger{enable_logging, "system", "logs/system.csv"}
+      logger{build_logger, "system", "system.csv"}
 {
 
     // Initialize wave speeds

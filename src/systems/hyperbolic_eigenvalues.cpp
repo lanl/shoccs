@@ -16,12 +16,12 @@ hyperbolic_eigenvalues::hyperbolic_eigenvalues(mesh&& m,
                                                bcs::Grid&& grid_bcs,
                                                bcs::Object&& object_bcs,
                                                stencil st,
-                                               bool enable_logging)
+                                               const logs& build_logger)
     : m{MOVE(m)},
       grid_bcs{MOVE(grid_bcs)},
       object_bcs{MOVE(object_bcs)},
-      grad{gradient(this->m, st, this->grid_bcs, this->object_bcs, enable_logging)},
-      logger{enable_logging, "system", "logs/system.csv"}
+      grad{gradient(this->m, st, this->grid_bcs, this->object_bcs, build_logger)},
+      logger{build_logger, "system", "system.csv"}
 {
 
     logger.set_pattern("%v");

@@ -39,7 +39,7 @@ public:
              d_interval&& dump_interval,
              std::string&& io_dir,
              int suffix_length,
-             bool enable_logging = false);
+             const logs& = {});
 
     bool write(std::span<const std::string>,
                field_view field,

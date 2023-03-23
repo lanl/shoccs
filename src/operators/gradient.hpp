@@ -21,7 +21,7 @@ public:
              const stencil&,
              const bcs::Grid&,
              const bcs::Object&,
-             bool enable_logging = false);
+             const logs& = {});
 
     std::function<void(vector_span)> operator()(scalar_view) const;
 

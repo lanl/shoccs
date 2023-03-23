@@ -20,7 +20,7 @@ TEST_CASE("header")
     auto ix = index_extents{.extents = {3, 4, 5}};
     auto dom = domain_extents{.min = {0.1, 0.2, 0.3}, .max = {1.1, 1.2, 1.3}};
     auto tmp = fs::temp_directory_path() / "headertest.xmf";
-    auto logger = logs{true, "field_io"};
+    auto logger = logs{"", true, "field_io"};
 
     auto writer = xdmf{tmp, ix, dom};
     T t{};

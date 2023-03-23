@@ -10,10 +10,10 @@ add_library(shoccs-operators
     eigenvalue_visitor.cpp)
 
 target_link_libraries(shoccs-operators
-    PUBLIC 
+    PUBLIC
         shoccs-mesh shoccs-matrices shoccs-logging
     PRIVATE
-        MKL::MKL)
+        lapackpp)
 target_include_directories(shoccs-operators PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>)
 
 

@@ -47,7 +47,7 @@ public:
                 real3 center,
                 real radius,
                 real max_error = 100.0,
-                bool enable_logging = false);
+                const logs& = {});
 
     void operator()(field& s, const step_controller&);
 

@@ -4,6 +4,9 @@
 #include <sol/sol.hpp>
 
 #include <iostream>
+#include <string>
+
+using namespace std::string_literals;
 
 namespace ccs
 {
@@ -82,8 +85,8 @@ real3 simulation_cycle::run()
 std::optional<simulation_cycle> simulation_cycle::from_lua(const sol::table& tbl)
 {
     bool enable_logging = tbl["logging"].get_or(true);
-
-    logs l{enable_logging, "builder"};
+    std::string logging_dir = enable_logging ? tbl["logging_dir"].get_or("logs"s) : ""s;
+    logs l{logging_dir, enable_logging, "builder"};
 
     auto sys_opt = system::from_lua(tbl, l);
     auto it_opt = integrator::from_lua(tbl, l);

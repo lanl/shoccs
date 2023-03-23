@@ -359,7 +359,7 @@ TEST_CASE("2D E2 with Floating Objects")
 
     scalar<T> du{m.ss()};
 
-    auto lap = laplacian{m, st, gridBcs, objectBcs, true};
+    auto lap = laplacian{m, st, gridBcs, objectBcs};
     du = lap(u, nu);
 
     ex += 1;

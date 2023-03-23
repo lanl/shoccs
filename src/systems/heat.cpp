@@ -23,16 +23,16 @@ heat::heat(mesh&& m,
            manufactured_solution&& m_sol,
            stencil st,
            real diffusivity,
-           bool enable_logging)
+           const logs& build_logger)
     : m{MOVE(m)},
       grid_bcs{MOVE(grid_bcs)},
       object_bcs{MOVE(object_bcs)},
       m_sol{MOVE(m_sol)},
-      lap{this->m, st, this->grid_bcs, this->object_bcs, enable_logging},
+      lap{this->m, st, this->grid_bcs, this->object_bcs, build_logger},
       diffusivity{diffusivity},
       neumann_u{this->m.ss()},
       error{this->m.ss()},
-      logger{enable_logging, "system", "logs/system.csv"}
+      logger{build_logger, "system", "system.csv"}
 {
     assert(!!(this->m_sol));
 

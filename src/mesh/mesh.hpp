@@ -54,14 +54,12 @@ class mesh
 
 public:
     mesh() = default;
-    mesh(const index_extents& extents,
-         const domain_extents& bounds,
-         bool enable_logging = false);
+    mesh(const index_extents& extents, const domain_extents& bounds, const logs& = {});
 
     mesh(const index_extents& extents,
          const domain_extents& bounds,
          const std::vector<shape>& shapes,
-         bool enable_logging = false);
+         const logs& = {});
 
     bool dirichlet_line(const int3& start, int dir, const bcs::Grid& cartesian_bcs) const;
 

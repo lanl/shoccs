@@ -24,13 +24,13 @@ field_io::field_io(xdmf&& xdmf_w,
                    d_interval&& dump_interval,
                    std::string&& io_dir,
                    int suffix_length,
-                   bool enable_logging)
+                   const logs& build_logger)
     : xdmf_w{MOVE(xdmf_w)},
       field_data_w{MOVE(field_data_w)},
       dump_interval{MOVE(dump_interval)},
       io_dir{MOVE(io_dir)},
       suffix_length{suffix_length},
-      logger{enable_logging, "field_io"}
+      logger{build_logger, "field_io"}
 {
 }
 bool field_io::write(std::span<const std::string> names,

@@ -10,11 +10,19 @@ private:
     bool enable;
 
     mutable std::shared_ptr<spdlog::logger> logger;
+    std::string logging_dir;
 
 public:
     logs() = default;
-    logs(bool enable, const std::string& name);
-    logs(bool enable, const std::string& looger_name, const std::string& file_name);
+
+    logs(const std::string& logging_dir, bool enable, const std::string& logger_name);
+    logs(bool enable, const std::string& logger_name) : logs{"", enable, logger_name} {}
+
+    logs(const logs& logger, const std::string& logger_name);
+
+    logs(const logs& logger,
+         const std::string& logger_name,
+         const std::string& file_name);
 
     void set_pattern(const std::string& pat);
 

@@ -18,7 +18,6 @@ class rk4
 
 public:
     rk4() = default;
-
     void ensure_size(system_size);
 
     void operator()(system&, const field&, field_span, const step_controller&, real);

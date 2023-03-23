@@ -96,7 +96,7 @@ std::string header(const int3& i,
 {
     auto&& [min, max] = d;
     real3 dxyz = (max - min) / clamp_lo(i - 1.0, 1.0);
-    return fmt::format(R"(<?xml version="1.0" encoding="utf-8"?>
+    std::string header = fmt::format(R"(<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE Xdmf SYSTEM "Xdmf.dtd" []>
 <Xdmf Version="3.0">
 <Domain>
@@ -122,12 +122,13 @@ std::string header(const int3& i,
 </Domain>
 </Xdmf>
 )",
-                       "dims"_a = fmt::join(i, " "),
-                       "origin"_a = fmt::join(min, " "),
-                       "dxyz"_a = fmt::join(dxyz, " "),
-                       "rx"_a = rs::size(get<0>(t)),
-                       "ry"_a = rs::size(get<1>(t)),
-                       "rz"_a = rs::size(get<2>(t)));
+                                     "dims"_a = fmt::join(i.begin(), i.end(), " "),
+                                     "origin"_a = fmt::join(min.begin(), min.end(), " "),
+                                     "dxyz"_a = fmt::join(dxyz.begin(), dxyz.end(), " "),
+                                     "rx"_a = rs::size(get<0>(t)),
+                                     "ry"_a = rs::size(get<1>(t)),
+                                     "rz"_a = rs::size(get<2>(t)));
+    return header;
 }
 } // namespace
 

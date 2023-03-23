@@ -11,10 +11,10 @@ laplacian::laplacian(const mesh& m,
                      const stencil& st,
                      const bcs::Grid& grid_bcs,
                      const bcs::Object& obj_bcs,
-                     bool enable_logging)
+                     const logs& build_logger)
 
 {
-    logs logger{enable_logging, "laplacian", "logs/laplacian.csv"};
+    logs logger{build_logger, "laplacian", "laplacian.csv"};
     logger.set_pattern("%v");
     auto st_info = st.query_max();
     logger(spdlog::level::info,

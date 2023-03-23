@@ -40,7 +40,7 @@ public:
          manufactured_solution&& m_sol,
          stencil st,
          real diffusivity,
-         bool enable_logging = false);
+         const logs& = {});
 
     static std::optional<heat> from_lua(const sol::table&, const logs& = {});
 

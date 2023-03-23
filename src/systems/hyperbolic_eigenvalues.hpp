@@ -26,7 +26,7 @@ public:
     hyperbolic_eigenvalues() = default;
 
     hyperbolic_eigenvalues(
-        mesh&&, bcs::Grid&&, bcs::Object&&, stencil, bool enable_logging = false);
+        mesh&&, bcs::Grid&&, bcs::Object&&, stencil, const logs& = {});
 
     void operator()(field& s, const step_controller&);
 
