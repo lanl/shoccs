@@ -27,7 +27,7 @@ interp_deriv_info interp_deriv_coefficients(int dir,
 {
     auto&& [p, r, t, _] = st.query(bc);
 
-    if (std::abs(obj.normal[dir] > 1e-12)) {
+    if (std::abs(obj.normal[dir]) > 1e-12) {
 
         const bool right_interp_wall = obj.normal[dir] < 0.0;
         // get coefficient for derivative

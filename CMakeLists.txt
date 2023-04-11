@@ -36,6 +36,11 @@ find_package(lapackpp REQUIRED)
 
 include(GNUInstallDirs)
 
+if(CMAKE_EXPORT_COMPILE_COMMANDS)
+    set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+endif()
+
+
 # helper function for defining serial tests
 function(add_unit_test t label)
   if (BUILD_TESTING)
