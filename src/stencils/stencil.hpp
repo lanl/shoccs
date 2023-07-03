@@ -267,6 +267,9 @@ public:
 stencil make_E2_2();
 stencil make_E4_2();
 stencil make_E2_1(std::span<const real>);
+stencil make_E4u_1(std::span<const real>);
+stencil make_E6u_1(std::span<const real>);
+stencil make_E8u_1(std::span<const real>);
 stencil make_polyE2_1(std::span<const real> floating_alpha,
                       std::span<const real> dirichlet_alpha,
                       std::span<const real> interpolant_alpha);
