@@ -7,6 +7,26 @@ Welcome to shoccs's documentation!
 ==================================
 
 ```{toctree}
+:caption: Current documentation
+:maxdepth: 2
+
+ONBOARDING.md
+CAPABILITY_AUDIT.md
+CLEANUP_PLAN.md
+```
+
+```{toctree}
+:caption: Reference
+:maxdepth: 1
+:glob:
+
+reference/*
+```
+
+```{toctree}
+:caption: Archive (pre-Kokkos design notes)
+:maxdepth: 1
+
 design.md
 lazyness.md
 field.md

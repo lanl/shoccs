@@ -1,3 +1,5 @@
+>  ⚠️ STALE / superseded. Predates the Kokkos migration; this note argued for keeping range-v3 lazy views, which were later removed when the codebase moved to Kokkos. The lazy/expression-template syntax shown no longer reflects the implemented API. Kept for historical design rationale only. Current: see docs/reference/fields.md and CLAUDE.md.
+
 Lazyness
 ====
 
