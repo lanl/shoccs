@@ -1,9 +1,12 @@
 #include "derivative.hpp"
-#include "fields/selector.hpp"
 
-#include <range/v3/all.hpp>
+#include <Kokkos_Profiling_ScopedRegion.hpp>
 
+#include <algorithm>
 #include <cassert>
+#include <ranges>
+#include <span>
+#include <vector>
 
 namespace ccs
 {
@@ -70,12 +73,12 @@ struct OB_builder {
     matrix::csr::builder O;
     matrix::csr::builder B;
 
-    template <rs::random_access_range R>
+    template <std::ranges::random_access_range R>
     void add_cut_row(integer shape_row, integer solid_ic, integer stride, R&& r)
     {
         B.add_point(shape_row, shape_row, r[0]);
-        for (auto&& [i, v] : vs::enumerate(r) | vs::drop(1))
-            O.add_point(shape_row, solid_ic + i * stride, v);
+        for (int i = 1; i < std::ranges::ssize(r); ++i)
+            O.add_point(shape_row, solid_ic + i * stride, r[i]);
     }
 
     void add_cut_point(integer shape_row, real u)
@@ -85,7 +88,7 @@ struct OB_builder {
 
     // this routine is currently no good for planar objects which result in interior
     // stencils where every point is a solid point
-    template <rs::random_access_range R>
+    template <std::ranges::random_access_range R>
     void add_interp_row(integer shape_row,
                         real deriv_coeff,
                         R&& interp_coeffs,
@@ -98,7 +101,7 @@ struct OB_builder {
         const auto left_ic = m.ic(left.mesh_coordinate);
         const auto right_ic = m.ic(right.mesh_coordinate);
 
-        auto it = rs::begin(interp_coeffs);
+        auto it = std::ranges::begin(interp_coeffs);
         // handle left point
         if (const auto& obj = left.object; obj)
             B.add_point(shape_row, obj->object_coordinate, deriv_coeff * *it);
@@ -167,9 +170,8 @@ void cut_discretization(int r,
     const auto shapes = m.R(r);
     const auto sz = shapes.size();
 
-    if (sz == 0 || rs::accumulate(obj_bcs, true, [](auto&& acc, auto&& cur) {
-            return acc && (cur == bcs::Dirichlet);
-        }))
+    if (sz == 0 ||
+        std::ranges::all_of(obj_bcs, [](auto bc) { return bc == bcs::Dirichlet; }))
         return; // quick exit'
 
     auto [p, rmax, tmax, ex_max] = st.query_max();
@@ -185,7 +187,8 @@ void cut_discretization(int r,
 
     if (dir == r) {
         // no interpolation needed for this case
-        for (auto&& [shape_row, obj] : vs::enumerate(shapes)) {
+        for (integer shape_row = 0; shape_row < (integer)sz; ++shape_row) {
+            const auto& obj = shapes[shape_row];
             auto bc_t = obj_bcs[obj.shape_id];
             // nothing to do for dirichlet
             if (bc_t == bcs::Dirichlet) continue;
@@ -194,16 +197,18 @@ void cut_discretization(int r,
             st.nbs(h, bc_t, obj.psi, obj.ray_outside, c, extra);
 
             if (obj.ray_outside) {
-                auto rng = c | vs::drop_exactly((rObj - 1) * tObj) |
-                           vs::take_exactly(tObj) | vs::reverse;
+                auto sub = std::span{c}.subspan((rObj - 1) * tObj, tObj);
+                std::vector<real> rng(sub.begin(), sub.end());
+                std::ranges::reverse(rng);
                 builder.add_cut_row(shape_row, m.ic(obj.solid_coord), -stride, rng);
             } else {
-                auto rng = c | vs::take_exactly(tObj);
+                auto rng = std::span{c}.subspan(0, tObj);
                 builder.add_cut_row(shape_row, m.ic(obj.solid_coord), stride, rng);
             }
         }
     } else {
-        for (auto&& [shape_row, obj] : vs::enumerate(shapes)) {
+        for (integer shape_row = 0; shape_row < (integer)sz; ++shape_row) {
+            const auto& obj = shapes[shape_row];
             auto bc_t = obj_bcs[obj.shape_id];
             // nothing to do for dirichlet
             if (bc_t == bcs::Dirichlet) continue;
@@ -234,7 +239,6 @@ void cut_discretization(int r,
                 if (cp[dir] == obj.solid_coord[dir]) {
                     builder.add_cut_point(shape_row, v);
                 } else {
-                    // cp[dir] += cp_shift;
                     auto&& [r_stride, left_bounds, right_bounds] = m.interp_line(r, cp);
                     auto&& [interp_v, left, right] =
                         st.interp(r, cp, y, left_bounds, right_bounds, interp_c);
@@ -322,8 +326,6 @@ void domain_discretization(int dir,
     auto N_builder = matrix::csr::builder();
 
     for (auto [stride, start, end] : m.lines(dir)) {
-        // assert(offset == m.ic(start.m_coordinate));
-        // skip derivatives along line of dirichlet bcs
         if (m.dirichlet_line(start.mesh_coordinate, dir, grid_bcs)) continue;
 
         // start with assumption of square matrix and adjust based on boundary conditions
@@ -344,16 +346,22 @@ void domain_discretization(int dir,
             // first row as it will be handled in the Rx/y/z operators
             int s = bc_t != bcs::Dirichlet;
             rLeft -= s;
-            auto lc = left | vs::drop(s * tLeft);
-            leftMat = matrix::dense{
-                rLeft, tLeft - 1, lc | vs::chunk(tLeft) | vs::for_each(vs::drop(1))};
+            auto lc = std::span{left}.subspan(s * tLeft);
+
+            // Build dense matrix: skip first column of each row
+            std::vector<real> dense_data;
+            dense_data.reserve(rLeft * (tLeft - 1));
+            for (int row = 0; row < rLeft; ++row) {
+                auto row_span = lc.subspan(row * tLeft + 1, tLeft - 1);
+                dense_data.insert(dense_data.end(), row_span.begin(), row_span.end());
+            }
+            leftMat = matrix::dense{rLeft, tLeft - 1, dense_data};
 
             sub.remove_left_row_col();
 
-            // add points to B
-            auto b_coeffs = lc | vs::stride(tLeft) | vs::take(rLeft);
-            for (auto&& [row, val] : vs::enumerate(b_coeffs)) {
-                B_builder.add_point(sub.left_row(row), obj->object_coordinate, val);
+            // add points to B (first element of each row = stride by tLeft)
+            for (int row = 0; row < rLeft; ++row) {
+                B_builder.add_point(sub.left_row(row), obj->object_coordinate, lc[row * tLeft]);
             }
 
         } else {
@@ -384,18 +392,21 @@ void domain_discretization(int dir,
 
             integer s = bc_t != bcs::Dirichlet;
             rRight -= s;
-            auto rc = right | vs::take_exactly(rRight * tRight);
+            auto rc = std::span{right}.subspan(0, rRight * tRight);
 
-            rightMat = matrix::dense{rRight,
-                                     tRight - 1,
-                                     rc | vs::chunk(tRight) |
-                                         vs::for_each(vs::take(tRight - 1))};
+            // Build dense matrix: take first (tRight-1) columns of each row
+            std::vector<real> dense_data;
+            dense_data.reserve(rRight * (tRight - 1));
+            for (int row = 0; row < rRight; ++row) {
+                auto row_span = rc.subspan(row * tRight, tRight - 1);
+                dense_data.insert(dense_data.end(), row_span.begin(), row_span.end());
+            }
+            rightMat = matrix::dense{rRight, tRight - 1, dense_data};
             sub.remove_right_row_col();
 
-            // add points to B
-            auto b_coeffs =
-                rc | vs::drop(tRight - 1) | vs::stride(tRight) | vs::take(rRight);
-            for (auto&& [row, val] : vs::enumerate(b_coeffs)) {
+            // add points to B (last element of each row)
+            for (int row = 0; row < rRight; ++row) {
+                auto val = rc[row * tRight + tRight - 1];
                 B_builder.add_point(
                     sub.right_row(row - rRight), obj->object_coordinate, val);
             }
@@ -451,7 +462,7 @@ derivative::derivative(int dir,
     auto [p, rmax, tmax, ex_max] = st.query_max();
     auto h = m.h(dir);
     // set up the interior stencil
-    interior_c.resize(2 * p + 1);
+    auto interior_c = std::vector<real>(2 * p + 1);
     st.interior(h, interior_c);
 
     domain_discretization(dir, m, st, grid_bcs, obj_bcs, O, B, N, interior_c);
@@ -462,43 +473,126 @@ derivative::derivative(int dir,
 }
 
 template <typename Op>
-    requires(!Scalar<Op>)
-void derivative::operator()(scalar_view u, scalar_span du, Op op) const
+    requires std::invocable<Op, real&, real>
+void derivative::apply_kernels(scalar_view u, scalar_span du, Op op) const
 {
-    using namespace si;
-
     // update points in R
-    Bfx(get<D>(u), get<Rx>(du));
-    Bfy(get<D>(u), get<Ry>(du));
-    Bfz(get<D>(u), get<Rz>(du));
+    Bfx(u.D, du.Rx);
+    Bfy(u.D, du.Ry);
+    Bfz(u.D, du.Rz);
 
-    Brx(get<Rx>(u), get<Rx>(du));
-    Bry(get<Ry>(u), get<Ry>(du));
-    Brz(get<Rz>(u), get<Rz>(du));
+    Brx(u.Rx, du.Rx);
+    Bry(u.Ry, du.Ry);
+    Brz(u.Rz, du.Rz);
 
     // update fluid domain
-    O(get<D>(u), get<D>(du), op);
-    // This is ugly
+    O(u.D, du.D, op);
     switch (dir) {
     case 0:
-        B(get<Rx>(u), get<D>(du));
+        B(u.Rx, du.D);
         break;
     case 1:
-        B(get<Ry>(u), get<D>(du));
+        B(u.Ry, du.D);
         break;
     default:
-        B(get<Rz>(u), get<D>(du));
+        B(u.Rz, du.D);
     }
 }
 
 template <typename Op>
-    requires(!Scalar<Op>)
+    requires std::invocable<Op, real&, real>
+void derivative::operator()(scalar_view u, scalar_span du, Op op) const
+{
+    Kokkos::Profiling::ScopedRegion region("derivative::operator()");
+    apply_kernels(u, du, op);
+    Kokkos::fence("derivative::operator() complete");
+}
+
+template <typename Op>
+    requires std::invocable<Op, real&, real>
 void derivative::operator()(scalar_view u, scalar_view nu, scalar_span du, Op op) const
 {
-    using namespace si;
+    Kokkos::Profiling::ScopedRegion region("derivative::operator()");
+    apply_kernels(u, du, op);
+    N(nu.D, du.D);
+    Kokkos::fence("derivative::operator() with Neumann complete");
+}
 
-    (*this)(u, du, op);
-    N(get<D>(nu), get<D>(du));
+template <typename Op>
+    requires std::invocable<Op, real&, real>
+void derivative::build_graph(scalar_view u, scalar_span du, Op op)
+{
+    const real* u_D = u.D.data();
+    const real* u_Rx = u.Rx.data();
+    const real* u_Ry = u.Ry.data();
+    const real* u_Rz = u.Rz.data();
+    real* du_D = du.D.data();
+    real* du_Rx = du.Rx.data();
+    real* du_Ry = du.Ry.data();
+    real* du_Rz = du.Rz.data();
+    const real* b_src = (dir == 0) ? u_Rx : (dir == 1) ? u_Ry : u_Rz;
+
+    graph_ = Kokkos::Experimental::create_graph<execution_space>(
+        [&](auto root) {
+            // R-space chains (3 independent pairs)
+            auto bfx = Bfx.graph_node(root, u_D, du_Rx);
+            Brx.graph_node(bfx, u_Rx, du_Rx);
+
+            auto bfy = Bfy.graph_node(root, u_D, du_Ry);
+            Bry.graph_node(bfy, u_Ry, du_Ry);
+
+            auto bfz = Bfz.graph_node(root, u_D, du_Rz);
+            Brz.graph_node(bfz, u_Rz, du_Rz);
+
+            // D-space chain
+            auto o = O.graph_node(root, u_D, du_D, op);
+            B.graph_node(o, b_src, du_D);
+        });
+
+    graph_->instantiate();
+}
+
+template <typename Op>
+    requires std::invocable<Op, real&, real>
+void derivative::build_graph(scalar_view u, scalar_view nu, scalar_span du, Op op)
+{
+    const real* u_D = u.D.data();
+    const real* u_Rx = u.Rx.data();
+    const real* u_Ry = u.Ry.data();
+    const real* u_Rz = u.Rz.data();
+    const real* nu_D = nu.D.data();
+    real* du_D = du.D.data();
+    real* du_Rx = du.Rx.data();
+    real* du_Ry = du.Ry.data();
+    real* du_Rz = du.Rz.data();
+    const real* b_src = (dir == 0) ? u_Rx : (dir == 1) ? u_Ry : u_Rz;
+
+    graph_ = Kokkos::Experimental::create_graph<execution_space>(
+        [&](auto root) {
+            // R-space chains (3 independent pairs)
+            auto bfx = Bfx.graph_node(root, u_D, du_Rx);
+            Brx.graph_node(bfx, u_Rx, du_Rx);
+
+            auto bfy = Bfy.graph_node(root, u_D, du_Ry);
+            Bry.graph_node(bfy, u_Ry, du_Ry);
+
+            auto bfz = Bfz.graph_node(root, u_D, du_Rz);
+            Brz.graph_node(bfz, u_Rz, du_Rz);
+
+            // D-space chain with Neumann
+            auto o = O.graph_node(root, u_D, du_D, op);
+            auto b = B.graph_node(o, b_src, du_D);
+            N.graph_node(b, nu_D, du_D);
+        });
+
+    graph_->instantiate();
+}
+
+void derivative::submit_graph()
+{
+    Kokkos::Profiling::ScopedRegion region("derivative::submit_graph()");
+    graph_->submit();
+    Kokkos::fence("derivative::submit_graph() complete");
 }
 
 template void derivative::operator()<eq_t>(scalar_view, scalar_span, eq_t) const;
@@ -511,5 +605,10 @@ derivative::operator()<eq_t>(scalar_view, scalar_view, scalar_span, eq_t) const;
 
 template void
 derivative::operator()<plus_eq_t>(scalar_view, scalar_view, scalar_span, plus_eq_t) const;
+
+template void derivative::build_graph<eq_t>(scalar_view, scalar_span, eq_t);
+template void derivative::build_graph<plus_eq_t>(scalar_view, scalar_span, plus_eq_t);
+template void derivative::build_graph<eq_t>(scalar_view, scalar_view, scalar_span, eq_t);
+template void derivative::build_graph<plus_eq_t>(scalar_view, scalar_view, scalar_span, plus_eq_t);
 
 } // namespace ccs

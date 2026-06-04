@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 
 project(shoccs LANGUAGES CXX)
 
@@ -23,7 +23,6 @@ include(CTest)
 
 find_package(sol2 REQUIRED)
 find_package(fmt 8 REQUIRED)
-find_package(range-v3 REQUIRED)
 find_package(pugixml 1.10 REQUIRED)
 find_package(spdlog 1.9 REQUIRED)
 find_package(cxxopts REQUIRED)
@@ -32,7 +31,12 @@ if (BUILD_TESTING)
 endif()
 find_package(Boost REQUIRED) # for header only mp11
 find_package(lapackpp REQUIRED)
+find_package(Kokkos REQUIRED)
 
+option(BUILD_BENCHMARKS "Build Google Benchmark suite" OFF)
+if (BUILD_BENCHMARKS)
+  find_package(benchmark REQUIRED)
+endif()
 
 include(GNUInstallDirs)
 
@@ -57,9 +61,11 @@ if(NOT APPLE)
   set(CMAKE_INSTALL_RPATH $ORIGIN)
 endif()
 
-add_subdirectory(external)
 add_subdirectory(src)
 add_subdirectory(docs)
+if (BUILD_BENCHMARKS)
+  add_subdirectory(benchmarks)
+endif()
 
 
 install(
@@ -77,6 +83,7 @@ install(
       shoccs-integrate
       shoccs-stencils
       shoccs-utils
+      shoccs-random
     EXPORT shoccs
 )
 install(EXPORT shoccs

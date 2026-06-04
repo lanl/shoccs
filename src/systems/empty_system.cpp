@@ -6,23 +6,8 @@
 
 namespace ccs::systems
 {
-void empty::operator()(field&, const step_controller&) {}
-
-system_stats empty::stats(const field&, const field&, const step_controller&) const
-{
-    return {};
-}
 
 bool empty::valid(const system_stats&) const { return false; }
-
-real empty::timestep_size(const field&, const step_controller&) const
-{
-    return std::numeric_limits<real>::max();
-}
-
-void empty::rhs(field_view, real, field_span) {}
-
-void empty::update_boundary(field_span, real) {}
 
 void empty::log(const system_stats&, const step_controller&)
 {
@@ -31,8 +16,33 @@ void empty::log(const system_stats&, const step_controller&)
 
 real3 empty::summary(const system_stats&) const { return {}; }
 
-bool empty::write(field_io&, field_view, const step_controller&, real) { return false; }
-
 system_size empty::size() const { return {}; }
+
+void empty::rhs(const sim_registry&, field_ref,
+                sim_registry&, field_ref, real)
+{
+}
+
+void empty::update_boundary(sim_registry&, field_ref, real) {}
+
+real empty::timestep_size(const sim_registry&, field_ref,
+                          const step_controller&) const
+{
+    return std::numeric_limits<real>::max();
+}
+
+system_stats empty::stats(const sim_registry&, field_ref,
+                           field_ref, const step_controller&) const
+{
+    return {};
+}
+
+void empty::initialize(sim_registry&, field_ref, const step_controller&) {}
+
+bool empty::write(field_io&, const sim_registry&, field_ref,
+                  const step_controller&, real)
+{
+    return false;
+}
 
 } // namespace ccs::systems

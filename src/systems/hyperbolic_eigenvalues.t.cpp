@@ -1,12 +1,22 @@
-#include <catch2/catch_approx.hpp>
-#include <catch2/catch_test_macros.hpp>
-
-#include "io/logging.hpp"
-#include <sol/sol.hpp>
-
 #include "system.hpp"
 
+#include "fields/field_registry.hpp"
+#include "io/logging.hpp"
+
+#include <Kokkos_Core.hpp>
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_session.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <sol/sol.hpp>
+
 using namespace ccs;
+
+// Custom main: Kokkos must be initialized before any test allocates Views.
+int main(int argc, char* argv[])
+{
+    Kokkos::ScopeGuard kokkos(argc, argv);
+    return Catch::Session().run(argc, argv);
+}
 
 TEST_CASE("hyperbolic_eigenvalues")
 {
@@ -49,10 +59,13 @@ TEST_CASE("hyperbolic_eigenvalues")
     auto& sys = *sys_opt;
     step_controller step{};
 
-    // Initialize array with system and ensure zero error
-    field f{sys(step)};
+    // Set up registry — hyperbolic_eigenvalues has size {0, 0, ss},
+    // so no scalars/vectors are allocated. field_refs keep default slot indices.
+    sim_registry reg;
+    field_ref u0_ref{0};
+    sys.initialize(reg, u0_ref, step);
 
     // maximum eigenvalue is very close to 0
-    auto st = sys.stats(f, f, step);
+    auto st = sys.stats(reg, u0_ref, u0_ref, step);
     REQUIRE(st.stats[0] + 1.0 == Catch::Approx(1.0));
 }

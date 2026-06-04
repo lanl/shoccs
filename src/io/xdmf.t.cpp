@@ -14,7 +14,7 @@ TEST_CASE("header")
 {
 
     using U = std::span<const mesh_object_info>;
-    using T = tuple<U, U, U>;
+    using T = std::array<U, 3>;
     std::vector<std::string> var_names{"U", "V"};
     std::vector<std::string> file_names{"U.00000", "V.00000"};
     auto ix = index_extents{.extents = {3, 4, 5}};
@@ -24,7 +24,7 @@ TEST_CASE("header")
 
     auto writer = xdmf{tmp, ix, dom};
     T t{};
-    REQUIRE(rs::size(get<0>(t)) == 0);
+    REQUIRE(std::get<0>(t).size() == 0);
 
     writer.write(0, 0.0, var_names, file_names, T{}, logger);
 

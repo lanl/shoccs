@@ -1,4 +1,3 @@
-#include <iomanip>
 #include <iostream>
 #include <pugixml.hpp>
 #include <string>
@@ -9,7 +8,7 @@
 #include "real3_operators.hpp"
 #include "xdmf.hpp"
 
-#include <range/v3/view/zip.hpp>
+#include "fields/lazy_views.hpp"
 
 using namespace fmt::literals;
 
@@ -25,9 +24,7 @@ void append_xdmf(pugi::xml_document& doc,
                  std::span<const std::string> var_names,
                  std::span<const std::string> file_names,
                  const std::string& dimensions,
-                 tuple<std::span<const mesh_object_info>,
-                       std::span<const mesh_object_info>,
-                       std::span<const mesh_object_info>> t,
+                 std::array<std::span<const mesh_object_info>, 3> t,
                  unsigned long f_sz)
 {
     // Get first grid node
@@ -48,7 +45,7 @@ void append_xdmf(pugi::xml_document& doc,
                         int topo_idx,
                         const std::string& dims,
                         unsigned long offset) {
-        auto sz = rs::size(rng);
+        auto sz = std::ranges::size(rng);
         if (sz == 0) return offset;
 
         auto grid = grid_col.append_child("Grid");
@@ -66,7 +63,9 @@ void append_xdmf(pugi::xml_document& doc,
         geom.append_attribute("Reference") =
             fmt::format("/Xdmf/Domain/Geometry[{}]", topo_idx).c_str();
 
-        for (auto&& [v, f] : vs::zip(var_names, file_names)) {
+        for (size_t i = 0; i < var_names.size(); ++i) {
+            auto& v = var_names[i];
+            auto& f = file_names[i];
             auto attr = grid.append_child("Attribute");
             attr.append_attribute("Name") = v.c_str();
             auto item = attr.append_child("DataItem");
@@ -81,18 +80,16 @@ void append_xdmf(pugi::xml_document& doc,
         return offset + sz * sizeof(real);
     };
 
-    auto offset = sub_grid(vs::repeat_n(0, f_sz), "F", 1, dimensions, 0);
+    auto offset = sub_grid(ccs::repeat_n(0, f_sz), "F", 1, dimensions, 0);
     auto&& [x, y, z] = t;
-    offset = sub_grid(x, "RX", 2, fmt::format("{} 1", rs::size(x)), offset);
-    offset = sub_grid(y, "RY", 3, fmt::format("{} 1", rs::size(y)), offset);
-    offset = sub_grid(z, "RZ", 4, fmt::format("{} 1", rs::size(z)), offset);
+    offset = sub_grid(x, "RX", 2, fmt::format("{} 1", x.size()), offset);
+    offset = sub_grid(y, "RY", 3, fmt::format("{} 1", y.size()), offset);
+    offset = sub_grid(z, "RZ", 4, fmt::format("{} 1", z.size()), offset);
 }
 
 std::string header(const int3& i,
                    const domain_extents& d,
-                   tuple<std::span<const mesh_object_info>,
-                         std::span<const mesh_object_info>,
-                         std::span<const mesh_object_info>> t)
+                   std::array<std::span<const mesh_object_info>, 3> t)
 {
     auto&& [min, max] = d;
     real3 dxyz = (max - min) / clamp_lo(i - 1.0, 1.0);
@@ -125,9 +122,9 @@ std::string header(const int3& i,
                                      "dims"_a = fmt::join(i.begin(), i.end(), " "),
                                      "origin"_a = fmt::join(min.begin(), min.end(), " "),
                                      "dxyz"_a = fmt::join(dxyz.begin(), dxyz.end(), " "),
-                                     "rx"_a = rs::size(get<0>(t)),
-                                     "ry"_a = rs::size(get<1>(t)),
-                                     "rz"_a = rs::size(get<2>(t)));
+                                     "rx"_a = get<0>(t).size(),
+                                     "ry"_a = get<1>(t).size(),
+                                     "rz"_a = get<2>(t).size());
     return header;
 }
 } // namespace
@@ -139,9 +136,7 @@ void xdmf::write(int grid_number,
                  real time,
                  std::span<const std::string> var_names,
                  std::span<const std::string> file_names,
-                 tuple<std::span<const mesh_object_info>,
-                       std::span<const mesh_object_info>,
-                       std::span<const mesh_object_info>> tp,
+                 std::array<std::span<const mesh_object_info>, 3> tp,
                  const logs& logger) const
 {
 

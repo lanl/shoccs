@@ -5,10 +5,21 @@
 #include "inner_block.hpp"
 
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
-#include <range/v3/all.hpp>
+#include <algorithm>
+#include <ranges>
+
+#include <Kokkos_Core.hpp>
+
+// Custom main: Kokkos must be initialized before View construction.
+int main(int argc, char* argv[])
+{
+    Kokkos::ScopeGuard kokkos(argc, argv);
+    return Catch::Session().run(argc, argv);
+}
 
 using namespace ccs;
 using Catch::Matchers::Approx;
@@ -16,7 +27,7 @@ using T = std::vector<real>;
 
 TEST_CASE("simple dense")
 {
-    T imat = vs::iota(25, 50) | rs::to<T>();
+    T imat = []{ auto r = std::views::iota(25, 50); return T(r.begin(), r.end()); }();
 
     const auto mat = matrix::dense{5, 5, imat};
 
@@ -27,13 +38,13 @@ TEST_CASE("simple dense")
 
     mat.visit(u);
 
-    REQUIRE(rs::equal(imat, u.matrix()));
+    REQUIRE(std::ranges::equal(imat, u.matrix()));
 }
 
 TEST_CASE("inner block")
 {
 
-    T imat = vs::iota(25, 50) | rs::to<T>();
+    T imat = []{ auto r = std::views::iota(25, 50); return T(r.begin(), r.end()); }();
     T cmat{1, -2, 1};
 
     auto x = matrix::inner_block{11,
@@ -61,7 +72,7 @@ TEST_CASE("inner block")
                0,  0,  0,  0,  0,  1,  -2, 1,  0,  /* row 6 */
                0,  0,  0,  0,  0,  0,  25, 26, 27, /* row 7 */
                0,  0,  0,  0,  0,  0,  29, 30, 31};
-    REQUIRE(rs::equal(expected, u.matrix()));
+    REQUIRE(std::ranges::equal(expected, u.matrix()));
 }
 
 TEST_CASE("csr + inner block")
@@ -72,7 +83,7 @@ TEST_CASE("csr + inner block")
     auto v = matrix::unit_stride_visitor(
         nxyz, std::vector<bool>{true, false}, std::vector<bool>{}, std::vector<bool>{});
 
-    T imat = vs::iota(25, 50) | rs::to<T>();
+    T imat = []{ auto r = std::views::iota(25, 50); return T(r.begin(), r.end()); }();
     T cmat{1, -2, 1};
 
     auto x = matrix::inner_block{8,
@@ -137,5 +148,5 @@ TEST_CASE("csr + inner block")
                0,  0,  0,  0,  0,  28, 29, 30, 40, /* row 7 */
                0,  0,  0,  0,  0,  0,  50, 60, 70};
 
-    REQUIRE(rs::equal(expected, u.matrix()));
+    REQUIRE(std::ranges::equal(expected, u.matrix()));
 }

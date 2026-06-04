@@ -1,12 +1,6 @@
 #include "stencil.hpp"
 
-#include <range/v3/algorithm/copy.hpp>
-#include <range/v3/algorithm/fill.hpp>
-#include <range/v3/algorithm/reverse.hpp>
-#include <range/v3/view/concat.hpp>
-#include <range/v3/view/repeat.hpp>
-#include <range/v3/view/take.hpp>
-#include <range/v3/view/transform.hpp>
+#include <algorithm>
 
 #include <cmath>
 
@@ -26,8 +20,7 @@ struct E6u_1 {
     E6u_1() = default;
     E6u_1(std::span<const real> a)
     {
-        rs::copy(vs::concat(a, vs::repeat(0.0)) | vs::take(alpha.size()),
-                 rs::begin(alpha));
+        copy_zero_padded(a, alpha);
     }
 
     info query_max() const { return {P, R, T, X}; }
@@ -143,7 +136,7 @@ struct E6u_1 {
         for (auto&& v : c) v /= h;
         if (right) {
             for (auto&& v : c) v *= -1;
-            ranges::reverse(c);
+            std::ranges::reverse(c);
         }
 
         return c;
@@ -151,14 +144,6 @@ struct E6u_1 {
 
     std::span<const real> nbs_dirichlet(real h, real, std::span<real> c, bool right) const
     {
-        // c[0] = (60 * alpha[0] - 137) / 60;
-        // c[1] = 5 - 6 * alpha[0];
-        // c[2] = 15 * alpha[0] - 5;
-        // c[3] = -(60 * alpha[0] - 10) / 3;
-        // c[4] = (60 * alpha[0] - 5) / 4;
-        // c[5] = -(30 * alpha[0] - 1) / 5;
-        // c[6] = alpha[0];
-        // c[7] = 0;
         c[0] = (5 * alpha[1] - 1) / 5;
         c[1] = -(72 * alpha[1] + 13) / 12;
         c[2] = 15 * alpha[1] + 2;
@@ -210,7 +195,7 @@ struct E6u_1 {
 
         if (right) {
             for (auto&& v : c) v *= -1;
-            ranges::reverse(c);
+            std::ranges::reverse(c);
         }
 
         return c;

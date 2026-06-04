@@ -6,60 +6,9 @@
 namespace ccs
 {
 
-std::function<void(field&)> system::operator()(const step_controller& step)
-{
-    return std::visit(
-        [&step](auto&& sys) {
-            return std::function<void(field&)>{[&step, &sys](field& f) {
-                // ensure the proper size for f
-                if (ssize(f) != sys.size()) { f = field{sys.size()}; }
-                sys(f, step);
-            }};
-        },
-        v);
-}
-
-std::function<void(field_span)> system::rhs(field_view field, real time)
-{
-    return std::visit(
-        [field, time](auto&& current_system) {
-            return std::function<void(field_span)>{
-                [&current_system, field, time](field_span view) {
-                    current_system.rhs(field, time, view);
-                }};
-        },
-        v);
-}
-
-void system::update_boundary(field_span view, real time)
-{
-    std::visit([view, time](
-                   auto&& current_system) { current_system.update_boundary(view, time); },
-               v);
-}
-
-std::optional<real> system::timestep_size(const field& field,
-                                          const step_controller& controller) const
-{
-    const auto predicted_dt = std::visit(
-        [&field, &controller](auto&& current_system) {
-            return current_system.timestep_size(field, controller);
-        },
-        v);
-    // the controller may adjust or invalidate this timestep size
-    return controller.check_timestep_size(predicted_dt);
-}
-
 bool system::valid(const system_stats& stats) const
 {
     return std::visit([&stats](auto&& sys) { return sys.valid(stats); }, v);
-}
-
-system_stats
-system::stats(const field& u0, const field& u1, const step_controller& controller) const
-{
-    return std::visit(
-        [&u0, &u1, &controller](auto&& sys) { return sys.stats(u0, u1, controller); }, v);
 }
 
 void system::log(const system_stats& stats, const step_controller& controller)
@@ -76,15 +25,79 @@ real3 system::summary(const system_stats& stats) const
     return std::visit([&stats](auto&& s) { return s.summary(stats); }, v);
 }
 
-bool system::write(field_io& io, field_view f, const step_controller& c, real dt)
-{
-    return std::visit(
-        [&io, f = f, &c, dt = dt](auto&& s) { return s.write(io, f, c, dt); }, v);
-}
-
 system_size system::size() const
 {
     return std::visit([](auto&& current_system) { return current_system.size(); }, v);
+}
+
+// Registry-based dispatch methods
+
+void system::rhs(const sim_registry& creg, field_ref input,
+                 sim_registry& reg, field_ref output, real time)
+{
+    std::visit([&](auto&& s) { s.rhs(creg, input, reg, output, time); }, v);
+}
+
+void system::build_rhs_graph(const sim_registry& creg, field_ref input,
+                             sim_registry& reg, field_ref output)
+{
+    std::visit([&](auto&& s) {
+        if constexpr (requires {
+            s.build_rhs_graph(std::declval<scalar_view>(),
+                              std::declval<scalar_span>());
+        }) {
+            constexpr auto sh = scalar_handle{0};
+            auto u = extract_scalar_view(creg, input, sh);
+            auto du = extract_scalar_span(reg, output, sh);
+            s.build_rhs_graph(u, du);
+        }
+    }, v);
+}
+
+void system::submit_rhs_graph(const sim_registry& creg, field_ref input,
+                              sim_registry& reg, field_ref output, real time)
+{
+    std::visit([&](auto&& s) {
+        if constexpr (requires { s.submit_rhs_graph(); }) {
+            if constexpr (requires { s.fill_source(time); })
+                s.fill_source(time);
+            s.submit_rhs_graph();
+        } else {
+            s.rhs(creg, input, reg, output, time);
+        }
+    }, v);
+}
+
+void system::update_boundary(sim_registry& reg, field_ref ref, real time)
+{
+    std::visit([&](auto&& s) { s.update_boundary(reg, ref, time); }, v);
+}
+
+system_stats system::stats(const sim_registry& reg, field_ref u0,
+                           field_ref u1, const step_controller& ctrl) const
+{
+    return std::visit(
+        [&](auto&& s) { return s.stats(reg, u0, u1, ctrl); }, v);
+}
+
+void system::initialize(sim_registry& reg, field_ref ref, const step_controller& ctrl)
+{
+    std::visit([&](auto&& s) { s.initialize(reg, ref, ctrl); }, v);
+}
+
+bool system::write(field_io& io, const sim_registry& reg, field_ref ref,
+                   const step_controller& c, real dt)
+{
+    return std::visit(
+        [&](auto&& s) { return s.write(io, reg, ref, c, dt); }, v);
+}
+
+std::optional<real> system::timestep_size(const sim_registry& reg, field_ref u,
+                                          const step_controller& ctrl) const
+{
+    const auto predicted_dt = std::visit(
+        [&](auto&& s) { return s.timestep_size(reg, u, ctrl); }, v);
+    return ctrl.check_timestep_size(predicted_dt);
 }
 
 std::optional<system> system::from_lua(const sol::table& tbl, const logs& logger)

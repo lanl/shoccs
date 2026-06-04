@@ -6,8 +6,7 @@
 
 #include <string>
 
-#include <range/v3/action/transform.hpp>
-
+#include <algorithm>
 #include <cctype>
 
 using namespace std::string_literals;
@@ -40,8 +39,9 @@ manufactured_solution::from_lua(const sol::table& tbl, int dims, const logs& log
         return std::nullopt;
     }
 
-    std::string ms_t = ms["type"].get_or(""s) |
-                       rs::action::transform([](auto c) { return std::tolower(c); });
+    std::string ms_t = ms["type"].get_or(""s);
+    std::transform(ms_t.begin(), ms_t.end(), ms_t.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
 
     if (ms_t == "gaussian") {
         logger(spdlog::level::info, "building gaussian manufactured solution");

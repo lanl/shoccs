@@ -1,5 +1,6 @@
 #include "stencil.hpp"
 
+#include <fmt/ranges.h>
 #include <sol/sol.hpp>
 
 namespace ccs::stencils
@@ -44,6 +45,9 @@ std::optional<stencil> stencil::from_lua(const sol::table& tbl, const logs& logg
         if (type == "E2") {
             logger(spdlog::level::info, "E2 first scheme chosen");
             return make_E2_1(alpha);
+        } else if (type == "E4") {
+            logger(spdlog::level::info, "E4 cut-cell first scheme chosen");
+            return make_E4_1(alpha);
         } else if (type == "E4u") {
             logger(spdlog::level::info, "E4 uniform first scheme chosen");
             return make_E4u_1(alpha);
@@ -53,6 +57,24 @@ std::optional<stencil> stencil::from_lua(const sol::table& tbl, const logs& logg
         } else if (type == "E8u") {
             logger(spdlog::level::info, "E8 uniform first scheme chosen");
             return make_E8u_1(alpha);
+        } else if (type == "tension_E4u") {
+            real sigma = m["sigma"].get_or(3.0);
+            logger(spdlog::level::info,
+                   "tension_E4u first scheme chosen (sigma = {})",
+                   sigma);
+            return make_tension_E4u_1(sigma);
+        } else if (type == "gaussian_E4u") {
+            real epsilon = m["epsilon"].get_or(0.9);
+            logger(spdlog::level::info,
+                   "gaussian_E4u first scheme chosen (epsilon = {})",
+                   epsilon);
+            return make_gaussian_E4u_1(epsilon);
+        } else if (type == "multiquadric_E4u") {
+            real epsilon = m["epsilon"].get_or(1.0);
+            logger(spdlog::level::info,
+                   "multiquadric_E4u first scheme chosen (epsilon = {})",
+                   epsilon);
+            return make_multiquadric_E4u_1(epsilon);
         }
         if (type == "E2-poly") {
             logger(spdlog::level::info, "E2-poly scheme chosen");

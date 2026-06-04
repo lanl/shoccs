@@ -38,7 +38,13 @@ public:
     matrix_base& stride(integer) = delete;
 
     template <typename Op = eq_t>
-    void operator()(std::span<const real> x, std::span<real> b, Op op = {}) const;
+    void operator()(std::span<const real> x,
+                    std::span<real> b,
+                    Op op = {}) const;
+
+    const dense& left() const { return left_boundary; }
+    const circulant& interior_circ() const { return interior; }
+    const dense& right() const { return right_boundary; }
 
     void visit(visitor& v) const
     {

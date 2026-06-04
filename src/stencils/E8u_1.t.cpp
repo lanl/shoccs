@@ -6,8 +6,6 @@
 
 #include <vector>
 
-#include <range/v3/view/zip.hpp>
-
 #include <sol/sol.hpp>
 #include <spdlog/spdlog.h>
 

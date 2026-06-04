@@ -1,3 +1,4 @@
+#include <Kokkos_Core.hpp>
 #include <cxxopts.hpp>
 #include <iostream>
 #include <sol/sol.hpp>
@@ -10,6 +11,7 @@
 
 int main(int argc, char* argv[])
 {
+    Kokkos::ScopeGuard kokkos(argc, argv);
 
     cxxopts::Options options(
         "shoccs", "Run the Stable High-Order Cut-Cell Solver with a given input");

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fields/field.hpp"
+#include "fields/field_registry.hpp"
 
 namespace ccs
 {
@@ -13,14 +13,13 @@ namespace integrators
 
 class euler
 {
-    field system_rhs;
-
 public:
     euler() = default;
 
-    void ensure_size(system_size);
-
-    void operator()(system&, const field&, field_span, const step_controller&, real);
+    void operator()(system& sys, sim_registry& reg,
+                    field_ref u0, field_ref output,
+                    field_ref system_rhs_ref,
+                    const step_controller& ctrl, real dt);
 };
 } // namespace integrators
 } // namespace ccs

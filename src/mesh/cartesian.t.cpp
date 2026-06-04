@@ -3,10 +3,20 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include <range/v3/view/single.hpp>
 
 #include <sol/sol.hpp>
 #include <spdlog/spdlog.h>
+
+#include "fields/lazy_views.hpp"
+#include <ranges>
+#include <span>
+
+// Verify cartesian_product_view satisfies standard range concepts (7.1e fix)
+using cpv_t = ccs::cartesian_product_view<std::span<const double>,
+                                          std::span<const double>,
+                                          std::span<const double>>;
+static_assert(std::ranges::input_range<cpv_t>);
+static_assert(std::ranges::forward_range<cpv_t>);
 
 using namespace ccs;
 

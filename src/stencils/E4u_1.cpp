@@ -1,12 +1,6 @@
 #include "stencil.hpp"
 
-#include <range/v3/algorithm/copy.hpp>
-#include <range/v3/algorithm/fill.hpp>
-#include <range/v3/algorithm/reverse.hpp>
-#include <range/v3/view/concat.hpp>
-#include <range/v3/view/repeat.hpp>
-#include <range/v3/view/take.hpp>
-#include <range/v3/view/transform.hpp>
+#include <algorithm>
 
 #include <cmath>
 
@@ -26,8 +20,7 @@ struct E4u_1 {
     E4u_1() = default;
     E4u_1(std::span<const real> a)
     {
-        rs::copy(vs::concat(a, vs::repeat(0.0)) | vs::take(alpha.size()),
-                 rs::begin(alpha));
+        copy_zero_padded(a, alpha);
     }
 
     info query_max() const { return {P, R, T, X}; }
@@ -103,7 +96,7 @@ struct E4u_1 {
         for (auto&& v : c) v /= h;
         if (right) {
             for (auto&& v : c) v *= -1;
-            ranges::reverse(c);
+            std::ranges::reverse(c);
         }
 
         return c;
@@ -126,7 +119,7 @@ struct E4u_1 {
 
         if (right) {
             for (auto&& v : c) v *= -1;
-            ranges::reverse(c);
+            std::ranges::reverse(c);
         }
 
         return c;

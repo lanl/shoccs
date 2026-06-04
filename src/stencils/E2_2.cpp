@@ -1,7 +1,6 @@
 #include "stencil.hpp"
 
-#include <range/v3/algorithm/fill.hpp>
-#include <range/v3/algorithm/reverse.hpp>
+#include <algorithm>
 
 #include <cassert>
 
@@ -131,7 +130,7 @@ struct E2_2 {
         c[7] = (2 + -2 * t6) * 1.0 / (2 + psi);
         for (auto&& v : c) v /= (h * h);
 
-        if (right) ranges::reverse(c);
+        if (right) std::ranges::reverse(c);
 
         return c;
     }
@@ -140,25 +139,14 @@ struct E2_2 {
     nbs_dirichlet(real h, real psi, std::span<real> c, bool right) const
     {
         real t6 = psi * psi;
-        // real t8 = psi * psi * psi;
-        // real t9 = -1 * t8;
         real t5 = -2 * psi;
-        // c[0] = psi;
-        // c[1] = (2 + t5 + -3 * t6 + t9) * 0.5;
-        // c[2] = -2 + 2 * t6 + t8;
-        // c[3] = (2 + -1 * t6 + t9) * 0.5;
         c[0] = (2 + 4 * psi) * 1.0 / (2 + 3 * psi + t6);
         c[1] = t5;
         c[2] = (-2 + 4 * t6) * 1.0 / (1 + psi);
         c[3] = (2 + -2 * t6) * 1.0 / (2 + psi);
         for (auto&& v : c) v /= (h * h);
 
-        if (right) ranges::reverse(c);
-        // nbs_floating(h, psi, c, right);
-        // if (right)
-        //     ranges::fill(c.subspan((R - 1) * T), real{});
-        // else
-        //     ranges::fill(c.subspan(0, T), real{});
+        if (right) std::ranges::reverse(c);
         return c;
     }
 
@@ -185,8 +173,8 @@ struct E2_2 {
         for (auto&& v : x) v /= h;
 
         if (right) {
-            ranges::reverse(c);
-            ranges::reverse(x);
+            std::ranges::reverse(c);
+            std::ranges::reverse(x);
             for (auto&& v : x) v *= -1;
         }
         return c;

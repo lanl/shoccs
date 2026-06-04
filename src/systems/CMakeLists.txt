@@ -17,5 +17,20 @@ target_link_libraries(shoccs-system
     sol2::sol2 lua spdlog::spdlog fmt::fmt)
 
 
-add_unit_test(heat "systems" shoccs-system)
-add_unit_test(hyperbolic_eigenvalues "systems" shoccs-system)
+if (BUILD_TESTING)
+  add_executable(t-heat heat.t.cpp)
+  target_link_libraries(t-heat Catch2::Catch2 shoccs-system Kokkos::kokkos)
+  add_test(NAME t-heat COMMAND t-heat)
+  set_tests_properties(t-heat PROPERTIES LABELS "systems")
+
+  add_executable(t-scalar_wave scalar_wave.t.cpp)
+  target_link_libraries(t-scalar_wave Catch2::Catch2 shoccs-system Kokkos::kokkos)
+  add_test(NAME t-scalar_wave COMMAND t-scalar_wave)
+  set_tests_properties(t-scalar_wave PROPERTIES LABELS "systems")
+
+  add_executable(t-hyperbolic_eigenvalues hyperbolic_eigenvalues.t.cpp)
+  target_link_libraries(t-hyperbolic_eigenvalues Catch2::Catch2 shoccs-system Kokkos::kokkos)
+  add_test(NAME t-hyperbolic_eigenvalues COMMAND t-hyperbolic_eigenvalues)
+  set_tests_properties(t-hyperbolic_eigenvalues PROPERTIES LABELS "systems")
+
+endif()

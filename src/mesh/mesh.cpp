@@ -1,5 +1,6 @@
 #include "mesh.hpp"
 
+#include <fmt/ranges.h>
 #include <sol/sol.hpp>
 
 #include <spdlog/sinks/basic_file_sink.h>
@@ -25,10 +26,6 @@ constexpr bool same_plane(const int3& x, const int3& y)
     return x[J] == y[J] && x[K] == y[K];
 }
 
-// constexpr auto offset = [](int3 n) {
-//     return [n](int3 ijk) { return ijk[0] * n[1] * n[2] + ijk[1] * n[2] + ijk[2]; };
-// };
-
 template <auto I>
 void init_line(std::vector<line>& v, int3 extents, std::span<const mesh_object_info> r)
 {
@@ -37,14 +34,12 @@ void init_line(std::vector<line>& v, int3 extents, std::span<const mesh_object_i
 
     constexpr auto S = index::dir<I>::slow;
     constexpr auto F = index::dir<I>::fast;
-    // auto off = offset(extents);
-
     integer ns = extents[S];
     integer nf = extents[F];
 
     v.reserve(ns * nf + r.size());
-    auto first = rs::begin(r);
-    auto last = rs::end(r);
+    auto first = std::ranges::begin(r);
+    auto last = std::ranges::end(r);
 
     int3 left{};
     int3 right{};
@@ -64,20 +59,18 @@ void init_line(std::vector<line>& v, int3 extents, std::span<const mesh_object_i
                 if (first->ray_outside) {
                     // set the `right` point and add both to line
                     v.emplace_back(
-                        // off(left_boundary->mesh_coordinate),
                         index::stride<I>(extents),
                         *left_boundary,
                         boundary{.mesh_coordinate = first->solid_coord,
                                  .object = object_boundary{
-                                     first - rs::begin(r), first->shape_id, first->psi}});
-                    // invalidate the boundary point to indicate it was consumed
+                                     first - std::ranges::begin(r), first->shape_id, first->psi}});
                     left_boundary.reset();
                 } else {
                     // set the left_boundary and allow the next loop to process
                     left_boundary =
                         boundary{.mesh_coordinate = first->solid_coord,
                                  .object = object_boundary{
-                                     first - rs::begin(r), first->shape_id, first->psi}};
+                                     first - std::ranges::begin(r), first->shape_id, first->psi}};
                 }
                 ++first;
             }
@@ -85,7 +78,6 @@ void init_line(std::vector<line>& v, int3 extents, std::span<const mesh_object_i
             // consume the left boundary
             if (left_boundary) {
                 v.emplace_back(
-                    // off(left_boundary->mesh_coordinate),
                     index::stride<I>(extents),
                     *left_boundary,
                     boundary{.mesh_coordinate = right, .object = std::nullopt});
@@ -132,17 +124,7 @@ mesh::mesh(const index_extents& extents,
            const logs& build_logger)
     : cart{extents.extents, bounds.min, bounds.max},
       geometry{shapes, cart},
-      logger{build_logger, "geometry", "geometry.csv"},
-      xmin{sel::xmin(extents)},
-      xmax{sel::xmax(extents)},
-      ymin{sel::ymin(extents)},
-      ymax{sel::ymax(extents)},
-      zmin{sel::zmin(extents)},
-      zmax{sel::zmax(extents)},
-      xyz{cart.domain(), geometry.domain()},
-      vxyz{tuple{tuple{cart.domain(), geometry.domain()},
-                 tuple{cart.domain(), geometry.domain()},
-                 tuple{cart.domain(), geometry.domain()}}}
+      logger{build_logger, "geometry", "geometry.csv"}
 
 {
     init_line<0>(lines_[0], cart.extents(), geometry.R(0));
@@ -152,7 +134,7 @@ mesh::mesh(const index_extents& extents,
     // setup fluid selector
     int i = extents[2] > 1 ? 2 : extents[1] > 1 ? 1 : 0;
     init_slices(fluid_slices, lines_[i], extents);
-    fluid = sel::multi_slice(fluid_slices);
+    fluid_desc_ = make_gather_from_slices(fluid_slices);
 
     logger.set_pattern("%v");
     logger(spdlog::level::info, "Timestamp,direction,ic,psi,x,y,z,i,j,k");
@@ -235,7 +217,6 @@ std::optional<mesh> mesh::from_lua(const sol::table& tbl, const logs& logger)
     const auto& shapes = *shapes_opt;
 
     return mesh{n, domain, shapes, logger};
-    // return std::nullopt;
 }
 
 } // namespace ccs

@@ -7,6 +7,7 @@
 #include "inviscid_vortex.hpp"
 #include "scalar_wave.hpp"
 
+#include "fields/field_registry.hpp"
 #include "io/logging.hpp"
 #include "temporal/step_controller.hpp"
 #include "types.hpp"
@@ -16,40 +17,8 @@
 namespace ccs
 {
 
-// Public API of a `system'
-//
-// timestep -> computes an acceptable timestep based on current solution state
-//
-// update -> given a rhs and timestep, update the solution state
-//
-// prestep -> call before the start of a timestep to precompute things
-//
-// valid -> returns true if the solution is in a valid state (may be overridden by
-// children)
-//
-// call operator -> evaluates the rhs of the system at the given time
-//
-// stats -> computes statistics of the system at its present state
-//
-// log -> given a logger, write system specific information
-//
-// current_solution/error
-//
-
-// May be overridden by child class
-//
-// valid
-// log
-
-// Must be define by child
-// private:
-//      system_timestep_size
-// public:
-//      call operator
-//      stats -> the corresponding routine in child class should make use of stats_ in
-//              parent
-
-// the system of pdes to solve is in this class
+// Variant wrapper over concrete PDE systems.
+// All field operations use sim_registry + field_ref (registry-based API).
 class system
 {
     std::variant<systems::empty,
@@ -67,30 +36,32 @@ public:
         requires(std::constructible_from<v_t, T>)
     system(T&& t) : v{FWD(t)} {}
 
-    // call operator for solution evaluation
-    std::function<void(field&)> operator()(const step_controller&);
-
-    system_stats stats(const field& u0, const field& u1, const step_controller&) const;
-
     void log(const system_stats&, const step_controller&);
 
     // returns true if the system stats say so
     bool valid(const system_stats&) const;
 
-    // return a valid timestep size based on cfl and system-specific data
-    std::optional<real> timestep_size(const field&, const step_controller&) const;
-
-    std::function<void(field_span)> rhs(field_view, real);
-
-    void update_boundary(field_span, real time);
-
     real3 summary(const system_stats&) const;
-
-    bool write(field_io&, field_view, const step_controller&, real);
 
     static std::optional<system> from_lua(const sol::table&, const logs& = {});
 
     system_size size() const;
+
+    // Registry-based dispatch methods
+    void rhs(const sim_registry& creg, field_ref input,
+             sim_registry& reg, field_ref output, real time);
+    void build_rhs_graph(const sim_registry& creg, field_ref input,
+                         sim_registry& reg, field_ref output);
+    void submit_rhs_graph(const sim_registry& creg, field_ref input,
+                          sim_registry& reg, field_ref output, real time);
+    void update_boundary(sim_registry& reg, field_ref ref, real time);
+    system_stats stats(const sim_registry& reg, field_ref u0,
+                       field_ref u1, const step_controller&) const;
+    void initialize(sim_registry& reg, field_ref ref, const step_controller&);
+    bool write(field_io& io, const sim_registry& reg, field_ref ref,
+               const step_controller& c, real dt);
+    std::optional<real> timestep_size(const sim_registry& reg, field_ref u,
+                                      const step_controller&) const;
 };
 
 } // namespace ccs

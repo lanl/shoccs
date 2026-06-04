@@ -2,6 +2,12 @@
 
 #include "io/logging.hpp"
 
+#include <Kokkos_Profiling_ScopedRegion.hpp>
+
+#include <fmt/ranges.h>
+#include <string>
+#include <vector>
+
 namespace ccs
 {
 gradient::gradient(const mesh& m,
@@ -13,9 +19,10 @@ gradient::gradient(const mesh& m,
     logs logger{build_logger, "gradient", "gradient.csv"};
     logger.set_pattern("%v");
     auto st_info = st.query_max();
+    std::vector<std::string> hdr(st_info.t - 1, "wall,psi");
     logger(spdlog::level::info,
            "timestamp,deriv,interp_dir,ic,y,psi,{}",
-           fmt::join(vs::repeat_n("wall,psi", st_info.t - 1), ","));
+           fmt::join(hdr, ","));
     logger.set_pattern("%Y-%m-%d %H:%M:%S.%f,%v");
 
     dx = derivative{0, m, st, grid_bcs, obj_bcs, logger};
@@ -24,13 +31,17 @@ gradient::gradient(const mesh& m,
     ex = m.extents();
 }
 
-std::function<void(vector_span)> gradient::operator()(scalar_view u) const
+std::function<void(scalar_span, scalar_span, scalar_span)>
+gradient::operator()(scalar_view u) const
 {
-    return std::function<void(vector_span)>{[this, u](vector_span du) {
-        du = 0;
-        if (ex[0] > 1) dx(u, get<vi::X>(du));
-        if (ex[1] > 1) dy(u, get<vi::Y>(du));
-        if (ex[2] > 1) dz(u, get<vi::Z>(du));
-    }};
+    return [this, u](scalar_span du_x, scalar_span du_y, scalar_span du_z) {
+        Kokkos::Profiling::ScopedRegion region("gradient::operator()");
+        du_x = 0;
+        du_y = 0;
+        du_z = 0;
+        if (ex[0] > 1) dx(u, du_x);
+        if (ex[1] > 1) dy(u, du_y);
+        if (ex[2] > 1) dz(u, du_z);
+    };
 }
 } // namespace ccs

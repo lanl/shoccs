@@ -7,7 +7,7 @@
 #include <span>
 #include <vector>
 
-#include <range/v3/view/transform.hpp>
+#include <ranges>
 
 #include <sol/forward.hpp>
 
@@ -62,8 +62,8 @@ public:
 
     auto domain() const
     {
-        auto t = vs::transform(&mesh_object_info::position);
-        return tuple{Rx() | t, Ry() | t, Rz() | t};
+        auto t = std::views::transform(&mesh_object_info::position);
+        return std::tuple{Rx() | t, Ry() | t, Rz() | t};
     }
 
     // details about points in solid
