@@ -1,0 +1,41 @@
+# Spack environment for SHOCCS development container
+#
+# All dependencies are from the standard spack builtin repository.
+# No custom spack repo is needed.
+#
+# Usage:
+#   spack env create shoccs-dev spack.yaml
+#   spack env activate shoccs-dev
+#   spack concretize
+#   spack install
+spack:
+  specs:
+    # Current dependencies (from CMakeLists.txt)
+    - lua
+    - lua-sol2
+    - "fmt@8:"
+    - "pugixml@1.10:"
+    - "spdlog@1.9:"
+    - cxxopts
+    - "catch2@3:"
+    - boost
+    - lapackpp
+    # Kokkos (parallel execution framework)
+    - "kokkos@5.0: cxxstd=20 +serial +openmp"
+    # Kokkos profiling tools (runtime profiling via KOKKOS_TOOLS_LIBS)
+    - kokkos-tools
+    # Microbenchmark framework (Google Benchmark)
+    - benchmark
+    - "cmake@3.24:"
+    - ninja
+
+  view: true
+
+  concretizer:
+    unify: true
+
+  packages:
+    all:
+      require: '%gcc'
+      prefer:
+        - cxxstd=20
