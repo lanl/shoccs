@@ -1,3 +1,5 @@
+>  📖 DESIGN-RATIONALE ARCHIVE (pre-Kokkos). The CONCEPTS still describe the implemented approach, but the C++ interfaces/types/struct members shown are pre-migration and partly inaccurate. For the current API see docs/reference/fields.md and docs/reference/simulation.md.
+
 # Design
 
 In shoccs, we solve sets of equations (systems) consisting of scalar and vector fields defined on a cut-cell domain. We take an object-oriented approach to thinking about the the problem domain.
