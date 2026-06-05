@@ -1,0 +1,51 @@
+[project]
+name = "stencil-gen"
+version = "0.1.0"
+description = "SymPy-based stencil coefficient derivation for SHOCCS"
+requires-python = ">=3.11"
+dependencies = [
+    "sympy>=1.13",
+    "pytest>=8.0",
+    "pytest-timeout>=2.0",
+    "numpy>=2.4.4",
+    "scipy>=1.17.1",
+    # Multi-objective optimization (plan 45): NSGA-II / NSGA-III.
+    "pymoo>=0.6",
+    # Derivative-free trust-region (BOBYQA) as an alternative to scipy COBYQA
+    # for plan 43 and beyond. Requires swig (added to devcontainer Dockerfile).
+    "nlopt>=2.7",
+    # Multi-fidelity Bayesian optimization (plan 47): BoTorch + dependencies.
+    # Pinned to botorch <0.18 because the 0.17.x → 0.18 transition typically
+    # removes deprecated APIs.  CPU-only torch wheel pulled via the
+    # [tool.uv] extra-index-url below (skips ~3 GB of NVIDIA CUDA wheels).
+    "torch>=2.2,<3",
+    "gpytorch>=1.15,<2",
+    "botorch>=0.17,<0.18",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+# Plan 47.0a: pull CPU-only PyTorch wheels.  Our GP fits run in microseconds
+# on CPU; pulling the default index brings ~3 GB of CUDA stack we don't use.
+# ``unsafe-best-match`` lets the resolver consider any index for any package
+# (so e.g. ``numpy`` resolves from PyPI even though the CPU torch index also
+# publishes numpy at older versions); without this, uv's default first-index
+# rule blocks the resolution.
+extra-index-url = ["https://download.pytorch.org/whl/cpu"]
+index-strategy = "unsafe-best-match"
+
+[tool.uv.sources]
+# nlopt has no aarch64 wheels on PyPI. Build from upstream Python-bindings
+# source (same codebase that publishes the PyPI wheels). Requires swig + cmake,
+# both present in .devcontainer/Dockerfile base-system stage. First-sync build
+# cost ~7s; cached on subsequent syncs.
+nlopt = { git = "https://github.com/DanielBok/nlopt-python.git", tag = "2.10.0" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselected by default, use --run-slow to include)",
+]
