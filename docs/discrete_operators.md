@@ -1,3 +1,5 @@
+>  📖 DESIGN-RATIONALE ARCHIVE (pre-Kokkos). The CONCEPTS still describe the implemented approach, but the C++ interfaces/types/struct members shown are pre-migration and partly inaccurate. For the current API see docs/reference/operators.md.
+
 # Discrete Operators
 
 In the paper, we discuss that a 1D cut-cell operator is formulated as:

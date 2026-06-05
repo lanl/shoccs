@@ -1,3 +1,5 @@
+>  ⚠️ STALE / superseded. Predates the Kokkos migration; this was an unimplemented DSL wishlist (`build_solver<du/dt = div(u)>`-style expression templates) that was never built. It describes aspirational APIs that do not exist. Kept for historical design rationale only. Current: see docs/reference/fields.md and CLAUDE.md.
+
 We solve many similar systems with different boundary conditions, and cut-cell domains.  Rather than defining a new type with many similarities, can we instead define everything needed via expression templates (perhaps via constexpr), maybe the result could look something like
 
 ```c++

@@ -1,3 +1,5 @@
+>  ⚠️ STALE / superseded. Predates the Kokkos migration; describes range-v3 / aspirational APIs that no longer exist. Kept for historical design rationale only. Current: see docs/reference/fields.md and CLAUDE.md.
+
 Fields
 ===
 
