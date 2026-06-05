@@ -1,0 +1,46 @@
+{
+  "name": "SHOCCS Dev",
+  "build": {
+    "context": "..",
+    "dockerfile": "Dockerfile",
+    "args": {
+      "TZ": "${localEnv:TZ:America/Denver}",
+      "CLANG_VERSION": "19"
+    }
+  },
+
+  "containerUser": "user",
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+
+  "mounts": [
+    "source=shoccs-bashhistory,target=/commandhistory,type=volume"
+  ],
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "cmake.configureOnOpen": true,
+        "cmake.generator": "Ninja",
+        "cmake.buildDirectory": "${workspaceFolder}/build",
+        "clangd.path": "/usr/local/bin/clangd",
+        "editor.formatOnSave": true
+      },
+      "extensions": [
+        "ms-vscode.cmake-tools",
+        "ms-vscode.cpptools",
+        "llvm-vs-code-extensions.vscode-clangd",
+        "twxs.cmake"
+      ]
+    }
+  },
+
+  "initializeCommand": "",
+  "onCreateCommand": "",
+  "postCreateCommand": "cmake -S /workspace -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON",
+
+  "remoteEnv": {
+    "DEVCONTAINER": "true"
+  }
+}
