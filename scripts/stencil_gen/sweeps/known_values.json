@@ -1,0 +1,440 @@
+{
+  "E2_1": {
+    "params": {
+      "p": 1,
+      "q": 1,
+      "nextra": 1,
+      "nu": 1
+    },
+    "tension": {
+      "sigma": 3.488263,
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ],
+      "gv_error": 2.6465125577553485
+    },
+    "gaussian": {
+      "epsilon": 3.511879,
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ],
+      "gv_error": 2.0537811466317955
+    },
+    "multiquadric": {
+      "epsilon": 2.679738,
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ],
+      "gv_error": 2.6235133022220056
+    },
+    "phs_k2": {
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ]
+    },
+    "tension_gv": {
+      "sigma": 20.0,
+      "gv_error": 2.074641143264805,
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ]
+    },
+    "gaussian_gv": {
+      "epsilon": 1.941492,
+      "gv_error": 1.9010555541664145,
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ]
+    },
+    "multiquadric_gv": {
+      "epsilon": 10.0,
+      "gv_error": 2.1436167116968674,
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ]
+    }
+  },
+  "E4_1": {
+    "params": {
+      "p": 2,
+      "q": 3,
+      "nextra": 0,
+      "nu": 1
+    },
+    "tension": {
+      "sigma": 1.488031,
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ],
+      "gv_error": 6.503000296681518
+    },
+    "gaussian": {
+      "epsilon": 2.130173,
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ],
+      "gv_error": 6.181216677920524
+    },
+    "multiquadric": {
+      "epsilon": 1.569657,
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ],
+      "gv_error": 6.281680154252788
+    },
+    "phs_k2": {
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ]
+    },
+    "known_unstable": [
+      {
+        "kernel": "gaussian",
+        "epsilon": 0.1,
+        "n": 20
+      }
+    ],
+    "tension_gv": {
+      "sigma": 20.0,
+      "gv_error": 4.79897368164198,
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ]
+    },
+    "gaussian_gv": {
+      "epsilon": 1.366448,
+      "gv_error": 4.8733775220793385,
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ]
+    },
+    "multiquadric_gv": {
+      "epsilon": 10.0,
+      "gv_error": 4.87217216095809,
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ]
+    }
+  },
+  "footprint": {
+    "E4_nextra0_phs": {
+      "nextra": 0,
+      "stable_at": [
+        20,
+        40,
+        80,
+        160
+      ]
+    },
+    "E4_nextra0_tension_3": {
+      "nextra": 0,
+      "sigma": 3.0,
+      "stable_at": [
+        40
+      ]
+    },
+    "E4_nextra1_phs": {
+      "nextra": 1,
+      "stable_at": [
+        40
+      ]
+    },
+    "E4_nextra2_phs": {
+      "nextra": 2,
+      "stable_at": [
+        40
+      ]
+    }
+  },
+  "brady2d_calibration": {
+    "E4_classical": {
+      "overall_verdict": "pass",
+      "failed_layer": null,
+      "failed_reason": "",
+      "compute_time": 1.6483995009912178,
+      "layer1": {
+        "interior_gv_err_x": 0.00013016508525931503,
+        "interior_gv_err_y": 0.00013016508525931503,
+        "boundary_gv_err": 0.021056053547695353,
+        "cutoff_fraction": 0.57422393669978
+      },
+      "layer2": {
+        "is_stable": true
+      },
+      "layer3": {
+        "max_stab_eig": -0.0001808367140203875
+      },
+      "layer4": {
+        "max_local_gv_error": 0.00017360868541544126
+      },
+      "layer5": {
+        "max_aligned_error": 0.0026147663048305177
+      },
+      "layer6": {
+        "spectral_abscissa": -0.0001808367140203875,
+        "transient_growth_bound": 8.527076798420156
+      },
+      "layer_bl42": {
+        "max_spectral_abscissa": 6.002468414324108e-14,
+        "purely_imaginary": true
+      }
+    },
+    "E2_phs_k2": {
+      "overall_verdict": "pass",
+      "failed_layer": null,
+      "failed_reason": "",
+      "compute_time": 0.8846915420144796,
+      "layer1": {
+        "interior_gv_err_x": 0.011473792229796054,
+        "interior_gv_err_y": 0.011473792229796054,
+        "boundary_gv_err": 0.0036362503367136645,
+        "cutoff_fraction": 0.5642056763868336
+      },
+      "layer2": {
+        "is_stable": true
+      },
+      "layer3": {
+        "max_stab_eig": -0.00011226540786009979
+      },
+      "layer4": {
+        "max_local_gv_error": 0.01237493230014061
+      },
+      "layer5": {
+        "max_aligned_error": 0.04811311242252088
+      },
+      "layer6": {
+        "spectral_abscissa": -0.00011226540786009979,
+        "transient_growth_bound": 3.346610142188868
+      },
+      "layer_bl42": {
+        "max_spectral_abscissa": 4.890563694017857e-15,
+        "purely_imaginary": true
+      }
+    },
+    "E4_phs_k2": {
+      "overall_verdict": "fail",
+      "failed_layer": 3,
+      "failed_reason": "BL42 max_spectral_abscissa=6.2970e-01 > BL42_TOL=1e-10",
+      "compute_time": 0.5218811669619754,
+      "layer1": {
+        "interior_gv_err_x": 0.00013016508525931503,
+        "interior_gv_err_y": 0.00013016508525931503,
+        "boundary_gv_err": 0.02119025992732393,
+        "cutoff_fraction": 0.6243152382645119
+      },
+      "layer2": {
+        "is_stable": true
+      },
+      "layer3": {
+        "max_stab_eig": -0.0005885839609341391
+      },
+      "layer_bl42": {
+        "max_spectral_abscissa": 0.6297033039720938,
+        "purely_imaginary": false
+      }
+    },
+    "E2_tension_6": {
+      "overall_verdict": "fail",
+      "failed_layer": 1,
+      "failed_reason": "boundary_gv_err=9.7527e-02 > L1_TOL=0.05",
+      "compute_time": 0.000659500015899539,
+      "layer1": {
+        "interior_gv_err_x": 0.011473792229796054,
+        "interior_gv_err_y": 0.011473792229796054,
+        "boundary_gv_err": 0.0975269363046769,
+        "cutoff_fraction": 0.5391600256044679
+      }
+    },
+    "E4_tension_3": {
+      "overall_verdict": "fail",
+      "failed_layer": 3,
+      "failed_reason": "BL42 max_spectral_abscissa=9.5397e-01 > BL42_TOL=1e-10",
+      "compute_time": 0.40694333298597485,
+      "layer1": {
+        "interior_gv_err_x": 0.00013016508525931503,
+        "interior_gv_err_y": 0.00013016508525931503,
+        "boundary_gv_err": 0.03633339025998916,
+        "cutoff_fraction": 0.5892513271691996
+      },
+      "layer2": {
+        "is_stable": true
+      },
+      "layer3": {
+        "max_stab_eig": -7.802238653237703e-06
+      },
+      "layer_bl42": {
+        "max_spectral_abscissa": 0.9539737194888105,
+        "purely_imaginary": false
+      }
+    },
+    "E2_gaussian_2": {
+      "overall_verdict": "fail",
+      "failed_layer": 1,
+      "failed_reason": "boundary_gv_err=2.6981e-01 > L1_TOL=0.05",
+      "compute_time": 0.0006042920285835862,
+      "layer1": {
+        "interior_gv_err_x": 0.011473792229796054,
+        "interior_gv_err_y": 0.011473792229796054,
+        "boundary_gv_err": 0.2698147449392271,
+        "cutoff_fraction": 0.35382220981496026
+      }
+    },
+    "E4_gaussian_09": {
+      "overall_verdict": "fail",
+      "failed_layer": 3,
+      "failed_reason": "BL42 max_spectral_abscissa=7.0022e-01 > BL42_TOL=1e-10",
+      "compute_time": 0.4603615839732811,
+      "layer1": {
+        "interior_gv_err_x": 0.00013016508525931503,
+        "interior_gv_err_y": 0.00013016508525931503,
+        "boundary_gv_err": 0.034342000515673377,
+        "cutoff_fraction": 0.6543700192033507
+      },
+      "layer2": {
+        "is_stable": true
+      },
+      "layer3": {
+        "max_stab_eig": -2.948974986938358e-05
+      },
+      "layer_bl42": {
+        "max_spectral_abscissa": 0.700221911579164,
+        "purely_imaginary": false
+      }
+    },
+    "E2_multiquadric_1": {
+      "overall_verdict": "fail",
+      "failed_layer": 1,
+      "failed_reason": "boundary_gv_err=5.9976e-02 > L1_TOL=0.05",
+      "compute_time": 0.0005589589709416032,
+      "layer1": {
+        "interior_gv_err_x": 0.011473792229796054,
+        "interior_gv_err_y": 0.011473792229796054,
+        "boundary_gv_err": 0.05997615349761254,
+        "cutoff_fraction": 0.5792330668562532
+      }
+    },
+    "E4_multiquadric_1": {
+      "overall_verdict": "fail",
+      "failed_layer": 3,
+      "failed_reason": "BL42 max_spectral_abscissa=6.4762e-01 > BL42_TOL=1e-10",
+      "compute_time": 0.39443516702158377,
+      "layer1": {
+        "interior_gv_err_x": 0.00013016508525931503,
+        "interior_gv_err_y": 0.00013016508525931503,
+        "boundary_gv_err": 0.023323536204860496,
+        "cutoff_fraction": 0.6343334985774581
+      },
+      "layer2": {
+        "is_stable": true
+      },
+      "layer3": {
+        "max_stab_eig": -9.34107837092079e-05
+      },
+      "layer_bl42": {
+        "max_spectral_abscissa": 0.6476246914364086,
+        "purely_imaginary": false
+      }
+    }
+  },
+  "brady2d_sweep": {
+    "E4": {
+      "classical": {
+        "scheme": "E4",
+        "kernel": "classical",
+        "max_layer": 3,
+        "param_name": "param",
+        "points": [
+          {
+            "param": NaN,
+            "params_dict": {
+              "alpha": [
+                -0.7733323791884821,
+                0.1623961700641681
+              ]
+            },
+            "report": {
+              "overall_verdict": "pass",
+              "failed_layer": null,
+              "failed_reason": "",
+              "compute_time": 1.108928041998297,
+              "layer1": {
+                "interior_gv_err_x": 0.00013016508525931503,
+                "interior_gv_err_y": 0.00013016508525931503,
+                "boundary_gv_err": 0.021056053547695353,
+                "cutoff_fraction": 0.57422393669978
+              },
+              "layer2": {
+                "is_stable": true
+              },
+              "layer3": {
+                "max_stab_eig": -0.0001808367140203875
+              },
+              "layer_bl42": {
+                "max_spectral_abscissa": 6.002468414324108e-14,
+                "purely_imaginary": 1.0
+              },
+              "kreiss": {
+                "is_stable": true,
+                "witness_s": [
+                  0.09999999708627205,
+                  2.4245886402902557e-05
+                ],
+                "witness_sigma_min": 1.194607399154801e-05,
+                "imaginary_axis_perturbation_verdict": "not_checked",
+                "defective_kappa_detected": false,
+                "s_grid_shape": [
+                  80,
+                  31
+                ],
+                "compute_time": 0.49281316704582423,
+                "n_admissible_roots": 2
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

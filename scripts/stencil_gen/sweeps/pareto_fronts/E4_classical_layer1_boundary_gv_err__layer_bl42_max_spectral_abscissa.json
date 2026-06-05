@@ -1,0 +1,800 @@
+{
+  "scheme": "E4",
+  "kernel": "classical",
+  "method": "NSGA-II",
+  "objective_fields": [
+    "layer1.boundary_gv_err",
+    "layer_bl42.max_spectral_abscissa"
+  ],
+  "bounds": [
+    [
+      -2.0,
+      2.0
+    ],
+    [
+      0.05,
+      2.0
+    ]
+  ],
+  "pop_size": 40,
+  "n_gen": 30,
+  "n_evals": 1200,
+  "seed": 1,
+  "compute_time": 379.33983567298856,
+  "ref_point": [
+    1.0,
+    1.0
+  ],
+  "hv_trace": [
+    0.7570275361114926,
+    0.7570275361114926,
+    0.9669983313371063,
+    0.9669983313371723,
+    0.9669983313371725,
+    0.9669983313371725,
+    0.973362605592357,
+    0.9860240520939525,
+    0.9860318805118449,
+    0.9870382620527816,
+    0.9873429361122282,
+    0.9879080218640277,
+    0.9899463252218076,
+    0.9900229004552558,
+    0.9900276953331896,
+    0.9902056780150503,
+    0.9902056780150504,
+    0.9907770906878045,
+    0.9907945733853478,
+    0.9907945733853478,
+    0.9910451520877659,
+    0.9910546188362181,
+    0.9910546417630963,
+    0.9917592581050113,
+    0.9918171875310354,
+    0.991840702674026,
+    0.9918574538351022,
+    0.9918708651501776,
+    0.9919509460394662,
+    0.9921205739795553
+  ],
+  "front": [
+    {
+      "x": [
+        -1.0738296564208545,
+        0.20902760385884978
+      ],
+      "params": {
+        "alpha": [
+          -1.0738296564208545,
+          0.20902760385884978
+        ]
+      },
+      "objectives": [
+        0.03131025393578213,
+        1.1517903106409507e-14
+      ],
+      "report": {
+        "overall_verdict": "pass",
+        "failed_layer": null,
+        "failed_reason": "",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.03131025393578213,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.00012422174312866672
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 1.1517903106409507e-14,
+          "purely_imaginary": 1.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.981186530326899,
+        0.2099908917573154
+      ],
+      "params": {
+        "alpha": [
+          -0.981186530326899,
+          0.2099908917573154
+        ]
+      },
+      "objectives": [
+        0.028148890251240233,
+        2.4513327114374634e-14
+      ],
+      "report": {
+        "overall_verdict": "pass",
+        "failed_layer": null,
+        "failed_reason": "",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.028148890251240233,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.00010188413235609947
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 2.4513327114374634e-14,
+          "purely_imaginary": 1.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.7937577870590572,
+        0.17142615701519054
+      ],
+      "params": {
+        "alpha": [
+          -0.7937577870590572,
+          0.17142615701519054
+        ]
+      },
+      "objectives": [
+        0.021753052293380426,
+        2.486899549717146e-14
+      ],
+      "report": {
+        "overall_verdict": "pass",
+        "failed_layer": null,
+        "failed_reason": "",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.021753052293380426,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.0001463983730251435
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 2.486899549717146e-14,
+          "purely_imaginary": 1.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.33042724402526297,
+        0.053826124777204
+      ],
+      "params": {
+        "alpha": [
+          -0.33042724402526297,
+          0.053826124777204
+        ]
+      },
+      "objectives": [
+        0.004624057853268582,
+        0.3488124571511004
+      ],
+      "report": {
+        "overall_verdict": "fail",
+        "failed_layer": 3,
+        "failed_reason": "BL42 max_spectral_abscissa=3.4881e-01 > BL42_TOL=1e-10",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.004624057853268582,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.00014376940214373387
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 0.3488124571511004,
+          "purely_imaginary": 0.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.982337613984837,
+        0.2099908917573154
+      ],
+      "params": {
+        "alpha": [
+          -0.982337613984837,
+          0.2099908917573154
+        ]
+      },
+      "objectives": [
+        0.028188169949881048,
+        2.1316284560935965e-14
+      ],
+      "report": {
+        "overall_verdict": "pass",
+        "failed_layer": null,
+        "failed_reason": "",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.028188169949881048,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.00010257231023966507
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 2.1316284560935965e-14,
+          "purely_imaginary": 1.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.3574222153090891,
+        0.0538880957635203
+      ],
+      "params": {
+        "alpha": [
+          -0.3574222153090891,
+          0.0538880957635203
+        ]
+      },
+      "objectives": [
+        0.005337581978346551,
+        0.31064267659707323
+      ],
+      "report": {
+        "overall_verdict": "fail",
+        "failed_layer": 3,
+        "failed_reason": "BL42 max_spectral_abscissa=3.1064e-01 > BL42_TOL=1e-10",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.005337581978346551,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.00014304274726227543
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 0.31064267659707323,
+          "purely_imaginary": 0.0
+        }
+      }
+    },
+    {
+      "x": [
+        -1.5414266797560192,
+        0.30573426497251166
+      ],
+      "params": {
+        "alpha": [
+          -1.5414266797560192,
+          0.30573426497251166
+        ]
+      },
+      "objectives": [
+        0.04726658346499124,
+        7.362263296641698e-15
+      ],
+      "report": {
+        "overall_verdict": "pass",
+        "failed_layer": null,
+        "failed_reason": "",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.04726658346499124,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -8.693008290752297e-05
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 7.362263296641698e-15,
+          "purely_imaginary": 1.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.5367075311073364,
+        0.11753699056873201
+      ],
+      "params": {
+        "alpha": [
+          -0.5367075311073364,
+          0.11753699056873201
+        ]
+      },
+      "objectives": [
+        0.010076405248403808,
+        0.2688176965112242
+      ],
+      "report": {
+        "overall_verdict": "fail",
+        "failed_layer": 3,
+        "failed_reason": "BL42 max_spectral_abscissa=2.6882e-01 > BL42_TOL=1e-10",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.010076405248403808,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.000816409373869526
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 0.2688176965112242,
+          "purely_imaginary": 0.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.7707954531633674,
+        0.17212028489928777
+      ],
+      "params": {
+        "alpha": [
+          -0.7707954531633674,
+          0.17212028489928777
+        ]
+      },
+      "objectives": [
+        0.020969483219771545,
+        3.7921645753639356e-14
+      ],
+      "report": {
+        "overall_verdict": "pass",
+        "failed_layer": null,
+        "failed_reason": "",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.020969483219771545,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -8.680823904984384e-05
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 3.7921645753639356e-14,
+          "purely_imaginary": 1.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.2740519518902183,
+        0.0549736732879241
+      ],
+      "params": {
+        "alpha": [
+          -0.2740519518902183,
+          0.0549736732879241
+        ]
+      },
+      "objectives": [
+        0.00313396065798921,
+        0.4166452589097452
+      ],
+      "report": {
+        "overall_verdict": "fail",
+        "failed_layer": 3,
+        "failed_reason": "BL42 max_spectral_abscissa=4.1665e-01 > BL42_TOL=1e-10",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.00313396065798921,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -7.454980140663855e-05
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 0.4166452589097452,
+          "purely_imaginary": 0.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.5452707945027055,
+        0.12170168498903236
+      ],
+      "params": {
+        "alpha": [
+          -0.5452707945027055,
+          0.12170168498903236
+        ]
+      },
+      "objectives": [
+        0.010302747219943731,
+        0.24852194190775725
+      ],
+      "report": {
+        "overall_verdict": "fail",
+        "failed_layer": 3,
+        "failed_reason": "BL42 max_spectral_abscissa=2.4852e-01 > BL42_TOL=1e-10",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.010302747219943731,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.00034435454310307245
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 0.24852194190775725,
+          "purely_imaginary": 0.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.2756586119425699,
+        0.0507462979179962
+      ],
+      "params": {
+        "alpha": [
+          -0.2756586119425699,
+          0.0507462979179962
+        ]
+      },
+      "objectives": [
+        0.003176427482497246,
+        0.4040965334423412
+      ],
+      "report": {
+        "overall_verdict": "fail",
+        "failed_layer": 3,
+        "failed_reason": "BL42 max_spectral_abscissa=4.0410e-01 > BL42_TOL=1e-10",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.003176427482497246,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.00010297748033030891
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 0.4040965334423412,
+          "purely_imaginary": 0.0
+        }
+      }
+    },
+    {
+      "x": [
+        -1.0724431212633134,
+        0.2185327602939736
+      ],
+      "params": {
+        "alpha": [
+          -1.0724431212633134,
+          0.2185327602939736
+        ]
+      },
+      "objectives": [
+        0.03126293966564364,
+        1.3995282476247421e-14
+      ],
+      "report": {
+        "overall_verdict": "pass",
+        "failed_layer": null,
+        "failed_reason": "",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.03126293966564364,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.00011322614278739946
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 1.3995282476247421e-14,
+          "purely_imaginary": 1.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.2747643148027394,
+        0.0538880957635203
+      ],
+      "params": {
+        "alpha": [
+          -0.2747643148027394,
+          0.0538880957635203
+        ]
+      },
+      "objectives": [
+        0.003152789650934462,
+        0.4134204730828456
+      ],
+      "report": {
+        "overall_verdict": "fail",
+        "failed_layer": 3,
+        "failed_reason": "BL42 max_spectral_abscissa=4.1342e-01 > BL42_TOL=1e-10",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.003152789650934462,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -8.391177289851e-05
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 0.4134204730828456,
+          "purely_imaginary": 0.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.7593714248167409,
+        0.16482070046467698
+      ],
+      "params": {
+        "alpha": [
+          -0.7593714248167409,
+          0.16482070046467698
+        ]
+      },
+      "objectives": [
+        0.020579648486541702,
+        1.0397120462675553e-13
+      ],
+      "report": {
+        "overall_verdict": "pass",
+        "failed_layer": null,
+        "failed_reason": "",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.020579648486541702,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.0001587111738196089
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 1.0397120462675553e-13,
+          "purely_imaginary": 1.0
+        }
+      }
+    },
+    {
+      "x": [
+        -1.0070637562791078,
+        0.20769826897681493
+      ],
+      "params": {
+        "alpha": [
+          -1.0070637562791078,
+          0.20769826897681493
+        ]
+      },
+      "objectives": [
+        0.02903192740500471,
+        1.5003523698182476e-14
+      ],
+      "report": {
+        "overall_verdict": "pass",
+        "failed_layer": null,
+        "failed_reason": "",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.02903192740500471,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.00011813806041354973
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 1.5003523698182476e-14,
+          "purely_imaginary": 1.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.2637332118972245,
+        0.0511811322766365
+      ],
+      "params": {
+        "alpha": [
+          -0.2637332118972245,
+          0.0511811322766365
+        ]
+      },
+      "objectives": [
+        0.0028612183813632175,
+        0.4178715040680345
+      ],
+      "report": {
+        "overall_verdict": "fail",
+        "failed_layer": 3,
+        "failed_reason": "BL42 max_spectral_abscissa=4.1787e-01 > BL42_TOL=1e-10",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.0028612183813632175,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -8.033926808313161e-05
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 0.4178715040680345,
+          "purely_imaginary": 0.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.32034659771155427,
+        0.05071768411748147
+      ],
+      "params": {
+        "alpha": [
+          -0.32034659771155427,
+          0.05071768411748147
+        ]
+      },
+      "objectives": [
+        0.004357608807421531,
+        0.3509876597533579
+      ],
+      "report": {
+        "overall_verdict": "fail",
+        "failed_layer": 3,
+        "failed_reason": "BL42 max_spectral_abscissa=3.5099e-01 > BL42_TOL=1e-10",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.004357608807421531,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.000137635648939587
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 0.3509876597533579,
+          "purely_imaginary": 0.0
+        }
+      }
+    },
+    {
+      "x": [
+        -0.7496857056648044,
+        0.14700835237693316
+      ],
+      "params": {
+        "alpha": [
+          -0.7496857056648044,
+          0.14700835237693316
+        ]
+      },
+      "objectives": [
+        0.020249131997338132,
+        0.18783026170880657
+      ],
+      "report": {
+        "overall_verdict": "fail",
+        "failed_layer": 3,
+        "failed_reason": "BL42 max_spectral_abscissa=1.8783e-01 > BL42_TOL=1e-10",
+        "layer1": {
+          "interior_gv_err_x": 0.00013016508525931503,
+          "interior_gv_err_y": 0.00013016508525931503,
+          "boundary_gv_err": 0.020249131997338132,
+          "cutoff_fraction": 0.57422393669978
+        },
+        "layer2": {
+          "is_stable": true
+        },
+        "layer3": {
+          "max_stab_eig": -0.00018727398448342182
+        },
+        "layer_bl42": {
+          "max_spectral_abscissa": 0.18783026170880657,
+          "purely_imaginary": 0.0
+        }
+      }
+    }
+  ],
+  "extras": {
+    "n_sentinel_filtered": 1,
+    "hv_n_nds": [
+      1,
+      1,
+      1,
+      2,
+      3,
+      3,
+      6,
+      8,
+      10,
+      7,
+      7,
+      7,
+      7,
+      8,
+      10,
+      9,
+      9,
+      9,
+      9,
+      10,
+      11,
+      12,
+      12,
+      13,
+      13,
+      14,
+      14,
+      16,
+      18,
+      19
+    ]
+  }
+}
