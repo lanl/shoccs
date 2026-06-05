@@ -2,14 +2,24 @@
 #include "derivative.hpp"
 
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
-#include "fields/tuple_utils.hpp"
 #include "identity_stencil.hpp"
 #include "stencils/stencil.hpp"
 
+#include <algorithm>
 #include <sol/sol.hpp>
+
+#include <Kokkos_Core.hpp>
+
+// Custom main: Kokkos must be initialized before parallel_for calls.
+int main(int argc, char* argv[])
+{
+    Kokkos::ScopeGuard kokkos(argc, argv);
+    return Catch::Session().run(argc, argv);
+}
 
 using namespace ccs;
 using Catch::Matchers::Approx;
@@ -54,7 +64,8 @@ TEST_CASE("identity")
     auto v = eigenvalue_visitor{mesh_opt->extents(), B{true, false}, B{}, B{}};
     v.visit(dx);
 
-    auto eigs = to<T>(v.eigenvalues_real());
+    auto er = v.eigenvalues_real();
+    auto eigs = T(er.begin(), er.end());
     REQUIRE(eigs.size() == 10u);
 
     T exact(eigs.size(), 1.0);
@@ -108,8 +119,9 @@ TEST_CASE("e2-poly")
     auto v = eigenvalue_visitor{mesh_opt->extents(), B{true, false}, B{}, B{}};
     v.visit(dx);
 
-    auto eigs = to<T>(v.eigenvalues_real());
+    auto er = v.eigenvalues_real();
+    auto eigs = T(er.begin(), er.end());
     REQUIRE(eigs.size() == 20u);
 
-    REQUIRE(rs::max(eigs) == Catch::Approx(0.19628372852526094));
+    REQUIRE(std::ranges::max(eigs) == Catch::Approx(0.19628372852526094));
 }

@@ -1,18 +1,26 @@
 #include "inner_block.hpp"
 
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
 #include "random/random.hpp"
 #include <vector>
 
-#include <range/v3/range/conversion.hpp>
-#include <range/v3/view/drop.hpp>
-#include <range/v3/view/generate_n.hpp>
-#include <range/v3/view/iota.hpp>
-#include <range/v3/view/stride.hpp>
-#include <range/v3/view/transform.hpp>
+#include <algorithm>
+#include <ranges>
+
+#include "fields/lazy_views.hpp"
+
+#include <Kokkos_Core.hpp>
+
+// Custom main: Kokkos must be initialized before parallel_for calls.
+int main(int argc, char* argv[])
+{
+    Kokkos::ScopeGuard kokkos(argc, argv);
+    return Catch::Session().run(argc, argv);
+}
 
 using namespace ccs;
 using Catch::Matchers::Approx;
@@ -41,14 +49,16 @@ TEST_CASE("Identity")
 
         REQUIRE(A.rows() == 16);
 
-        const auto x = vs::generate_n(g, A.rows()) | rs::to<T>();
+        T x(A.rows());
+        std::generate_n(x.begin(), A.rows(), g);
         auto b = T(A.rows());
 
         A(x, b);
         REQUIRE_THAT(x, Approx(b));
 
         A(x, b, plus_eq);
-        const T b2 = x | vs::transform(x2) | rs::to<T>();
+        T b2(x.size());
+        std::ranges::transform(x, b2.begin(), x2);
         REQUIRE_THAT(b2, Approx(b));
     }
 
@@ -72,15 +82,16 @@ TEST_CASE("Identity")
         REQUIRE(A.col_offset() == 0);
         REQUIRE(A.row_offset() == 1);
 
-        const auto x = vs::generate_n([]() { return pick(); }, A.columns()) | rs::to<T>();
+        T x(A.columns());
+        std::generate_n(x.begin(), A.columns(), []() { return pick(); });
         auto b = T(A.columns());
 
         A(x, b);
 
         REQUIRE(b[0] == 0.0);
 
-        const auto xx = x | vs::drop(1) | rs::to<T>();
-        const auto bb = b | vs::drop(1) | rs::to<T>();
+        const T xx(x.begin() + 1, x.end());
+        const T bb(b.begin() + 1, b.end());
         REQUIRE_THAT(xx, Approx(bb));
     }
 }
@@ -167,9 +178,11 @@ TEST_CASE("strided")
 
     using T = std::vector<real>;
 
-    const T lc = vs::iota(0, 15) | rs::to<T>(); // 3x5 matrix
+    auto iota15 = std::views::iota(0, 15);
+    const T lc(iota15.begin(), iota15.end());    // 3x5 matrix
     const T ic{-2, -1, 0, 1, 2};                // minimum offset of 2 needed
-    const T rc = vs::iota(1, 7) | rs::to<T>();  // 2 x 3
+    auto iota17 = std::views::iota(1, 7);
+    const T rc(iota17.begin(), iota17.end());    // 2 x 3
 
     const integer columns = 15;
     const integer stride = 3;
@@ -183,7 +196,8 @@ TEST_CASE("strided")
                                            matrix::dense(3, 5, lc),
                                            matrix::circulant(10, ic),
                                            matrix::dense(2, 3, rc)};
-        const T x = vs::iota(0, 45) | rs::to<T>();
+        auto iota45 = std::views::iota(0, 45);
+        const T x(iota45.begin(), iota45.end());
         T b(x.size());
         A(x, b);
 
@@ -195,13 +209,15 @@ TEST_CASE("strided")
                                             matrix::dense(3, 5, lc),
                                             matrix::circulant(10, ic),
                                             matrix::dense(2, 3, rc));
-        const T xx = vs::iota(0, 45) | vs::drop(offset) | vs::stride(stride) |
-                     vs::take(15) | rs::to<T>();
+        auto strided_xx = ccs::stride(std::views::iota(0, 45) | std::views::drop(offset), stride);
+        auto taken_xx = strided_xx | std::views::take(15);
+        const T xx(taken_xx.begin(), taken_xx.end());
         T bb(xx.size());
         AA(xx, bb);
 
-        const T bp =
-            b | vs::drop(offset) | vs::stride(stride) | vs::take(15) | rs::to<T>();
+        auto strided_bp = ccs::stride(b | std::views::drop(offset), stride);
+        auto taken_bp = strided_bp | std::views::take(15);
+        const T bp(taken_bp.begin(), taken_bp.end());
 
         REQUIRE_THAT(bp, Approx(bb));
     }

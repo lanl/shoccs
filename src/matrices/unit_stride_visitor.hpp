@@ -1,8 +1,9 @@
 #pragma once
 
 #include "common.hpp"
-#include "fields/tuple_fwd.hpp"
 #include "matrix_visitor.hpp"
+
+#include <ranges>
 
 namespace ccs::matrix
 {
@@ -46,17 +47,17 @@ public:
 
     template <Range Rx, Range Ry, Range Rz>
     unit_stride_visitor(int3 nxyz, Rx&& rx, Ry&& ry, Rz&& rz)
-        : nrows_in(nxyz[0] * nxyz[1] * nxyz[2] + rs::size(rx) + rs::size(ry) +
-                   rs::size(rz)),
+        : nrows_in(nxyz[0] * nxyz[1] * nxyz[2] + std::ranges::size(rx) +
+                   std::ranges::size(ry) + std::ranges::size(rz)),
           ncols_in(nrows_in),
           nrows_out{},
           ncols_out{},
           base_in{nxyz[0] * nxyz[1] * nxyz[2]},
           rows_out(nrows_in, -1),
           cols_out(ncols_in, -1),
-          rx(rs::begin(rx), rs::end(rx)),
-          ry(rs::begin(ry), rs::end(ry)),
-          rz(rs::begin(rz), rs::end(rz))
+          rx(std::ranges::begin(rx), std::ranges::end(rx)),
+          ry(std::ranges::begin(ry), std::ranges::end(ry)),
+          rz(std::ranges::begin(rz), std::ranges::end(rz))
     {
     }
 

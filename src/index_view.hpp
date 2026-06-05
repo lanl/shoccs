@@ -1,15 +1,14 @@
 #pragma once
 
 #include "indexing.hpp"
-#include <cppcoro/generator.hpp>
-#include <range/v3/view/take_exactly.hpp>
+#include <vector>
 
 // note that these are not currently sized ranges
 
 namespace ccs
 {
 template <int I = 2>
-cppcoro::generator<int3> index_view(int3 extents)
+std::vector<int3> index_view(int3 extents)
 {
     constexpr int F = index::dir<I>::fast;
     constexpr int S = index::dir<I>::slow;
@@ -19,22 +18,26 @@ cppcoro::generator<int3> index_view(int3 extents)
     const auto nf = extents[F];
     const auto ns = extents[S];
 
+    std::vector<int3> result;
+    result.reserve(ni * nf * ns);
+
     for (int s = 0; s < ns; s++) {
         ijk[S] = s;
         for (int f = 0; f < nf; f++) {
             ijk[F] = f;
             for (int i = 0; i < ni; i++) {
                 ijk[I] = i;
-                co_yield ijk;
+                result.push_back(ijk);
             }
         }
     }
+    return result;
 }
 
 // index view of plane coordinates, if a negative value is specified,
 // add extents[I] to it.  This allows for specifying plane boundaries with 0, -1
 template <int I>
-cppcoro::generator<int3> index_view(int3 extents, int i)
+std::vector<int3> index_view(int3 extents, int i)
 {
     constexpr int F = index::dir<I>::fast;
     constexpr int S = index::dir<I>::slow;
@@ -45,13 +48,17 @@ cppcoro::generator<int3> index_view(int3 extents, int i)
 
     ijk[I] = i >= 0 ? i : i + extents[I];
 
+    std::vector<int3> result;
+    result.reserve(nf * ns);
+
     for (int s = 0; s < ns; s++) {
         ijk[S] = s;
         for (int f = 0; f < nf; f++) {
             ijk[F] = f;
-            co_yield ijk;
+            result.push_back(ijk);
         }
     }
+    return result;
 }
 
 } // namespace ccs

@@ -7,4 +7,9 @@ target_link_libraries(shoccs-simulation
     shoccs-system
     shoccs-integrate)
 
-add_unit_test(simulation_cycle "simulation" shoccs-simulation)
+if (BUILD_TESTING)
+  add_executable(t-simulation_cycle simulation_cycle.t.cpp)
+  target_link_libraries(t-simulation_cycle Catch2::Catch2 shoccs-simulation Kokkos::kokkos)
+  add_test(NAME t-simulation_cycle COMMAND t-simulation_cycle)
+  set_tests_properties(t-simulation_cycle PROPERTIES LABELS "simulation")
+endif()

@@ -1,12 +1,6 @@
 #include "stencil.hpp"
 
-#include <range/v3/algorithm/copy.hpp>
-#include <range/v3/algorithm/fill.hpp>
-#include <range/v3/algorithm/reverse.hpp>
-#include <range/v3/view/concat.hpp>
-#include <range/v3/view/repeat.hpp>
-#include <range/v3/view/take.hpp>
-#include <range/v3/view/transform.hpp>
+#include <algorithm>
 
 #include <cmath>
 
@@ -24,8 +18,7 @@ struct E2_1 {
     E2_1() = default;
     E2_1(std::span<const real> a)
     {
-        rs::copy(vs::concat(a, vs::repeat(0.0)) | vs::take(alpha.size()),
-                 rs::begin(alpha));
+        copy_zero_padded(a, alpha);
     }
 
     info query_max() const { return {P, R, T, X}; }
@@ -1308,7 +1301,7 @@ struct E2_1 {
         for (auto&& v : c) v /= h;
         if (right) {
             for (auto&& v : c) v *= -1;
-            ranges::reverse(c);
+            std::ranges::reverse(c);
         }
 
         return c;
@@ -2444,11 +2437,6 @@ struct E2_1 {
             t978 + t979 + t980 + t981 + t982 + t983 + t984 + t985 + t986 + t987 + t988 +
             t989 + t990 + t991 + t992 + t993 + t994 + t995 + t996 + t997 + t998 + t999;
         double t1144 = (3 * t1143 * t511) / 2.;
-        // c[0] = -1 + t3 + t9;
-        // c[1] = -(psi * (-1 + 2 * t3 + 3 * t5));
-        // c[2] = 1 + t11 + t12 + t13 + t14 + 3 * psi * t5;
-        // c[3] = t18 + psi * t5;
-        // c[4] = t21;
         c[0] = t29 * (-1 + t11 + 2 * psi * t22 + 4 * psi * t24 + t3 - psi * t3 -
                       2 * psi * t5 + t9);
         c[1] = -(psi * (-1 + 2 * t22 + 3 * t24));
@@ -2495,7 +2483,7 @@ struct E2_1 {
 
         if (right) {
             for (auto&& v : c) v *= -1;
-            ranges::reverse(c);
+            std::ranges::reverse(c);
         }
 
         return c;

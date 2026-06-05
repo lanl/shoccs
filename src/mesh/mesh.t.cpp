@@ -1,8 +1,9 @@
 #include "mesh.hpp"
-#include "fields/selector.hpp"
+#include "fields/selection_desc.hpp"
 #include "random/random.hpp"
 
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
@@ -11,14 +12,33 @@
 #include <fmt/core.h>
 #include <fmt/ranges.h>
 
+#include <Kokkos_Core.hpp>
 #include <sol/sol.hpp>
 #include <spdlog/spdlog.h>
 
-#include <range/v3/all.hpp>
+#include <ranges>
+
+// Custom main: Kokkos must be initialized before any test creates Views.
+int main(int argc, char* argv[])
+{
+    Kokkos::ScopeGuard kokkos(argc, argv);
+    return Catch::Session().run(argc, argv);
+}
 
 using namespace ccs;
 
 constexpr auto g = []() { return pick(); };
+
+// Helper: extract gather_selection indices to a host vector.
+std::vector<int> to_host_indices(const gather_selection& gs)
+{
+    auto h = Kokkos::create_mirror_view(gs.indices_);
+    Kokkos::deep_copy(h, gs.indices_);
+    std::vector<int> result(gs.count());
+    for (int i = 0; i < gs.count(); ++i)
+        result[i] = h(i);
+    return result;
+}
 
 TEST_CASE("lines with no cut-cells")
 {
@@ -240,27 +260,31 @@ TEST_CASE("lines")
 
 TEST_CASE("selections")
 {
-    using T = std::vector<real>;
-
     const auto db = domain_extents{.min = {-1, -1, 0}, .max = {1, 2, 2.2}};
     const auto extents = int3{21, 22, 23};
 
     auto m = mesh{index_extents{extents}, db};
 
     randomize();
-    scalar<T> u{m.ss()};
-    u | sel::D = m.xyz | vs::transform([](auto&& xyz) { return get<0>(xyz); });
-    // test whole field comparison
-    REQUIRE(rs::equal(u | sel::D, u | m.fluid));
+    std::vector<real> u_d(m.size());
+    {
+        integer i = 0;
+        for (auto&& pt : ccs::cartesian_product(m.x(), m.y(), m.z()))
+            u_d[i++] = std::get<0>(pt);
+    }
+    // Without objects, all cells are fluid — fluid_desc covers everything.
+    const auto& fd = m.fluid_desc();
+    REQUIRE(fd.count() == m.size());
+    auto fluid_idx = to_host_indices(fd);
+    for (int i = 0; i < fd.count(); ++i)
+        REQUIRE(u_d[fluid_idx[i]] == u_d[i]);
 }
 
 TEST_CASE("selections with object")
 {
-    using T = std::vector<int>;
-
     sol::state lua;
     lua.open_libraries(sol::lib::base, sol::lib::math);
-    lua.script(R"(           
+    lua.script(R"(
             simulation = {
                 mesh = {
                     index_extents = {21, 22, 23},
@@ -282,60 +306,222 @@ TEST_CASE("selections with object")
     REQUIRE(!!m_opt);
     const mesh& m = *m_opt;
 
-    scalar<T> u{m.ss()};
-    u | sel::D = -1;
-    u | m.fluid = 1;
+    std::vector<int> u_d(m.size(), 0);
+    std::vector<int> u_rx(m.Rx().size(), 0);
+    std::vector<int> u_ry(m.Ry().size(), 0);
+    std::vector<int> u_rz(m.Rz().size(), 0);
+
+    std::ranges::fill(u_d, -1);
+
+    // Set fluid cells to 1.
+    auto fluid_idx = to_host_indices(m.fluid_desc());
+    for (auto idx : fluid_idx)
+        u_d[idx] = 1;
 
     {
         const bcs::Object obj_bcs = {bcs::Floating};
-        u | m.dirichlet(obj_bcs) = -1;
-        REQUIRE(rs::count(u | sel::Rx, -1) == 0);
-        REQUIRE(rs::count(u | sel::Ry, -1) == 0);
-        REQUIRE(rs::count(u | sel::Rz, -1) == 0);
+        // Floating => no Dirichlet objects => R components unaffected.
+        for (int dir = 0; dir < 3; ++dir) {
+            auto desc = m.dirichlet_object_desc(dir, obj_bcs);
+            auto idx = to_host_indices(desc);
+            auto& r = (dir == 0) ? u_rx : (dir == 1) ? u_ry : u_rz;
+            for (auto i : idx)
+                r[i] = -1;
+        }
+        REQUIRE(std::ranges::count(u_rx, -1) == 0);
+        REQUIRE(std::ranges::count(u_ry, -1) == 0);
+        REQUIRE(std::ranges::count(u_rz, -1) == 0);
     }
 
     {
         const bcs::Object obj_bcs = {bcs::Dirichlet};
-        u | m.dirichlet(obj_bcs) = -1;
-        REQUIRE(rs::count(u | sel::Rx, -1) == (integer)rs::size(u | sel::Rx));
-        REQUIRE(rs::count(u | sel::Ry, -1) == (integer)rs::size(u | sel::Ry));
-        REQUIRE(rs::count(u | sel::Rz, -1) == (integer)rs::size(u | sel::Rz));
+        for (int dir = 0; dir < 3; ++dir) {
+            auto desc = m.dirichlet_object_desc(dir, obj_bcs);
+            auto idx = to_host_indices(desc);
+            auto& r = (dir == 0) ? u_rx : (dir == 1) ? u_ry : u_rz;
+            for (auto i : idx)
+                r[i] = -1;
+        }
+        REQUIRE(std::ranges::count(u_rx, -1) == (integer)u_rx.size());
+        REQUIRE(std::ranges::count(u_ry, -1) == (integer)u_ry.size());
+        REQUIRE(std::ranges::count(u_rz, -1) == (integer)u_rz.size());
     }
 
-    {
-        using F = decltype(u | m.fluid);
-
-        REQUIRE(rs::bidirectional_range<F>);
-        REQUIRE(!rs::contiguous_range<F>);
-        REQUIRE(rs::random_access_range<F>);
-        REQUIRE(rs::sized_range<F>);
-    }
-
-    auto nsolid = rs::count(u | sel::D, -1);
+    auto nsolid = std::ranges::count(u_d, -1);
     REQUIRE(nsolid > 0);
-    auto nfluid = rs::count(u | sel::D, 1);
+    auto nfluid = std::ranges::count(u_d, 1);
     REQUIRE(nfluid > 0);
 
     REQUIRE(nfluid + nsolid == m.size());
-    REQUIRE(nfluid == (integer)rs::size(u | m.fluid));
+    REQUIRE(nfluid == m.fluid_desc().count());
 
-    scalar<T> v{m.ss()};
+    std::vector<int> v_d(m.size(), 0);
+    std::vector<int> v_rx(m.Rx().size(), 0);
+    std::vector<int> v_ry(m.Ry().size(), 0);
+    std::vector<int> v_rz(m.Rz().size(), 0);
 
-    v | sel::D = m.xyz | vs::transform([center = real3{0.01, -0.01, 0.5}](auto&& loc) {
-                     return length(loc - center) > 0.25 ? 1 : -1;
-                 });
+    {
+        auto center = real3{0.01, -0.01, 0.5};
+        integer i = 0;
+        for (auto&& pt : ccs::cartesian_product(m.x(), m.y(), m.z())) {
+            real3 loc{std::get<0>(pt), std::get<1>(pt), std::get<2>(pt)};
+            v_d[i++] = length(loc - center) > 0.25 ? 1 : -1;
+        }
+    }
 
     {
         const bcs::Object obj_bcs = {bcs::Dirichlet};
-        u | m.dirichlet(obj_bcs) = 0;
+        // All objects are Dirichlet => reset all R to 0.
+        for (int dir = 0; dir < 3; ++dir) {
+            auto desc = m.dirichlet_object_desc(dir, obj_bcs);
+            auto idx = to_host_indices(desc);
+            auto& r = (dir == 0) ? u_rx : (dir == 1) ? u_ry : u_rz;
+            for (auto i : idx)
+                r[i] = 0;
+        }
     }
 
-    REQUIRE(u == v);
+    REQUIRE(u_d == v_d);
+    REQUIRE(u_rx == v_rx);
+    REQUIRE(u_ry == v_ry);
+    REQUIRE(u_rz == v_rz);
 
-    // test assignment
-    scalar<T> w{m.ss()};
-    w | sel::D = -1;
+    // test assignment: copy fluid elements from u to w
+    std::vector<int> w_d(m.size(), -1);
+    std::vector<int> w_rx(m.Rx().size(), 0);
+    std::vector<int> w_ry(m.Ry().size(), 0);
+    std::vector<int> w_rz(m.Rz().size(), 0);
 
-    w | m.fluid = u; // | m.fluid;
-    REQUIRE(w == u);
+    for (auto idx : fluid_idx)
+        w_d[idx] = u_d[idx];
+
+    REQUIRE(w_d == u_d);
+    REQUIRE(w_rx == u_rx);
+    REQUIRE(w_ry == u_ry);
+    REQUIRE(w_rz == u_rz);
+}
+
+TEST_CASE("fluid_desc")
+{
+    const auto db = domain_extents{.min = {-1, -1, 0}, .max = {1, 2, 2.2}};
+    const auto extents = int3{21, 22, 23};
+
+    SECTION("no objects - all cells are fluid")
+    {
+        auto m = mesh{index_extents{extents}, db};
+
+        // The fluid selector should select all cells for a mesh with no objects.
+        const auto& fd = m.fluid_desc();
+        REQUIRE(fd.count() == m.size());
+
+        // Verify indices are contiguous [0, size).
+        auto h = Kokkos::create_mirror_view(fd.indices_);
+        Kokkos::deep_copy(h, fd.indices_);
+        for (int i = 0; i < fd.count(); ++i)
+            REQUIRE(h(i) == i);
+    }
+
+    SECTION("with objects - fluid_desc matches geometric classification")
+    {
+        sol::state lua;
+        lua.open_libraries(sol::lib::base, sol::lib::math);
+        lua.script(R"(
+            simulation = {
+                mesh = {
+                    index_extents = {21, 22, 23},
+                    domain_bounds = {
+                        min = {-1, -1,   0},
+                        max = { 1,  2, 2.2}
+                    }
+                },
+                shapes = {
+                    {
+                        type = "sphere",
+                        center = {0.01, -0.01, 0.5},
+                        radius = 0.25
+                    }
+                }
+            }
+        )");
+        auto m_opt = mesh::from_lua(lua["simulation"]);
+        REQUIRE(!!m_opt);
+        const mesh& m = *m_opt;
+
+        // Compute expected fluid indices from geometry: fluid = outside sphere.
+        auto center = real3{0.01, -0.01, 0.5};
+        std::vector<int> expected_fluid;
+        integer i = 0;
+        for (auto&& pt : ccs::cartesian_product(m.x(), m.y(), m.z())) {
+            real3 loc{std::get<0>(pt), std::get<1>(pt), std::get<2>(pt)};
+            if (length(loc - center) > 0.25)
+                expected_fluid.push_back(i);
+            ++i;
+        }
+
+        const auto& fd = m.fluid_desc();
+        REQUIRE(fd.count() == (int)expected_fluid.size());
+
+        auto new_indices = to_host_indices(fd);
+        REQUIRE(expected_fluid == new_indices);
+    }
+}
+
+TEST_CASE("dirichlet_object_desc and non_dirichlet_object_desc")
+{
+    sol::state lua;
+    lua.open_libraries(sol::lib::base, sol::lib::math);
+    lua.script(R"(
+        simulation = {
+            mesh = {
+                index_extents = {21, 22, 23},
+                domain_bounds = {
+                    min = {-1, -1,   0},
+                    max = { 1,  2, 2.2}
+                }
+            },
+            shapes = {
+                {
+                    type = "sphere",
+                    center = {0.01, -0.01, 0.5},
+                    radius = 0.25
+                }
+            }
+        }
+    )");
+    auto m_opt = mesh::from_lua(lua["simulation"]);
+    REQUIRE(!!m_opt);
+    const mesh& m = *m_opt;
+
+    SECTION("all Dirichlet - selects all object points")
+    {
+        const bcs::Object obj_bcs = {bcs::Dirichlet};
+        for (int dir = 0; dir < 3; ++dir) {
+            auto gd = m.dirichlet_object_desc(dir, obj_bcs);
+            REQUIRE(gd.count() == (int)m.R(dir).size());
+            // All indices should be 0..count-1
+            auto h = Kokkos::create_mirror_view(gd.indices_);
+            Kokkos::deep_copy(h, gd.indices_);
+            for (int i = 0; i < gd.count(); ++i)
+                REQUIRE(h(i) == i);
+        }
+    }
+
+    SECTION("all Floating - Dirichlet desc selects nothing")
+    {
+        const bcs::Object obj_bcs = {bcs::Floating};
+        for (int dir = 0; dir < 3; ++dir) {
+            auto gd = m.dirichlet_object_desc(dir, obj_bcs);
+            REQUIRE(gd.count() == 0);
+        }
+    }
+
+    SECTION("non_dirichlet is complement of dirichlet")
+    {
+        const bcs::Object obj_bcs = {bcs::Dirichlet};
+        for (int dir = 0; dir < 3; ++dir) {
+            auto gd = m.dirichlet_object_desc(dir, obj_bcs);
+            auto nd = m.non_dirichlet_object_desc(dir, obj_bcs);
+            REQUIRE(gd.count() + nd.count() == (int)m.R(dir).size());
+        }
+    }
 }

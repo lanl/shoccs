@@ -1,13 +1,11 @@
 #pragma once
 
-#include <functional>
 #include <optional>
 #include <sol/forward.hpp>
 #include <variant>
 
 #include "empty_integrator.hpp"
 #include "euler.hpp"
-#include "fields/field.hpp"
 #include "io/logging.hpp"
 #include "rk4.hpp"
 #include "types.hpp"
@@ -29,8 +27,10 @@ public:
         requires(std::constructible_from<v_t, T>)
     integrator(T&& t) : v{FWD(t)} {}
 
-    std::function<void(field_span)>
-    operator()(system&, const field&, const step_controller&, real dt);
+    void operator()(system& sys, sim_registry& reg,
+                    field_ref u0, field_ref output,
+                    field_ref scratch1, field_ref scratch2,
+                    const step_controller& ctrl, real dt);
 
     static std::optional<integrator> from_lua(const sol::table&, const logs& = {});
 };

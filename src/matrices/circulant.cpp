@@ -1,24 +1,21 @@
 #include "circulant.hpp"
 
-#include <cassert>
+#include "kokkos_types.hpp"
 
-#include <range/v3/algorithm/copy.hpp>
-#include <range/v3/numeric/inner_product.hpp>
-#include <range/v3/range/concepts.hpp>
-#include <range/v3/view/drop.hpp>
-#include <range/v3/view/repeat_n.hpp>
-#include <range/v3/view/sliding.hpp>
-#include <range/v3/view/stride.hpp>
-#include <range/v3/view/zip.hpp>
-#include <range/v3/view/zip_with.hpp>
+#include <cassert>
+#include <numeric>
 
 namespace ccs::matrix
 {
 
 circulant::circulant(integer rows, std::span<const real> coeffs)
     : matrix_base{rows, rows + (integer)coeffs.size() - 1, (integer)coeffs.size() / 2},
-      v{coeffs}
+      v_d("circulant_coeffs", coeffs.size())
 {
+    auto h_view = Kokkos::View<const real*, Kokkos::HostSpace,
+                               Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        coeffs.data(), coeffs.size());
+    Kokkos::deep_copy(v_d, h_view);
 }
 
 circulant::circulant(integer rows,
@@ -26,8 +23,12 @@ circulant::circulant(integer rows,
                      integer stride,
                      std::span<const real> coeffs)
     : matrix_base{rows, rows + (integer)coeffs.size() - 1, row_offset, -1, stride},
-      v{coeffs}
+      v_d("circulant_coeffs", coeffs.size())
 {
+    auto h_view = Kokkos::View<const real*, Kokkos::HostSpace,
+                               Kokkos::MemoryTraits<Kokkos::Unmanaged>>(
+        coeffs.data(), coeffs.size());
+    Kokkos::deep_copy(v_d, h_view);
 }
 
 template <typename Op>
@@ -41,25 +42,28 @@ void circulant::operator()(std::span<const real> x, std::span<real> b, Op op) co
     x = x.subspan(row_offset() - st * (size() / 2));
     b = b.subspan(row_offset());
 
+    const auto nr = rows();
+    const auto* vp = v_d.data();
+    const auto vs = static_cast<integer>(v_d.extent(0));
+    const auto* xp = x.data();
+    auto* bp = b.data();
+
     if (st == 1) {
-        auto rng =
-            vs::zip_with([](auto&& a, auto&& b) { return rs::inner_product(a, b, 0.0); },
-                         vs::repeat_n(v, rows()),
-                         x | vs::sliding(size()));
-
-        // rs::copy(rng, rs::begin(b));
-        for (auto&& [y, z] : vs::zip(b, rng)) op(y, z);
+        Kokkos::parallel_for(
+            Kokkos::RangePolicy<execution_space>(0, nr),
+            [=](int i) {
+                auto dot = std::inner_product(vp, vp + vs, xp + i, 0.0);
+                op(bp[i], dot);
+            });
     } else {
-        auto in = x | vs::stride(st);
-        auto out = b | vs::stride(st);
-
-        auto rng =
-            vs::zip_with([](auto&& a, auto&& b) { return rs::inner_product(a, b, 0.0); },
-                         vs::repeat_n(v, rows()),
-                         in | vs::sliding(size()));
-
-        // rs::copy(rng, rs::begin(out));
-        for (auto&& [y, z] : vs::zip(out, rng)) op(y, z);
+        Kokkos::parallel_for(
+            Kokkos::RangePolicy<execution_space>(0, nr),
+            [=](int i) {
+                real dot = 0.0;
+                for (integer j = 0; j < vs; j++)
+                    dot += vp[j] * xp[(i + j) * st];
+                op(bp[i * st], dot);
+            });
     }
 }
 

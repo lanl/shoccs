@@ -6,18 +6,20 @@
 namespace ccs
 {
 
-std::function<void(field_span)> integrator::operator()(system& s,
-                                                       const field& f,
-                                                       const step_controller& controller,
-                                                       real dt)
+void integrator::operator()(system& sys, sim_registry& reg,
+                            field_ref u0, field_ref output,
+                            field_ref scratch1, field_ref scratch2,
+                            const step_controller& ctrl, real dt)
 {
-    return std::visit(
-        [&s, &f, &controller, dt](auto&& integrator_v) {
-            return std::function<void(field_span)>{
-                [&s, &f, &controller, dt, &integrator_v](field_span fs) {
-                    integrator_v.ensure_size(s.size());
-                    integrator_v(s, f, fs, controller, dt);
-                }};
+    std::visit(
+        [&](auto&& integ) {
+            using T = std::decay_t<decltype(integ)>;
+            if constexpr (std::is_same_v<T, integrators::rk4>) {
+                integ(sys, reg, u0, output, scratch1, scratch2, ctrl, dt);
+            } else if constexpr (std::is_same_v<T, integrators::euler>) {
+                integ(sys, reg, u0, output, scratch2, ctrl, dt);
+            }
+            // integrators::empty: no-op
         },
         v);
 }

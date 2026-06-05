@@ -1,12 +1,9 @@
 #pragma once
 #include <array>
-#include <iostream>
 #include <string>
-#include <tuple>
 #include <vector>
 
 #include "field_data.hpp"
-#include "fields/field.hpp"
 #include "interval.hpp"
 #include "logging.hpp"
 #include "mesh/mesh_types.hpp"
@@ -42,12 +39,10 @@ public:
              const logs& = {});
 
     bool write(std::span<const std::string>,
-               field_view field,
+               std::span<const scalar_view> scalars,
                const step_controller& controller,
                real dt,
-               tuple<std::span<const mesh_object_info>,
-                     std::span<const mesh_object_info>,
-                     std::span<const mesh_object_info>>);
+               std::array<std::span<const mesh_object_info>, 3>);
 
     static std::optional<field_io> from_lua(const sol::table&, const logs& = {});
 };

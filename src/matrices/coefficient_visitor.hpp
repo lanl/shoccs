@@ -1,6 +1,5 @@
 #pragma once
 
-#include "fields/tuple_fwd.hpp"
 #include "matrix_visitor.hpp"
 #include "unit_stride_visitor.hpp"
 

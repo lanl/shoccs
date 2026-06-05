@@ -1,11 +1,13 @@
 #pragma once
 
-#include "fields/field.hpp"
+#include "fields/field_registry.hpp"
 #include "io/field_io.hpp"
 #include "mesh/mesh.hpp"
 #include "mms/manufactured_solutions.hpp"
 #include "operators/laplacian.hpp"
 #include "temporal/step_controller.hpp"
+#include <Kokkos_Graph.hpp>
+#include <optional>
 #include <sol/forward.hpp>
 
 namespace ccs::systems
@@ -24,12 +26,16 @@ class heat
     laplacian lap;
     real diffusivity;
 
-    scalar_real neumann_u;
-    scalar_real error;
+    std::vector<real> neumann_d, neumann_rx, neumann_ry, neumann_rz;
+    std::vector<real> src_d, src_rx, src_ry, src_rz;
+    std::vector<real> error_d, error_rx, error_ry, error_rz;
 
     logs logger;
 
     std::vector<std::string> io_names = {"U", "Error"};
+
+    // Pre-built graph for submit_rhs_graph().
+    std::optional<Kokkos::Experimental::Graph<execution_space>> rhs_graph_;
 
 public:
     heat() = default;
@@ -44,24 +50,27 @@ public:
 
     static std::optional<heat> from_lua(const sol::table&, const logs& = {});
 
-    void operator()(field&, const step_controller&);
-
-    system_stats stats(const field& u0, const field& u1, const step_controller&) const;
-
     bool valid(const system_stats&) const;
 
-    real timestep_size(const field&, const step_controller&) const;
-
-    void rhs(field_view, real, field_span) const;
-
-    void update_boundary(field_span, real time);
-
     void log(const system_stats&, const step_controller&);
-
-    bool write(field_io&, field_view, const step_controller&, real);
 
     real3 summary(const system_stats&) const;
 
     system_size size() const;
+
+    void fill_source(real time);
+
+    void rhs(const sim_registry& reg, field_ref input,
+             sim_registry& out_reg, field_ref output, real time);
+    void build_rhs_graph(scalar_view u, scalar_span du);
+    void submit_rhs_graph();
+    void update_boundary(sim_registry& reg, field_ref ref, real time);
+    real timestep_size(const sim_registry& reg, field_ref ref,
+                       const step_controller&) const;
+    system_stats stats(const sim_registry& reg, field_ref u0,
+                       field_ref u1, const step_controller&) const;
+    void initialize(sim_registry& reg, field_ref ref, const step_controller&);
+    bool write(field_io& io, const sim_registry& reg, field_ref ref,
+               const step_controller& c, real dt);
 };
 } // namespace ccs::systems

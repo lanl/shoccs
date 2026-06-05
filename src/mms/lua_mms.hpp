@@ -10,6 +10,8 @@ namespace ccs
 class manufactured_solution;
 
 struct lua_mms {
+    static constexpr bool thread_safe = false;
+
     sol::table tbl;
 
     std::function<real(real, const real3&)> call_;

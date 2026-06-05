@@ -1,12 +1,6 @@
 #include "stencil.hpp"
 
-#include <range/v3/algorithm/copy.hpp>
-#include <range/v3/algorithm/fill.hpp>
-#include <range/v3/algorithm/reverse.hpp>
-#include <range/v3/view/concat.hpp>
-#include <range/v3/view/repeat.hpp>
-#include <range/v3/view/take.hpp>
-#include <range/v3/view/transform.hpp>
+#include <algorithm>
 
 #include <cmath>
 
@@ -28,9 +22,9 @@ struct polyE2_1 {
              std::span<const real> da_,
              std::span<const real> ia_)
     {
-        rs::copy(vs::concat(fa_, vs::repeat(0.0)) | vs::take(fa.size()), rs::begin(fa));
-        rs::copy(vs::concat(da_, vs::repeat(0.0)) | vs::take(da.size()), rs::begin(da));
-        rs::copy(vs::concat(ia_, vs::repeat(0.0)) | vs::take(ia.size()), rs::begin(ia));
+        copy_zero_padded(fa_, fa);
+        copy_zero_padded(da_, da);
+        copy_zero_padded(ia_, ia);
     }
 
     info query_max() const { return {P, R, T, X}; }
@@ -206,7 +200,7 @@ struct polyE2_1 {
         for (auto&& v : c) v /= h;
         if (right) {
             for (auto&& v : c) v *= -1;
-            ranges::reverse(c);
+            std::ranges::reverse(c);
         }
         return c;
     }
@@ -251,7 +245,7 @@ struct polyE2_1 {
         for (auto&& v : c) v /= h;
         if (right) {
             for (auto&& v : c) v *= -1;
-            ranges::reverse(c);
+            std::ranges::reverse(c);
         }
         return c;
     }

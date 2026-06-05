@@ -1,12 +1,12 @@
 #pragma once
 
-#include "fields/tuple_utils.hpp"
+#include "types.hpp"
 #include "io/logging.hpp"
 #include <array>
 #include <cassert>
 #include <concepts>
 #include <optional>
-#include <range/v3/view/transform.hpp>
+#include <ranges>
 
 #include <sol/forward.hpp>
 
@@ -47,6 +47,11 @@ class manufactured_solution
         virtual ~any_sol() = default;
 
         virtual any_sol* clone() const = 0;
+
+        // Returns true if operator() and other evaluation methods are safe
+        // to call concurrently from multiple threads (e.g. pure-math Gauss MMS).
+        // Returns false for Lua-backed MMS which uses a non-thread-safe Lua state.
+        virtual bool is_thread_safe() const { return true; }
     };
 
     template <ManufacturedSolution M>
@@ -59,6 +64,14 @@ class manufactured_solution
         any_sol_impl(M&& m) : m{std::move(m)} {}
 
         any_sol_impl* clone() const override { return new any_sol_impl(m); }
+
+        bool is_thread_safe() const override
+        {
+            if constexpr (requires { { M::thread_safe } -> std::convertible_to<bool>; })
+                return M::thread_safe;
+            else
+                return true;
+        }
 
         real operator()(real time, const real3& loc) const override
         {
@@ -130,6 +143,8 @@ public:
 
         explicit operator bool() const { return s != nullptr; }
 
+        bool is_thread_safe() const { return s && s->is_thread_safe(); }
+
         static std::optional<manufactured_solution>
         from_lua(const sol::table&, int dims = 3, const logs& = {});
 
@@ -163,84 +178,85 @@ public:
             return s->laplacian(time, loc);
         }
 
-        template <TupleLike L>
-        requires ArrayFromTuple<real3, L> real operator()(real time, L&& loc) const
+        template <typename L>
+            requires(!std::same_as<real3, std::remove_cvref_t<L>>)
+        real operator()(real time, L&& loc) const
         {
             assert(s);
-            return (*s)(time, to<real3>(FWD(loc)));
+            return (*s)(time, real3{std::get<0>(loc), std::get<1>(loc), std::get<2>(loc)});
         }
 
-        template <TupleLike L>
-            requires ArrayFromTuple<real3, L> real ddt(real time, L&& loc)
-        const
+        template <typename L>
+            requires(!std::same_as<real3, std::remove_cvref_t<L>>)
+        real ddt(real time, L&& loc) const
         {
             assert(s);
-            return s->ddt(time, to<real3>(FWD(loc)));
+            return s->ddt(time, real3{std::get<0>(loc), std::get<1>(loc), std::get<2>(loc)});
         }
 
-        template <TupleLike L>
-            requires ArrayFromTuple<real3, L> real3 gradient(real time, L&& loc)
-        const
+        template <typename L>
+            requires(!std::same_as<real3, std::remove_cvref_t<L>>)
+        real3 gradient(real time, L&& loc) const
         {
             assert(s);
-            return s->gradient(time, to<real3>(FWD(loc)));
+            return s->gradient(time, real3{std::get<0>(loc), std::get<1>(loc), std::get<2>(loc)});
         }
 
-        template <TupleLike L>
-            requires ArrayFromTuple<real3, L> real divergence(real time, L&& loc)
-        const
+        template <typename L>
+            requires(!std::same_as<real3, std::remove_cvref_t<L>>)
+        real divergence(real time, L&& loc) const
         {
             assert(s);
-            return s->divergence(time, to<real3>(FWD(loc)));
+            return s->divergence(time, real3{std::get<0>(loc), std::get<1>(loc), std::get<2>(loc)});
         }
 
-        template <TupleLike L>
-            requires ArrayFromTuple<real3, L> real laplacian(real time, L&& loc)
-        const
+        template <typename L>
+            requires(!std::same_as<real3, std::remove_cvref_t<L>>)
+        real laplacian(real time, L&& loc) const
         {
             assert(s);
-            return s->laplacian(time, to<real3>(FWD(loc)));
+            return s->laplacian(time, real3{std::get<0>(loc), std::get<1>(loc), std::get<2>(loc)});
         }
 
         auto operator()(real time) const
         {
             assert(s);
-            return vs::transform(
+            return std::views::transform(
                 [this, time](auto&& loc) { return (*this)(time, FWD(loc)); });
         }
 
         auto ddt(real time) const
         {
             assert(s);
-            return vs::transform(
+            return std::views::transform(
                 [this, time](auto&& loc) { return ddt(time, FWD(loc)); });
         }
 
         auto gradient(real time) const
         {
             assert(s);
-            return vs::transform(
+            return std::views::transform(
                 [this, time](auto&& loc) { return gradient(time, FWD(loc)); });
         }
 
         auto gradient(int i, real time) const
         {
             assert(s);
-            return vs::transform(
+            return std::views::transform(
                 [this, i, time](auto&& loc) { return gradient(time, FWD(loc))[i]; });
         }
 
         auto divergence(real time) const
         {
             assert(s);
-            return vs::transform(
+            return std::views::transform(
                 [this, time](auto&& loc) { return divergence(time, FWD(loc)); });
         }
 
         auto laplacian(real time) const
         {
             assert(s);
-            return vs::transform(
+            return std::views::transform(
                 [this, time](auto&& loc) { return laplacian(time, FWD(loc)); });
         }
 };

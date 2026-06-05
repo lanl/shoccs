@@ -1,24 +1,37 @@
 #include "csr.hpp"
 
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
 #include "random/random.hpp"
+#include <algorithm>
+#include <random>
 #include <vector>
 
-#include <range/v3/algorithm/equal.hpp>
-#include <range/v3/algorithm/shuffle.hpp>
-#include <range/v3/range/conversion.hpp>
-#include <range/v3/view/generate_n.hpp>
+#include <Kokkos_Core.hpp>
+
+// Custom main: Kokkos must be initialized before View construction.
+int main(int argc, char* argv[])
+{
+    Kokkos::ScopeGuard kokkos(argc, argv);
+    return Catch::Session().run(argc, argv);
+}
 
 using namespace ccs;
 using Catch::Matchers::Approx;
 using T = std::vector<real>;
 
 constexpr auto random_vec = [](integer n) {
-    return vs::generate_n([]() { return pick(); }, n) | rs::to<T>();
+    T v(n);
+    std::generate_n(v.begin(), n, []() { return pick(); });
+    return v;
 };
+
+// NOLINTBEGIN(cert-msc32-c,cert-msc51-cpp)
+static std::mt19937 rng{42};
+// NOLINTEND(cert-msc32-c,cert-msc51-cpp)
 
 TEST_CASE("Identity")
 {
@@ -97,7 +110,7 @@ TEST_CASE("Identity Builder")
     for (int j = 0; j < 10; j++) {
         auto bld = matrix::csr::builder();
 
-        ranges::shuffle(pts);
+        std::ranges::shuffle(pts, rng);
         for (auto&& [r, c, v] : pts) bld.add_point(r, c, v);
 
         const auto A = bld.to_csr(vsize);
@@ -148,7 +161,7 @@ TEST_CASE("Random Builder")
     for (int j = 0; j < 10; j++) {
         auto builder = matrix::csr::builder();
 
-        ranges::shuffle(pts);
+        std::ranges::shuffle(pts, rng);
         for (auto&& [r, c, v] : pts) builder.add_point(r, c, v);
 
         const auto A = builder.to_csr(10);

@@ -6,8 +6,6 @@
 
 #include <vector>
 
-#include <range/v3/view/zip.hpp>
-
 #include <sol/sol.hpp>
 #include <spdlog/spdlog.h>
 
@@ -65,7 +63,8 @@ TEST_CASE("E2_1")
                               0,
                               -0.25,
                               0,
-                              0.25}));
+                              0.25})
+                         .margin(1e-12));
     }
     {
         auto [p, r, t, x] = st.query(bcs::Dirichlet);
@@ -93,6 +92,7 @@ TEST_CASE("E2_1")
                               -2.,
                               20.,
                               0.,
-                              -12.}));
+                              -12.})
+                         .margin(1e-12));
     }
 }

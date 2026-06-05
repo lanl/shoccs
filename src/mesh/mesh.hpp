@@ -1,7 +1,7 @@
 #pragma once
 
 #include "cartesian.hpp"
-#include "fields/selector.hpp"
+#include "fields/selection_desc.hpp"
 #include "io/logging.hpp"
 #include "mesh_types.hpp"
 #include "object_geometry.hpp"
@@ -18,39 +18,8 @@ class mesh
     object_geometry geometry;
     std::array<std::vector<line>, 3> lines_;
     std::vector<index_slice> fluid_slices;
+    gather_selection fluid_desc_;
     logs logger;
-
-    template <bcs::type B, int I>
-    auto grid_boundaries(const bcs::Grid& g) const
-    {
-        if constexpr (I == -1) {
-            return tuple{xmin, xmax, ymin, ymax, zmin, zmax} |
-                   tuple{sel::optional_view(g[0].left == B),
-                         sel::optional_view(g[0].right == B),
-                         sel::optional_view(g[1].left == B),
-                         sel::optional_view(g[1].right == B),
-                         sel::optional_view(g[2].left == B),
-                         sel::optional_view(g[2].right == B)};
-        } else {
-            return tuple{xmin, xmax, ymin, ymax, zmin, zmax} |
-                   tuple{sel::optional_view(I == 0 && g[0].left == B),
-                         sel::optional_view(I == 0 && g[0].right == B),
-                         sel::optional_view(I == 1 && g[1].left == B),
-                         sel::optional_view(I == 1 && g[1].right == B),
-                         sel::optional_view(I == 2 && g[2].left == B),
-                         sel::optional_view(I == 2 && g[2].right == B)};
-        }
-    }
-
-    template <typename Fn>
-    auto object_boundaries(Fn cmp) const
-    {
-        auto t = vs::transform([cmp = MOVE(cmp)](auto&& info) { return cmp(FWD(info)); });
-
-        return tuple{sel::Rx, sel::Ry, sel::Rz} | tuple{sel::predicate(Rx() | t),
-                                                        sel::predicate(Ry() | t),
-                                                        sel::predicate(Rz() | t)};
-    }
 
 public:
     mesh() = default;
@@ -66,6 +35,10 @@ public:
     constexpr auto size() const { return cart.size(); }
 
     constexpr int dims() const { return cart.dims(); }
+
+    constexpr std::span<const real> x() const { return cart.x(); }
+    constexpr std::span<const real> y() const { return cart.y(); }
+    constexpr std::span<const real> z() const { return cart.z(); }
 
     const auto& lines(int i) const { return lines_[i]; }
 
@@ -94,8 +67,6 @@ public:
         return ijk[0] * n[1] * n[2] + ijk[1] * n[2] + ijk[2];
     }
 
-    // constexpr auto location() const { return views::location(cart, geometry); }
-
     // Intersection of rays in x and all objects
     std::span<const mesh_object_info> Rx() const { return geometry.Rx(); }
     // Intersection of rays in y and all objects
@@ -103,7 +74,10 @@ public:
     // Intersection of rays in z and all objects
     std::span<const mesh_object_info> Rz() const { return geometry.Rz(); }
 
-    auto R() const { return tuple{geometry.Rx(), geometry.Ry(), geometry.Rz()}; }
+    auto R() const
+    {
+        return std::array<std::span<const mesh_object_info>, 3>{Rx(), Ry(), Rz()};
+    }
 
     std::span<const mesh_object_info> R(int dir) const
     {
@@ -117,72 +91,30 @@ public:
         }
     }
 
+    const gather_selection& fluid_desc() const { return fluid_desc_; }
+
+    // Indices into R(dir); R(dir) buffer layout matches the data buffer by construction.
+    gather_selection dirichlet_object_desc(int dir, const bcs::Object& o) const
+    {
+        return make_gather_from_predicate(
+            R(dir),
+            [&o](const mesh_object_info& info) {
+                return o[info.shape_id] == bcs::Dirichlet;
+            });
+    }
+
+    // Indices into R(dir); R(dir) buffer layout matches the data buffer by construction.
+    gather_selection non_dirichlet_object_desc(int dir, const bcs::Object& o) const
+    {
+        return make_gather_from_predicate(
+            R(dir),
+            [&o](const mesh_object_info& info) {
+                return o[info.shape_id] != bcs::Dirichlet;
+            });
+    }
+
     line interp_line(int dir, int3 pt) const;
 
-    auto ss() const // scalar size
-    {
-        return tuple{tuple{size()}, tuple{Rx().size(), Ry().size(), Rz().size()}};
-    }
-
-    auto vs() const // vector size
-    {
-        return tuple{ss(), ss(), ss()};
-    }
-
-    template <int I = -1>
-    auto dirichlet(const bcs::Grid& g) const
-    {
-        return grid_boundaries<bcs::Dirichlet, I>(g);
-    }
-
-    auto dirichlet(const bcs::Object& o) const
-    {
-        return object_boundaries(
-            [&o](auto&& info) { return o[info.shape_id] == bcs::Dirichlet; });
-    }
-
-    auto non_dirichlet(const bcs::Object& o) const
-    {
-        return object_boundaries(
-            [&o](auto&& info) { return o[info.shape_id] != bcs::Dirichlet; });
-    }
-
-    template <int I = -1>
-    auto dirichlet(const bcs::Grid& g, const bcs::Object& o) const
-    {
-        return tuple_cat<tuple<integer>>(this->template dirichlet<I>(g),
-                                         this->dirichlet(o));
-    }
-
-    auto fluid_all(const bcs::Object& o) const
-    {
-        return tuple_cat<tuple<integer>>(tuple{fluid}, non_dirichlet(o));
-    }
-
-    template <int I = -1>
-    auto neumann(const bcs::Grid& g) const
-    {
-        return grid_boundaries<bcs::Neumann, I>(g);
-    }
-
     static std::optional<mesh> from_lua(const sol::table&, const logs& = {});
-
-    sel::xmin_t xmin;
-    sel::xmax_t xmax;
-    sel::ymin_t ymin;
-    sel::ymax_t ymax;
-    sel::zmin_t zmin;
-    sel::zmax_t zmax;
-    sel::multi_slice_t fluid;
-    tuple<decltype(std::declval<cartesian>().domain()),
-          decltype(std::declval<object_geometry>().domain())>
-        xyz;
-    tuple<tuple<decltype(std::declval<cartesian>().domain()),
-                decltype(std::declval<object_geometry>().domain())>,
-          tuple<decltype(std::declval<cartesian>().domain()),
-                decltype(std::declval<object_geometry>().domain())>,
-          tuple<decltype(std::declval<cartesian>().domain()),
-                decltype(std::declval<object_geometry>().domain())>>
-        vxyz;
 };
 } // namespace ccs

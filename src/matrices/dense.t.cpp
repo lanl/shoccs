@@ -1,12 +1,24 @@
 #include "dense.hpp"
 
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_vector.hpp>
 
-#include <range/v3/all.hpp>
+#include <algorithm>
+#include <ranges>
 
+#include "fields/lazy_views.hpp"
 #include "random/random.hpp"
+
+#include <Kokkos_Core.hpp>
+
+// Custom main: Kokkos must be initialized before View construction.
+int main(int argc, char* argv[])
+{
+    Kokkos::ScopeGuard kokkos(argc, argv);
+    return Catch::Session().run(argc, argv);
+}
 
 using namespace ccs;
 using Catch::Matchers::Approx;
@@ -30,7 +42,8 @@ TEST_CASE("Identity")
     REQUIRE_THAT(rng, Approx(rhs));
 
     mat(rng, rhs, plus_eq);
-    const T rng2 = rng | vs::transform([](auto&& x) { return x + x; }) | rs::to<T>();
+    T rng2(rng.size());
+    std::ranges::transform(rng, rng2.begin(), [](auto&& x) { return x + x; });
     REQUIRE_THAT(rng2, Approx(rhs));
 }
 
@@ -44,15 +57,16 @@ TEST_CASE("Identity - NonSquare")
            0, 0, 0, 0, 1};
     const auto A = matrix::dense{4, 5, 1, 0, 1, imat};
 
-    const T x = vs::generate_n([]() { return pick(); }, A.columns()) | rs::to<T>();
+    T x(A.columns());
+    std::generate_n(x.begin(), A.columns(), []() { return pick(); });
     auto b = T(A.columns());
 
     A(x, b);
 
     REQUIRE(b[0] == 0.0);
 
-    const auto xx = x | vs::drop(1) | rs::to<T>();
-    const auto bb = b | vs::drop(1) | rs::to<T>();
+    const T xx(x.begin() + 1, x.end());
+    const T bb(b.begin() + 1, b.end());
     REQUIRE_THAT(bb, Approx(xx));
 }
 
@@ -122,23 +136,25 @@ TEST_CASE("Non Square2")
 
 TEST_CASE("strided")
 {
-    const auto coeffs = vs::iota(0, 25);
+    const auto coeffs = std::views::iota(0, 25);
 
     for (integer offset = 0; offset < 3; offset++) {
         // setup strided problem
         const auto A = matrix::dense(5, 5, offset, offset, 3, coeffs);
-        const auto x = vs::iota(0, 15) | rs::to<std::vector<real>>();
+        auto iota15 = std::views::iota(0, 15);
+        const std::vector<real> x(iota15.begin(), iota15.end());
         auto b = std::vector<real>(x.size());
         A(x, b);
 
         // non-strided problem
         const auto AA = matrix::dense(5, 5, coeffs);
-        const auto xx = vs::iota(0, 15) | vs::drop(offset) | vs::stride(3) |
-                        rs::to<std::vector<real>>();
+        auto strided_xx = ccs::stride(std::views::iota(0, 15) | std::views::drop(offset), 3);
+        const std::vector<real> xx(strided_xx.begin(), strided_xx.end());
         auto bb = std::vector<real>(xx.size());
         AA(xx, bb);
 
-        auto bp = b | vs::drop(offset) | vs::stride(3) | rs::to<std::vector<real>>();
+        auto strided_bp = ccs::stride(b | std::views::drop(offset), 3);
+        std::vector<real> bp(strided_bp.begin(), strided_bp.end());
         REQUIRE_THAT(bp, Approx(bb));
     }
 }

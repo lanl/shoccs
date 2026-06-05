@@ -94,9 +94,9 @@ TEST_CASE("sphere intersections")
         for (int i = 0; auto&& c : rx) {
             auto [x, y, z] = exact[i];
             auto [cx, cy, cz] = c.position;
-            REQUIRE(cx == Catch::Approx(x));
-            REQUIRE(cy == Catch::Approx(y));
-            REQUIRE(cz == Catch::Approx(z));
+            REQUIRE(cx == Catch::Approx(x).margin(1e-14));
+            REQUIRE(cy == Catch::Approx(y).margin(1e-14));
+            REQUIRE(cz == Catch::Approx(z).margin(1e-14));
 
             REQUIRE(c.psi == Catch::Approx(psi[i]));
 
@@ -223,9 +223,9 @@ TEST_CASE("sphere intersections")
         for (int i = 0; auto&& c : ry) {
             auto [x, y, z] = exact[i];
             auto [cx, cy, cz] = c.position;
-            REQUIRE(cx == Catch::Approx(x));
-            REQUIRE(cy == Catch::Approx(y));
-            REQUIRE(cz == Catch::Approx(z));
+            REQUIRE(cx == Catch::Approx(x).margin(1e-14));
+            REQUIRE(cy == Catch::Approx(y).margin(1e-14));
+            REQUIRE(cz == Catch::Approx(z).margin(1e-14));
             REQUIRE(c.psi == Catch::Approx(psi[i]));
             REQUIRE(c.solid_coord == sc[i]);
             i++;
@@ -303,9 +303,9 @@ TEST_CASE("sphere intersections")
         for (int i = 0; auto&& c : rz) {
             auto [x, y, z] = exact[i];
             auto [cx, cy, cz] = c.position;
-            REQUIRE(cx == Catch::Approx(x));
-            REQUIRE(cy == Catch::Approx(y));
-            REQUIRE(cz == Catch::Approx(z));
+            REQUIRE(cx == Catch::Approx(x).margin(1e-14));
+            REQUIRE(cy == Catch::Approx(y).margin(1e-14));
+            REQUIRE(cz == Catch::Approx(z).margin(1e-14));
             REQUIRE(c.psi == Catch::Approx(psi[i]));
             REQUIRE(c.solid_coord == sc[i]);
             i++;
@@ -407,4 +407,79 @@ TEST_CASE("1D rect_intersections")
     auto g = object_geometry(shapes, m);
     REQUIRE(g.Rx().size() == 2u);
     REQUIRE(g.Sx().size() == 2u);
+}
+
+TEST_CASE("grid-aligned sphere - cross-direction consistency")
+{
+    // Reproduce issue #7: sphere surface passes exactly through grid node
+    // (i=249, j=169) = (1.245, 0.845).  Verify:
+    //   (1.245 - 1.053)^2 + (0.845 - 0.901)^2 = 0.192^2 + 0.056^2 = 0.04 = 0.2^2
+    //
+    // Without the grid-snap fix, accumulated floating-point error in the
+    // intersection calculation makes static_cast<int>(t/h) floor to the
+    // wrong cell.  The X-ray and Y-ray go through different arithmetic
+    // paths (different oc, discriminant, sqrt), so they can round in
+    // opposite directions — one assigns the boundary one cell too early,
+    // the other one cell too late.  This makes the same physical boundary
+    // point appear in different cells depending on ray direction.
+
+    sol::state lua;
+    lua.open_libraries(sol::lib::base, sol::lib::math);
+    lua.script(R"(
+            simulation = {
+                mesh = {
+                    index_extents = {401, 401},
+                    domain_bounds = {2, 2}
+                },
+                shapes = {
+                    {
+                        type = "sphere",
+                        center = {1.053, 0.901, 0},
+                        radius = 0.2
+                    }
+                }
+            }
+        )");
+
+    auto m_opt = cartesian::from_lua(lua["simulation"]);
+    REQUIRE(!!m_opt);
+    auto&& [n, domain] = *m_opt;
+
+    auto shapes_opt = object_geometry::from_lua(lua["simulation"], n, domain);
+    REQUIRE(!!shapes_opt);
+    const auto& shapes = *shapes_opt;
+
+    auto m = cartesian(n.extents, domain.min, domain.max);
+    object_geometry g{shapes, m};
+
+    constexpr real pos_tol = 1e-14;
+
+    // X-ray at j=169 exits the sphere at x=1.245 (grid point i=249).
+    // Correct: solid_coord[0] = 249, psi ≈ 1.0.
+    // Bug:     solid_coord[0] = 248, psi ≈ 0 (truncation error).
+    bool found_x = false;
+    for (auto& info : g.Rx()) {
+        if (std::abs(info.position[0] - 1.245) < pos_tol &&
+            std::abs(info.position[1] - 0.845) < pos_tol) {
+            REQUIRE_FALSE(info.ray_outside); // exiting sphere
+            REQUIRE(info.solid_coord[0] == 249);
+            REQUIRE(info.psi == Catch::Approx(1.0).margin(1e-8));
+            found_x = true;
+        }
+    }
+    REQUIRE(found_x);
+
+    // Y-ray at i=249 enters the sphere at y=0.845 (grid point j=169).
+    // Correct: solid_coord[1] = 170 (= i_cell + ray_outside = 169 + 1).
+    // Bug:     solid_coord[1] = 169 (if truncation rounds i_cell to 168).
+    bool found_y = false;
+    for (auto& info : g.Ry()) {
+        if (std::abs(info.position[0] - 1.245) < pos_tol &&
+            std::abs(info.position[1] - 0.845) < pos_tol) {
+            REQUIRE(info.ray_outside); // entering sphere
+            REQUIRE(info.solid_coord[1] == 170);
+            found_y = true;
+        }
+    }
+    REQUIRE(found_y);
 }

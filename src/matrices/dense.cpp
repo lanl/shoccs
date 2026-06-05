@@ -1,15 +1,7 @@
 #include "dense.hpp"
-// range includes
-#include <range/v3/algorithm/copy.hpp>
-#include <range/v3/numeric/inner_product.hpp>
-#include <range/v3/range/concepts.hpp>
-#include <range/v3/view/chunk.hpp>
-#include <range/v3/view/repeat_n.hpp>
-#include <range/v3/view/stride.hpp>
-#include <range/v3/view/zip.hpp>
-#include <range/v3/view/zip_with.hpp>
 
 #include <cassert>
+#include <numeric>
 
 namespace ccs::matrix
 {
@@ -24,24 +16,23 @@ void dense::operator()(std::span<const real> x, std::span<real> b, Op op) const
     x = x.subspan(col_offset());
     b = b.subspan(row_offset());
     const auto st = stride();
+    const auto* vp = v_d.data();
+    const auto nc = columns();
 
     if (st == 1) {
-        auto rng =
-            vs::zip_with([](auto&& a, auto&& b) { return rs::inner_product(a, b, 0.0); },
-                         vs::chunk(v, columns()),
-                         vs::repeat_n(x, rows()));
-        // rs::copy(rng, rs::begin(b));
-        for (auto&& [y, z] : vs::zip(b, rng)) op(y, z);
+        for (integer i = 0; i < rows(); i++) {
+            auto dot = std::inner_product(
+                vp + i * nc, vp + (i + 1) * nc,
+                x.data(), 0.0);
+            op(b[i], dot);
+        }
     } else {
-        auto in = x | vs::stride(st);
-        auto out = b | vs::stride(st);
-
-        auto rng =
-            vs::zip_with([](auto&& a, auto&& b) { return rs::inner_product(a, b, 0.0); },
-                         vs::chunk(v, columns()),
-                         vs::repeat_n(in, rows()));
-        for (auto&& [y, z] : vs::zip(out, rng)) op(y, z);
-        // rs::copy(rng, rs::begin(out));
+        for (integer i = 0; i < rows(); i++) {
+            real dot = 0.0;
+            for (integer j = 0; j < nc; j++)
+                dot += vp[i * nc + j] * x[j * st];
+            op(b[i * st], dot);
+        }
     }
 }
 

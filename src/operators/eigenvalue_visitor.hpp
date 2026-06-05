@@ -3,6 +3,8 @@
 #include "matrices/coefficient_visitor.hpp"
 #include "operator_visitor.hpp"
 
+#include <cassert>
+
 namespace ccs
 {
 class eigenvalue_visitor : public operator_visitor

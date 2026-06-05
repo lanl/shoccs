@@ -1,7 +1,6 @@
 #include "stencil.hpp"
 
-#include <range/v3/algorithm/fill.hpp>
-#include <range/v3/algorithm/reverse.hpp>
+#include <algorithm>
 
 #include <cassert>
 
@@ -232,7 +231,7 @@ struct E4_2 {
 
         for (auto&& v : c) v /= (h * h);
 
-        if (right) ranges::reverse(c);
+        if (right) std::ranges::reverse(c);
         return c;
     }
 
@@ -260,7 +259,7 @@ struct E4_2 {
         c[9] = -(t7 * (2 + t18 + t7)) / 72.;
         for (auto&& v : c) v /= (h * h);
 
-        if (right) ranges::reverse(c);
+        if (right) std::ranges::reverse(c);
 
         return c;
     }
@@ -303,8 +302,8 @@ struct E4_2 {
         for (auto&& v : x) v /= h;
 
         if (right) {
-            ranges::reverse(c);
-            ranges::reverse(x);
+            std::ranges::reverse(c);
+            std::ranges::reverse(x);
             for (auto&& v : x) v *= -1;
         }
 

@@ -3,8 +3,12 @@
 #include "common.hpp"
 #include "matrix_visitor.hpp"
 
+#include "kokkos_types.hpp"
+
+#include <Kokkos_Graph.hpp>
+
 #include <compare>
-#include <range/v3/range/concepts.hpp>
+#include <ranges>
 #include <vector>
 
 namespace ccs::matrix
@@ -20,11 +24,11 @@ class csr
 public:
     csr() = default;
 
-    template <ranges::input_range W, ranges::input_range V, ranges::input_range U>
+    template <std::ranges::input_range W, std::ranges::input_range V, std::ranges::input_range U>
     csr(W&& w, V&& v, U&& u, flag row_col_space = 0)
-        : w(rs::begin(w), rs::end(w)),
-          v(rs::begin(v), rs::end(v)),
-          u(rs::begin(u), rs::end(u)),
+        : w(std::ranges::begin(w), std::ranges::end(w)),
+          v(std::ranges::begin(v), std::ranges::end(v)),
+          u(std::ranges::begin(u), std::ranges::end(u)),
           f{row_col_space}
     {
     }
@@ -37,6 +41,24 @@ public:
     integer size() const { return (integer)w.size(); }
 
     void operator()(std::span<const real> x, std::span<real> b) const;
+
+    // Chain a RangePolicy graph node that performs the CSR matvec (always +=).
+    // For 0-row matrices, the node executes zero iterations.
+    template <typename NodeType>
+    auto graph_node(NodeType parent, const real* x_ptr, real* b_ptr) const
+    {
+        const auto nr = rows();
+        const auto* wp = w.data();
+        const auto* vp = v.data();
+        const auto* up = u.data();
+        return parent.then_parallel_for(
+            "csr_matvec",
+            Kokkos::RangePolicy<execution_space>(0, nr),
+            KOKKOS_LAMBDA(integer row) {
+                for (integer i = up[row]; i < up[row + 1]; i++)
+                    b_ptr[row] += wp[i] * x_ptr[vp[i]];
+            });
+    }
 
     struct builder;
 
@@ -63,13 +85,10 @@ struct csr::builder {
 
     void add_point(integer row, integer col, real v)
     {
-        // std::cout << "adding\t" << row << '\t' << col << '\t' << v << '\n';
         p.emplace_back(row, col, v);
     }
 
     csr to_csr(integer nrows);
 };
-
-// using CSR_Builder = csr::builder_;
 
 } // namespace ccs::matrix

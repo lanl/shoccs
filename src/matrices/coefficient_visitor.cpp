@@ -3,10 +3,7 @@
 #include "csr.hpp"
 #include "dense.hpp"
 
-#include <range/v3/view/chunk.hpp>
-#include <range/v3/view/drop.hpp>
-#include <range/v3/view/for_each.hpp>
-#include <range/v3/view/zip.hpp>
+#include <cassert>
 
 namespace ccs::matrix
 {
@@ -22,13 +19,16 @@ void coefficient_visitor::visit(const dense& mat)
     auto d = mat.data();
 
     if (auto f = mat.flags(); is_ldd(f)) {
-        auto t = vs::chunk(c_n) | vs::for_each(vs::drop(1));
-        for (auto&& [i, x] : vs::zip(ind | t, d | t)) { m[i] = x; }
+        for (integer r = 0; r < r_n; r++)
+            for (integer c = 1; c < c_n; c++)
+                m[ind[r * c_n + c]] = d[r * c_n + c];
     } else if (is_rdd(f)) {
-        auto t = vs::chunk(c_n) | vs::for_each(vs::take(c_n - 1));
-        for (auto&& [i, x] : vs::zip(ind | t, d | t)) m[i] = x;
+        for (integer r = 0; r < r_n; r++)
+            for (integer c = 0; c < c_n - 1; c++)
+                m[ind[r * c_n + c]] = d[r * c_n + c];
     } else {
-        for (auto&& [i, x] : vs::zip(ind, d)) m[i] = x;
+        for (integer i = 0; i < (integer)ind.size(); i++)
+            m[ind[i]] = d[i];
     }
 }
 
@@ -41,9 +41,10 @@ void coefficient_visitor::visit(const circulant& mat)
     integer c_off = r_off - (mat.size() / 2);
 
     for (integer row = 0; row < r_n; row++) {
-        for (auto&& [i, x] :
-             vs::zip(v.mapped(row + r_off, 1, c_off + row, mat.size()), mat.data()))
-            m[i] = x;
+        auto mapped = v.mapped(row + r_off, 1, c_off + row, mat.size());
+        auto data = mat.data();
+        for (integer k = 0; k < (integer)mapped.size(); k++)
+            m[mapped[k]] = data[k];
     }
 }
 
@@ -52,8 +53,10 @@ void coefficient_visitor::visit(const csr& mat)
     assert(m.size() > 0);
 
     for (integer row = 0; row < mat.rows(); row++) {
-        for (auto&& [i, x] : vs::zip(v.mapped(row, mat), mat.column_coefficients(row)))
-            if (i != -1) m[i] = x;
+        auto mapped = v.mapped(row, mat);
+        auto coeffs = mat.column_coefficients(row);
+        for (integer k = 0; k < (integer)mapped.size(); k++)
+            if (mapped[k] != -1) m[mapped[k]] = coeffs[k];
     }
 }
 } // namespace ccs::matrix

@@ -1,6 +1,8 @@
 #pragma once
 
-#include "fields/tuple.hpp"
+#include <array>
+#include <span>
+
 #include "index_extents.hpp"
 #include "logging.hpp"
 #include "mesh/mesh_types.hpp"
@@ -25,9 +27,7 @@ public:
                real time,
                std::span<const std::string> var_names,
                std::span<const std::string> file_names,
-               tuple<std::span<const mesh_object_info>,
-                     std::span<const mesh_object_info>,
-                     std::span<const mesh_object_info>>,
+               std::array<std::span<const mesh_object_info>, 3>,
                const logs& logger) const;
 };
 

@@ -6,7 +6,11 @@
 
 #include <vector>
 
-#include <range/v3/all.hpp>
+#include <numeric>
+#include <ranges>
+#include <span>
+
+#include "fields/lazy_views.hpp"
 
 #include <sol/sol.hpp>
 #include <spdlog/spdlog.h>
@@ -16,12 +20,12 @@ using namespace ccs;
 
 // interior function for use with E2-poly
 constexpr auto gf = [](auto&& x) { return 2 * x * x - 3 * x + 1; };
-constexpr auto gt = vs::transform(gf);
+const auto gt = std::views::transform(gf);
 constexpr auto g_dx = [](auto&& x) { return 4 * x - 3; };
 
 // boundary function for use with E2-poly
 constexpr auto bf = [](auto&& x) { return 2 * x + 1; };
-constexpr auto bt = vs::transform(bf);
+const auto bt = std::views::transform(bf);
 constexpr auto b_dx = [](auto&& x) { return 2; };
 
 constexpr real ymin = -1.;
@@ -93,11 +97,13 @@ TEST_CASE("interior")
     REQUIRE(t == 4);
     REQUIRE(x == 0);
 
-    const auto mesh = vs::linear_distribute(ymin, ymax, 2 * p + 1) | rs::to<T>();
+    const auto mesh = ccs::linear_distribute(ymin, ymax, 2 * p + 1);
     const auto h = mesh[1] - mesh[0];
     T c(2 * p + 1);
 
-    REQUIRE(rs::inner_product(st.interior(h, c), mesh | gt, 0.) ==
+    auto coeffs = st.interior(h, c);
+    auto view_gt = mesh | gt;
+    REQUIRE(std::inner_product(std::ranges::begin(coeffs), std::ranges::end(coeffs), view_gt.begin(), 0.) ==
             Catch::Approx(g_dx(mesh[p])));
 }
 
@@ -126,32 +132,36 @@ TEST_CASE("floating")
 
     T c(r * t);
     T ex(x);
-    T mesh = vs::linear_distribute(ymin, ymax, t - 1) | rs::to<T>();
+    T mesh = ccs::linear_distribute(ymin, ymax, t - 1);
     real h = mesh[1] - mesh[0];
     real psi = 0.2;
 
     {
-        T m = vs::concat(vs::single(ymin - psi * h), mesh) | rs::to<T>();
+        T m = {ymin - psi * h};
+        m.insert(m.end(), mesh.begin(), mesh.end());
         REQUIRE((int)m.size() == t);
 
         st.nbs(h, bcs::Floating, psi, false, c, ex);
 
-        for (int i = 0; i < r; i++)
-            REQUIRE(rs::inner_product(c | vs::drop(i * t) | vs::take_exactly(t),
-                                      m | bt,
-                                      0.) == Catch::Approx(b_dx(m[i])));
+        auto view_bt = m | bt;
+        for (int i = 0; i < r; i++) {
+            auto cs = std::span(c).subspan(i * t, t);
+            REQUIRE(std::inner_product(cs.begin(), cs.end(), view_bt.begin(), 0.) == Catch::Approx(b_dx(m[i])));
+        }
     }
 
     {
-        T m = vs::concat(mesh, vs::single(ymax + psi * h)) | rs::to<T>();
+        T m(mesh.begin(), mesh.end());
+        m.push_back(ymax + psi * h);
         REQUIRE((int)m.size() == t);
 
         st.nbs(h, bcs::Floating, psi, true, c, ex);
 
-        for (int i = 0; i < r; i++)
-            REQUIRE(rs::inner_product(c | vs::drop(i * t) | vs::take_exactly(t),
-                                      m | bt,
-                                      0.) == Catch::Approx(b_dx(m[t - r + i])));
+        auto view_bt = m | bt;
+        for (int i = 0; i < r; i++) {
+            auto cs = std::span(c).subspan(i * t, t);
+            REQUIRE(std::inner_product(cs.begin(), cs.end(), view_bt.begin(), 0.) == Catch::Approx(b_dx(m[t - r + i])));
+        }
     }
 }
 
@@ -180,32 +190,36 @@ TEST_CASE("dirichlet")
 
     T c(r * t);
     T ex(x);
-    T mesh = vs::linear_distribute(ymin, ymax, t - 1) | rs::to<T>();
+    T mesh = ccs::linear_distribute(ymin, ymax, t - 1);
     real h = mesh[1] - mesh[0];
     real psi = 0.0;
 
     {
-        T m = vs::concat(vs::single(ymin - psi * h), mesh) | rs::to<T>();
+        T m = {ymin - psi * h};
+        m.insert(m.end(), mesh.begin(), mesh.end());
         REQUIRE((int)m.size() == t);
 
         st.nbs(h, bcs::Dirichlet, psi, false, c, ex);
 
-        for (int i = 0; i < r; i++)
-            REQUIRE(rs::inner_product(c | vs::drop(i * t) | vs::take_exactly(t),
-                                      m | bt,
-                                      0.) == Catch::Approx(b_dx(m[i + 1])));
+        auto view_bt = m | bt;
+        for (int i = 0; i < r; i++) {
+            auto cs = std::span(c).subspan(i * t, t);
+            REQUIRE(std::inner_product(cs.begin(), cs.end(), view_bt.begin(), 0.) == Catch::Approx(b_dx(m[i + 1])));
+        }
     }
 
     {
-        T m = vs::concat(mesh, vs::single(ymax + psi * h)) | rs::to<T>();
+        T m(mesh.begin(), mesh.end());
+        m.push_back(ymax + psi * h);
         REQUIRE((int)m.size() == t);
 
         st.nbs(h, bcs::Dirichlet, psi, true, c, ex);
 
-        for (int i = 0; i < r; i++)
-            REQUIRE(rs::inner_product(c | vs::drop(i * t) | vs::take_exactly(t),
-                                      m | bt,
-                                      0.) == Catch::Approx(b_dx(m[t - r - 1 + i])));
+        auto view_bt = m | bt;
+        for (int i = 0; i < r; i++) {
+            auto cs = std::span(c).subspan(i * t, t);
+            REQUIRE(std::inner_product(cs.begin(), cs.end(), view_bt.begin(), 0.) == Catch::Approx(b_dx(m[t - r - 1 + i])));
+        }
     }
 }
 
@@ -229,10 +243,10 @@ TEST_CASE("interp interior")
     auto p = st.query_interp().p;
 
     T c(p);
-    T mesh = vs::linear_distribute(ymin, ymax, p) | rs::to<T>();
+    T mesh = ccs::linear_distribute(ymin, ymax, p);
     real h = mesh[1] - mesh[0];
 
-    for (auto&& y : vs::linear_distribute(-0.45, 0.45, 11)) {
+    for (auto&& y : ccs::linear_distribute(-0.45, 0.45, 11)) {
 
         int center = 1 - (y > 0);
 
@@ -245,7 +259,8 @@ TEST_CASE("interp interior")
 
         REQUIRE(!l.object);
         REQUIRE(!r.object);
-        real yi = rs::inner_product(v, mesh | bt, 0.);
+        auto view_bt = mesh | bt;
+        real yi = std::inner_product(v.begin(), v.end(), view_bt.begin(), 0.);
         REQUIRE(yi == Catch::Approx(bf(mesh[center] + y * h)));
     }
 }
@@ -273,13 +288,14 @@ TEST_CASE("interp wall")
     auto t = st.query_max().t;
 
     T c(t);
-    T mesh = vs::linear_distribute(ymin, ymax, t - 1) | rs::to<T>();
+    T mesh = ccs::linear_distribute(ymin, ymax, t - 1);
     const real h = mesh[1] - mesh[0];
 
     // left 0
     {
         const real psi = 0.8, y = 0.3;
-        auto m = vs::concat(vs::single(ymin - psi * h), mesh) | rs::to<T>();
+        T m = {ymin - psi * h};
+        m.insert(m.end(), mesh.begin(), mesh.end());
         auto&& [v, l, r] = st.interp(0,
                                      int3{8, 4, 5},
                                      y,
@@ -288,13 +304,15 @@ TEST_CASE("interp wall")
                                      c);
         REQUIRE(l.object);
         REQUIRE(!r.object);
-        real yi = rs::inner_product(v, m | bt, 0.);
+        auto view_bt = m | bt;
+        real yi = std::inner_product(v.begin(), v.end(), view_bt.begin(), 0.);
         REQUIRE(yi == Catch::Approx(bf(ymin - h + y * h)));
     }
     // left 1
     {
         const real psi = 0.8, y = -0.2;
-        auto m = vs::concat(vs::single(ymin - psi * h), mesh) | rs::to<T>();
+        T m = {ymin - psi * h};
+        m.insert(m.end(), mesh.begin(), mesh.end());
         auto&& [v, l, r] = st.interp(0,
                                      int3{9, 4, 5},
                                      y,
@@ -303,14 +321,16 @@ TEST_CASE("interp wall")
                                      c);
         REQUIRE(l.object);
         REQUIRE(!r.object);
-        real yi = rs::inner_product(v, m | bt, 0.);
+        auto view_bt = m | bt;
+        real yi = std::inner_product(v.begin(), v.end(), view_bt.begin(), 0.);
         REQUIRE(yi == Catch::Approx(bf(ymin + y * h)));
     }
 
     // right 0
     {
         const real psi = 0.9, y = -0.3;
-        auto m = vs::concat(mesh, vs::single(ymax + psi * h)) | rs::to<T>();
+        T m(mesh.begin(), mesh.end());
+        m.push_back(ymax + psi * h);
         auto&& [v, l, r] = st.interp(1,
                                      int3{8, 9, 5},
                                      y,
@@ -319,14 +339,16 @@ TEST_CASE("interp wall")
                                      c);
         REQUIRE(!l.object);
         REQUIRE(r.object);
-        real yi = rs::inner_product(v, m | bt, 0.);
+        auto view_bt = m | bt;
+        real yi = std::inner_product(v.begin(), v.end(), view_bt.begin(), 0.);
         REQUIRE(yi == Catch::Approx(bf(ymax + h + y * h)));
     }
 
     // right 1
     {
         const real psi = 0.9, y = 0.3;
-        auto m = vs::concat(mesh, vs::single(ymax + psi * h)) | rs::to<T>();
+        T m(mesh.begin(), mesh.end());
+        m.push_back(ymax + psi * h);
         auto&& [v, l, r] = st.interp(1,
                                      int3{8, 8, 5},
                                      y,
@@ -335,7 +357,8 @@ TEST_CASE("interp wall")
                                      c);
         REQUIRE(!l.object);
         REQUIRE(r.object);
-        real yi = rs::inner_product(v, m | bt, 0.);
+        auto view_bt = m | bt;
+        real yi = std::inner_product(v.begin(), v.end(), view_bt.begin(), 0.);
         REQUIRE(yi == Catch::Approx(bf(ymax + y * h)));
     }
 }

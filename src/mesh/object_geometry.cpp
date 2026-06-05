@@ -2,7 +2,7 @@
 #include "indexing.hpp"
 #include <cassert>
 #include <cmath>
-#include <iostream>
+#include <fmt/ranges.h>
 
 #include <sol/sol.hpp>
 
@@ -68,8 +68,17 @@ static void init_line(std::span<const shape> shapes,
 
             const ray r{origin, direction};
             while (auto hit = closest_hit(shapes, r, t_min, t_max)) {
-                // how should this be handled to favor uniform over degenerate cases.
-                coord[I] = static_cast<int>(hit->t / iline.h) + hit->ray_outside;
+                // Snap to nearest integer when t/h is within floating-point
+                // tolerance of a grid point.  Without this, accumulated
+                // round-off in the intersection calculation can cause
+                // static_cast<int> to floor to the wrong cell, producing a
+                // near-zero psi that degenerates the NBS stencil.
+                real t_over_h = hit->t / iline.h;
+                int i_cell = static_cast<int>(std::round(t_over_h));
+                constexpr real snap_tol = 1e-12;
+                if (std::abs(t_over_h - i_cell) > snap_tol)
+                    i_cell = static_cast<int>(t_over_h);
+                coord[I] = i_cell + hit->ray_outside;
 
                 // if ray_outside then coord[I]-1 is the fluid coord and psi =
                 // hit->position[I]-(mesh_position[coord[I]-1]) if !ray_outside then
@@ -78,6 +87,12 @@ static void init_line(std::span<const shape> shapes,
                 int off = 1 - 2 * hit->ray_outside;
                 real fluid_pos = min + h * (coord[I] + off);
                 real psi = off * (fluid_pos - hit->position[I]) / h;
+
+                // After snapping i_cell, the recomputed psi may be slightly
+                // outside [0, 1] because position and coord come from
+                // different arithmetic paths.  Clamp to keep psi consistent
+                // with the snapped cell assignment.
+                psi = std::clamp(psi, snap_tol, 1.0 - snap_tol);
 
                 auto id = hit->shape_id;
                 const auto& shp = shapes[id];
