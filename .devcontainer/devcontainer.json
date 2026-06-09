@@ -38,7 +38,7 @@
 
   "initializeCommand": "",
   "onCreateCommand": "",
-  "postCreateCommand": "cmake -S /workspace -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON",
+  "postCreateCommand": "bash -c 'source /home/user/spack/share/spack/setup-env.sh && spack env activate shoccs-dev && cmake -S /workspace -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON'",
 
   "remoteEnv": {
     "DEVCONTAINER": "true"

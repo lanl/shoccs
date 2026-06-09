@@ -31,7 +31,16 @@ set GREEN '\033[0;32m'
 set BLUE '\033[0;34m'
 set NC '\033[0m' # No Color
 
+# Find a free host port (starting at 8000) to forward to container port 8000.
+# Avoids "Bind for 0.0.0.0:8000 failed: port is already allocated" when another
+# process/container already holds the port. No manual editing required.
+set host_port 8000
+while lsof -nP -iTCP:$host_port -sTCP:LISTEN >/dev/null 2>&1
+    set host_port (math $host_port + 1)
+end
+
 echo -e "$BLUE Starting $container ...$NC"
+echo -e "$GREEN Forwarding host port $host_port -> container port 8000$NC"
 echo ""
 
 # Run container with all necessary configuration
@@ -39,7 +48,7 @@ docker run -it --rm \
   --name $name \
   --cap-add=NET_ADMIN \
   --cap-add=NET_RAW \
-  -p 8000:8000 \
+  -p $host_port:8000 \
   -v (pwd):/workspace \
   -v $HOME/.claude-container:/home/user/.claude \
   -v $HOME/.gitconfig:/home/user/.gitconfig:ro \

@@ -1,0 +1,9 @@
+# Docker build context for the devcontainer image (context = repo root).
+# The image only needs the project Spack repo and the .devcontainer/ files
+# (the source tree is bind-mounted at runtime, not copied at build time), so
+# ignore everything by default and re-include just what the Dockerfile COPYs.
+# This keeps the ~1.4 GB build/ directory (and .git, io/, logs/, …) out of the
+# build context.
+*
+!spack_repo
+!.devcontainer

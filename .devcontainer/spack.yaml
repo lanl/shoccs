@@ -1,33 +1,41 @@
-# Spack environment for SHOCCS development container
+# Spack 1.0+ environment for the SHOCCS development container.
 #
-# All dependencies are from the standard spack builtin repository.
-# No custom spack repo is needed.
+# Dependencies are provisioned from the project-owned custom repo
+# (spack_repo/shoccs, checked into this git repo) which declares a single
+# `shoccs` recipe. The Dockerfile copies that repo to the ABSOLUTE path
+# referenced below and creates a named environment from this manifest:
 #
-# Usage:
-#   spack env create shoccs-dev spack.yaml
+#   spack env create shoccs-dev .devcontainer/spack.yaml
 #   spack env activate shoccs-dev
-#   spack concretize
-#   spack install
+#   spack install --only dependencies        # build just the TPLs
+#
+# This file uses an ABSOLUTE repo path on purpose: a named/managed environment
+# copies its manifest into Spack's environments directory, so a relative repo
+# path would be rewritten/relocated.
 spack:
   specs:
-    # Current dependencies (from CMakeLists.txt)
-    - lua
-    - lua-sol2
-    - "fmt@8:"
-    - "pugixml@1.10:"
-    - "spdlog@1.9:"
-    - cxxopts
-    - "catch2@3:"
-    - boost
-    - lapackpp
-    # Kokkos (parallel execution framework)
-    - "kokkos@5.0: cxxstd=20 +serial +openmp"
-    # Kokkos profiling tools (runtime profiling via KOKKOS_TOOLS_LIBS)
-    - kokkos-tools
-    # Microbenchmark framework (Google Benchmark)
-    - benchmark
-    - "cmake@3.24:"
-    - ninja
+    # +profiling pulls kokkos-tools (an unpinned `develop` branch) to match the
+    # project's runtime profiling setup; drop it for a fully pinned build.
+    # Pin kokkos to the exact validated 5.1.1 — an open `@5.1:` range otherwise
+    # lets the concretizer slide kokkos to the `develop` branch version.
+    - shoccs +tests +benchmarks +profiling ^kokkos@5.1.1
+
+  repos:
+    # Project recipe, copied here by the Dockerfile.
+    shoccs: /home/user/spack_repo/shoccs
+    # Pin the community package repo to a develop commit that ships Kokkos 5.1.1
+    # (the Graph API the solver uses; no tagged release has 5.1.x yet — the
+    # newest tag, v2026.03.0, caps at 5.0.2). Pinning a commit keeps the
+    # container build reproducible. The trailing `::` fully REPLACES the
+    # inherited default entry (a plain `builtin:` would deep-merge into a
+    # conflicting branch+commit pair). Bump this commit (or switch to a tag) once
+    # a tagged spack-packages release ships kokkos 5.1+.
+    # NOTE: the Dockerfile re-syncs the on-disk clone via
+    # `spack repo update builtin --commit <sha>`; that SHA is what actually takes
+    # effect, so keep it identical to the commit below.
+    builtin::
+      git: https://github.com/spack/spack-packages.git
+      commit: 1b13532cdcb78de32ef23a83a05d2ab144bd0702
 
   view: true
 
@@ -36,6 +44,10 @@ spack:
 
   packages:
     all:
-      require: '%gcc'
+      # Build everything with GCC. Spack 1.0 made compilers dependencies, so a
+      # bare `require: "%gcc"` would force a compiler onto language-less
+      # packages and fail to concretize. The conditional per-language form only
+      # constrains packages that actually compile C/C++/Fortran code.
+      require: "%[when=%c]c=gcc %[when=%cxx]cxx=gcc %[when=%fortran]fortran=gcc"
       prefer:
         - cxxstd=20
