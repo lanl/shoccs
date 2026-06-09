@@ -1279,8 +1279,14 @@ class TestLayer8Dispatch:
         assert calls[0]["scheme_type"] == "E4u"
 
 
+@pytest.mark.slow
 class TestStabilityScoreL8:
-    """brady2d_stability_score with max_layer=8 (plan 42.3b)."""
+    """brady2d_stability_score with max_layer=8 (plan 42.3b).
+
+    Class is slow-marked: each test runs the full layer-1..7 stability
+    cascade before reaching the stubbed layer 8 (12-19 s apiece). Run with
+    --run-slow.
+    """
 
     CLASSICAL_ALPHA = [-0.7733323791884821, 0.1623961700641681]
 

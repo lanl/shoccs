@@ -836,6 +836,13 @@ class TestValidateWithCpp:
                 stable=True, final_linf=0.001, wall_time_s=1.5
             ),
         )
+        # Default ``SHOCCS_BINARY`` may not exist in the test sandbox —
+        # patch ``.exists`` to True so the validate path runs.
+        monkeypatch.setattr(
+            bo_cli,
+            "SHOCCS_BINARY",
+            types.SimpleNamespace(exists=lambda: True),
+        )
         result = _make_classical_result(
             kernel="tension", best_x=np.array([10.0])
         )
@@ -864,6 +871,13 @@ class TestValidateWithCpp:
             lambda *a, **kw: _fake_layer8_report(
                 stable=True, final_linf=soft_linf, wall_time_s=2.0
             ),
+        )
+        # Default ``SHOCCS_BINARY`` may not exist in the test sandbox —
+        # patch ``.exists`` to True so the validate path runs.
+        monkeypatch.setattr(
+            bo_cli,
+            "SHOCCS_BINARY",
+            types.SimpleNamespace(exists=lambda: True),
         )
         result = _make_classical_result(
             kernel="tension", best_x=np.array([10.0])

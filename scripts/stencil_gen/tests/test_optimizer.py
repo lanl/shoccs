@@ -997,7 +997,10 @@ class TestMultiStart:
                 n_restarts=2,
             )
 
+    @pytest.mark.slow
     def test_multi_start_finds_feasible_optimum(self):
+        # Slow-marked: full multi-start optimization against a real
+        # stability objective (~35 s). Run with --run-slow.
         # Plan 43.4b: tension E4 against layer3.max_stab_eig.  Gate at L2
         # (not L3) because tension σ~3 fails L3r (BL42 reflecting-hyperbolic).
         # layer3 is still populated since L3 runs before L3r in the cascade.
@@ -1193,9 +1196,14 @@ class TestRunScipyLocalCOBYQAUnavailable:
             )
 
 
+@pytest.mark.slow
 class TestGlobalOptimizers:
     """Integration tests for :func:`run_scipy_shgo` / :func:`run_scipy_de`
-    against real :mod:`brady2d_stability` objectives (plan 43.5c)."""
+    against real :mod:`brady2d_stability` objectives (plan 43.5c).
+
+    Class is slow-marked: each test runs a global optimization to
+    convergence (~2 min apiece locally). Run with --run-slow.
+    """
 
     def test_shgo_finds_tension_optimum(self):
         # 1D tension E4 against layer3.max_stab_eig.  Gate at L2 (not L3)

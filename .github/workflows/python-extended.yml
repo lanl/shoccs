@@ -1,0 +1,40 @@
+# Runs the full stencil_gen suite INCLUDING the @pytest.mark.slow tests
+# (139 tests, minutes to tens of minutes each) that the per-PR python job
+# deselects. Scheduled weekly; dispatch manually after touching the
+# derivation pipeline. Full-resolution sweeps (python -m sweeps) stay out of
+# CI entirely — they take hours and mutate sweeps/known_values.json.
+
+name: python extended
+
+on:
+  schedule:
+    - cron: '47 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  slow-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    defaults:
+      run:
+        working-directory: scripts/stencil_gen
+    env:
+      SYMPY_CACHE_SIZE: '50000'
+      UV_PYTHON: '3.11'
+    steps:
+      - uses: actions/checkout@v6
+
+      # setup-uv publishes no moving major tag (no @v8) — pin the exact release
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: scripts/stencil_gen/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run full suite (slow tests included)
+        run: uv run pytest tests/ -q -n auto --run-slow --timeout=3600

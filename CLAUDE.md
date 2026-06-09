@@ -51,6 +51,14 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=O
 
 Benchmark executables are in `build/benchmarks/` (bench_stencil, bench_block, bench_derivative, bench_expr, bench_selection, bench_rhs).
 
+## Continuous Integration
+
+GitHub Actions workflows in `.github/workflows/`:
+
+- `ci.yml` — runs on PRs and pushes to main. The `cpp` job builds and tests inside the prebuilt dependency image `ghcr.io/lanl/shoccs-ci` (visibly skipped if the image hasn't been published yet); the gating ctest run excludes `t-laplacian` (known failure, `docs/CLEANUP_PLAN.md` §0a), which runs separately as a non-gating step. The `python` job runs the stencil_gen suite (slow tests deselected) via uv. Benchmarks are compile-checked, never executed in CI.
+- `devcontainer-image.yml` — builds the lean `ci` stage of `.devcontainer/Dockerfile` and pushes it to GHCR. Triggers on pushes to main touching `.devcontainer/` or `spack_repo/`, weekly cron, or manual dispatch. Dispatch it manually after changing the dependency stack; a cold build takes hours (full Spack source build).
+- `python-extended.yml` — weekly/manual run of the stencil_gen suite including `--run-slow` tests. Full-resolution sweeps stay out of CI.
+
 ## Code Conventions
 
 - **C++20** with concepts, `std::ranges`, and `std::span`. No C++23 features; missing C++23 utilities (stride, zip_transform, cartesian_product, bind_back) have project-local implementations in `src/fields/lazy_views.hpp`.
@@ -96,7 +104,7 @@ The codebase was migrated from range-v3 to Kokkos. The `plans/` directory contai
 The `scripts/stencil_gen/` directory contains a SymPy-based pipeline for deriving finite difference stencil coefficients symbolically. Managed by `uv`.
 
 ```bash
-# Run stencil_gen tests (from repo root)
+# Run stencil_gen tests (from repo root); add -n auto to parallelize (pytest-xdist)
 cd scripts/stencil_gen && SYMPY_CACHE_SIZE=50000 uv run pytest tests/ -x -q
 
 # Run a specific sweep (epsilon, tension, tension-penalty, footprint, comparison, alpha, mixed-epsilon)

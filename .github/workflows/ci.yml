@@ -1,0 +1,137 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: corporate-ca.pem must stay an empty placeholder
+        run: |
+          if [ -s .devcontainer/corporate-ca.pem ]; then
+            echo "::error file=.devcontainer/corporate-ca.pem::this file must remain empty in the repository; a real CA bundle must never be committed"
+            exit 1
+          fi
+
+  # The cpp job needs the prebuilt dependency image. Probe for it so that the
+  # job is visibly skipped (rather than red) before the first image build —
+  # see .github/workflows/devcontainer-image.yml.
+  check-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      exists: ${{ steps.probe.outputs.exists }}
+    steps:
+      - name: Probe for prebuilt CI image
+        id: probe
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/shoccs-ci:latest
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin || true
+          if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::$IMAGE not found; cpp job skipped. Run the 'devcontainer image' workflow to build it."
+          fi
+
+  cpp:
+    needs: check-image
+    if: needs.check-image.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/shoccs-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      # All spack-built dependencies resolve through the environment view
+      # baked into the image (also set in the image's ENV; repeated here so
+      # the configure line works even if the runner drops image env vars).
+      CMAKE_PREFIX_PATH: /home/user/spack/var/spack/environments/shoccs-dev/.spack-env/view
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 500M
+      # Tests are per-binary Kokkos/OpenMP; don't pin threads on the shared
+      # 4-vCPU runner.
+      OMP_PROC_BIND: 'false'
+      OMP_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/cache@v5
+        with:
+          path: .ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-${{ runner.os }}-
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DBUILD_TESTING=ON
+          -DBUILD_BENCHMARKS=ON
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      # Benchmarks are compile-checked by the build; they are not run in CI
+      # (shared-runner timings are too noisy — use scripts/bench_compare.sh
+      # locally).
+      - name: Build
+        run: cmake --build build
+
+      - name: ccache stats
+        run: ccache -s
+
+      - name: Test (t-laplacian excluded — known failure, docs/CLEANUP_PLAN.md §0a)
+        run: ctest --test-dir build --output-on-failure -E '^t-laplacian$'
+
+      # Non-gating: keeps the known numerics failure visible in the log and
+      # shows when a fix lands. Remove together with the exclusion above.
+      - name: Known failure t-laplacian (non-gating)
+        continue-on-error: true
+        run: ctest --test-dir build --output-on-failure -R '^t-laplacian$'
+
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: scripts/stencil_gen
+    env:
+      # Essential for SymPy performance — the default cache size of 1000
+      # causes severe slowdowns with large symbolic expressions.
+      SYMPY_CACHE_SIZE: '50000'
+      # Match the devcontainer's interpreter.
+      UV_PYTHON: '3.11'
+    steps:
+      - uses: actions/checkout@v6
+
+      # setup-uv publishes no moving major tag (no @v8) — pin the exact release
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: scripts/stencil_gen/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # Slow-marked tests are deselected by default (see tests/conftest.py);
+      # they run in the python-extended workflow instead. Per-test timeout
+      # comes from pyproject.toml.
+      - name: Run tests
+        run: uv run pytest tests/ -q -n auto
