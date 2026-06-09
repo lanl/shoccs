@@ -1,0 +1,70 @@
+# Builds the lean CI image (the `ci` stage of .devcontainer/Dockerfile) and
+# pushes it to GHCR. The cpp job in ci.yml consumes this image, so it only
+# needs to be rebuilt when the dependency stack changes — hence the paths
+# filter plus a weekly cron to pick up apt security updates.
+#
+# A cold build compiles the full Spack dependency tree from source and takes
+# multiple hours on a standard runner; registry layer caching makes rebuilds
+# that don't touch the spack-builder stage fast. Runs on push to main (not
+# pull_request) because fork PRs have a read-only GITHUB_TOKEN and cannot
+# push packages.
+
+name: devcontainer image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.devcontainer/**'
+      - 'spack_repo/**'
+      - '.dockerignore'
+      - '.github/workflows/devcontainer-image.yml'
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: devcontainer-image
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/shoccs-ci
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      # The spack build needs more scratch space than the ~14 GB the runner
+      # ships with; drop the preinstalled toolchains we don't use.
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          df -h /
+
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: .devcontainer/Dockerfile
+          target: ci
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max

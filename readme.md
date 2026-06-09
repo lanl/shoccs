@@ -1,5 +1,7 @@
 # Stable High-Order Cut-Cell Solver (shoccs)
 
+[![CI](https://github.com/lanl/shoccs/actions/workflows/ci.yml/badge.svg)](https://github.com/lanl/shoccs/actions/workflows/ci.yml)
+
 SHOCCS is a Cartesian cut-cell solver for time-dependent PDEs (heat equation,
 scalar wave, Euler/hyperbolic systems), using high-order finite-difference
 operators on structured grids with embedded boundaries. It is the code

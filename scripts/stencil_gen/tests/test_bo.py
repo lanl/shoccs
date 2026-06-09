@@ -694,8 +694,15 @@ class TestDOE:
         assert fid.dtype == np.int64
 
 
+@pytest.mark.slow
 class TestRunMFBO:
-    """Plan 47.3b/47.3b.1: budget validation in :func:`run_mfbo`."""
+    """Plan 47.3b/47.3b.1: budget validation in :func:`run_mfbo`.
+
+    Class is slow-marked: every test runs a full multi-fidelity BO campaign
+    (GP fits + acquisition loops), 2-65 s apiece (~9 CPU-minutes total) —
+    validation harnesses, not unit tests. Run with --run-slow (CI: the
+    python-extended workflow).
+    """
 
     def test_init_anchors_preserved_under_tight_budget(self):
         # 47.3b.1: under the old code, ``budget_evals - 1 < n_init`` silently

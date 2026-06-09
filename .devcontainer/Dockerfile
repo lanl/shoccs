@@ -148,7 +148,38 @@ RUN --mount=type=cache,target=/home/user/spack/var/spack/cache,uid=1000,gid=1000
 
 
 # =============================================================================
-# STAGE 3: Final devcontainer image
+# STAGE 3: Lean CI image
+# =============================================================================
+# Published to GHCR by .github/workflows/devcontainer-image.yml and consumed
+# by the cpp job in .github/workflows/ci.yml. Toolchain (base-system) plus the
+# spack-built dependency tree only — no Claude Code, shell customizations, or
+# other devcontainer conveniences, so the image stays small and contains
+# nothing unredistributable.
+#
+# This stage must come BEFORE `final`: devcontainer.json and the Makefile
+# build without --target, which selects the last stage in the file.
+
+FROM base-system AS ci
+
+ARG USERNAME=user
+
+# ccache backs the actions/cache-persisted compiler cache in CI
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ccache \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# The spack tree must stay at its build-time path: the environment view and
+# the library rpaths point into /home/user/spack/opt. The bootstrap store
+# (~/.spack) is not copied — CI never runs spack itself; cmake resolves all
+# dependencies through the view.
+COPY --from=spack-builder --chown=$USERNAME:$USERNAME /home/$USERNAME/spack /home/$USERNAME/spack
+COPY --from=spack-builder --chown=$USERNAME:$USERNAME /home/$USERNAME/shoccs-env /home/$USERNAME/shoccs-env
+COPY --from=spack-builder --chown=$USERNAME:$USERNAME /home/$USERNAME/spack_repo /home/$USERNAME/spack_repo
+
+ENV CMAKE_PREFIX_PATH=/home/$USERNAME/spack/var/spack/environments/shoccs-dev/.spack-env/view
+
+# =============================================================================
+# STAGE 4: Final devcontainer image
 # =============================================================================
 
 FROM base-system AS final
