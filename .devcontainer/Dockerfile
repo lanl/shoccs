@@ -83,10 +83,14 @@ RUN useradd -m -u 1000 -s /bin/zsh $USERNAME || true
 # This stage only rebuilds when:
 #   - base-system changes (compilers, etc.)
 #   - spack.yaml changes (dependency specifications)
-#   - Spack version changes
+#   - the spack_repo/ recipe changes
+#   - the pinned Spack / spack-packages versions change
 #
-# All SHOCCS dependencies are in the standard spack builtin repo.
-# No custom spack_repo is needed.
+# SHOCCS dependencies are provisioned from a PROJECT-OWNED custom spack repo
+# (spack_repo/shoccs, checked into the git repo) that declares a single
+# `shoccs` recipe. The community spack-packages repo is pinned (in spack.yaml)
+# to a develop commit that ships Kokkos 5.1+ (the Graph API the solver needs;
+# no tagged spack-packages release carries 5.1.x yet).
 
 FROM base-system AS spack-builder
 
@@ -95,16 +99,31 @@ ARG SPACK_MIRROR_URL=""
 USER $USERNAME
 WORKDIR /home/$USERNAME
 
-# Clone and configure Spack (use develop branch for Kokkos 5.0+ recipes)
-RUN git clone --depth=1 -b develop https://github.com/spack/spack.git /home/$USERNAME/spack
+# Clone Spack at a pinned 1.x release for reproducibility (since Spack 1.0 the
+# builtin package recipes live in the separate spack-packages repo, which the
+# environment manifest pins to a develop commit containing Kokkos 5.1).
+RUN git clone --depth=1 -b v1.1.1 https://github.com/spack/spack.git /home/$USERNAME/spack
+
+# Copy the project-owned custom spack repo to the ABSOLUTE path referenced by
+# the environment manifest's `repos:` entry.
+COPY --chown=$USERNAME:$USERNAME spack_repo /home/$USERNAME/spack_repo
 
 # Copy the spack environment file
 COPY --chown=$USERNAME:$USERNAME .devcontainer/spack.yaml /home/$USERNAME/shoccs-env/spack.yaml
 
-# Configure Spack: find system compilers
+# Configure Spack: find system compilers (Spack 1.0 records these as externals
+# in packages.yaml)
 RUN /home/$USERNAME/spack/bin/spack compiler find
 
-# Concretize and build all dependencies
+# Concretize and build all dependencies.
+# NOTE: `spack repo update builtin` is REQUIRED. Spack auto-clones the DEFAULT
+# builtin repo (this Spack release pins releases/v2025.11, which has no kokkos
+# 5.1) on first use and does NOT re-sync that on-disk clone to the commit pinned
+# under `repos: builtin:` in spack.yaml. `spack repo update` forces the checkout
+# to the pinned commit, which ships kokkos 5.1.1.
+# The commit SHA on the `spack repo update builtin --commit` line below is what
+# actually takes effect; keep it in sync with the `builtin::` commit in
+# .devcontainer/spack.yaml (editing only the manifest is silently ignored).
 # Cache mounts persist across builds for faster rebuilds:
 #   - var/spack/cache: downloaded source tarballs
 #   - .spack/cache: misc caches including fetch cache
@@ -122,8 +141,10 @@ RUN --mount=type=cache,target=/home/user/spack/var/spack/cache,uid=1000,gid=1000
     if [ -n "$SPACK_MIRROR_URL" ]; then spack mirror add custom-mirror "$SPACK_MIRROR_URL"; fi && \
     spack env create shoccs-dev /home/$USERNAME/shoccs-env/spack.yaml && \
     spack env activate shoccs-dev && \
+    spack repo update builtin --commit 1b13532cdcb78de32ef23a83a05d2ab144bd0702 && \
+    spack repo list && \
     spack concretize && \
-    spack install -j $(nproc)
+    spack install -j $(nproc) --only dependencies
 
 
 # =============================================================================
@@ -185,6 +206,9 @@ RUN ARCH=$(dpkg --print-architecture) && \
 COPY --from=spack-builder --chown=$USERNAME:$USERNAME /home/$USERNAME/spack /home/$USERNAME/spack
 COPY --from=spack-builder --chown=$USERNAME:$USERNAME /home/$USERNAME/shoccs-env /home/$USERNAME/shoccs-env
 COPY --from=spack-builder --chown=$USERNAME:$USERNAME /home/$USERNAME/.spack /home/$USERNAME/.spack
+# The custom repo must remain at the absolute path the environment's repos:
+# entry points at, so `spack env activate shoccs-dev` can load the recipe.
+COPY --from=spack-builder --chown=$USERNAME:$USERNAME /home/$USERNAME/spack_repo /home/$USERNAME/spack_repo
 
 # =============================================================================
 # User configuration
@@ -207,7 +231,8 @@ ENV DEVCONTAINER=true \
     REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
     SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
-    UV_NATIVE_TLS=true
+    UV_NATIVE_TLS=true \
+    CMAKE_PREFIX_PATH=/home/$USERNAME/spack/var/spack/environments/shoccs-dev/.spack-env/view
 
 # Install Oh My Zsh
 RUN git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git /home/$USERNAME/.oh-my-zsh
@@ -229,7 +254,7 @@ RUN echo 'export ZSH="/home/user/.oh-my-zsh"' > /home/$USERNAME/.zshrc && \
     echo '' >> /home/$USERNAME/.zshrc && \
     echo '# Spack initialization' >> /home/$USERNAME/.zshrc && \
     echo 'source /home/user/spack/share/spack/setup-env.sh' >> /home/$USERNAME/.zshrc && \
-    echo 'spack env activate shoccs-dev' >> /home/$USERNAME/.zshrc
+    echo 'spack env activate shoccs-dev || echo "warning: could not activate shoccs-dev; run: spack env list"' >> /home/$USERNAME/.zshrc
 
 WORKDIR /workspace
 CMD ["/bin/zsh"]
