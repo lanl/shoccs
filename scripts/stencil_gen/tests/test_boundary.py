@@ -283,7 +283,7 @@ def test_E4u_numerical_dirichlet(e4u_pipeline):
 
 
 def test_E4u_conservation_column_sums(e4u_pipeline):
-    """Conservation verification: weighted column sums satisfy SBP."""
+    """Conservation verification: weighted column sums satisfy the discrete-conservation (telescoping/flux) condition."""
     updated_rows, solution_dict, w_syms, result = e4u_pipeline
     w_exprs = [solution_dict[w] for w in w_syms]
     t = result.t  # 5
@@ -298,10 +298,10 @@ def test_E4u_conservation_column_sums(e4u_pipeline):
         col_sum += _interior_contribution(j, r, p, result.interior_coeffs)
         if j == 0:
             # Column 0 sums to -1
-            assert cancel(col_sum + 1) == 0, f"Column {j} SBP failed"
+            assert cancel(col_sum + 1) == 0, f"Column {j} conservation failed"
         else:
             # All other columns sum to 0
-            assert cancel(col_sum) == 0, f"Column {j} SBP failed"
+            assert cancel(col_sum) == 0, f"Column {j} conservation failed"
 
 
 def test_E4u_polynomial_exactness(e4u_pipeline):
@@ -513,7 +513,7 @@ def test_E6u_polynomial_exactness(e6u_pipeline):
 
 
 def test_E6u_conservation_column_sums(e6u_pipeline):
-    """Conservation verification: weighted column sums satisfy SBP."""
+    """Conservation verification: weighted column sums satisfy the discrete-conservation (telescoping/flux) condition."""
     updated_rows, solution_dict, w_syms, result = e6u_pipeline
     w_exprs = [solution_dict[w] for w in w_syms]
     t = result.t  # 8
@@ -527,9 +527,9 @@ def test_E6u_conservation_column_sums(e6u_pipeline):
         )
         col_sum += _interior_contribution(j, r, p, result.interior_coeffs)
         if j == 0:
-            assert cancel(col_sum + 1) == 0, f"Column {j} SBP failed"
+            assert cancel(col_sum + 1) == 0, f"Column {j} conservation failed"
         else:
-            assert cancel(col_sum) == 0, f"Column {j} SBP failed"
+            assert cancel(col_sum) == 0, f"Column {j} conservation failed"
 
 
 # ---------------------------------------------------------------------------
@@ -777,7 +777,7 @@ def test_E8u_numerical_dirichlet(e8u_pipeline):
 
 
 def test_E8u_conservation_column_sums(e8u_pipeline):
-    """Conservation verification: weighted column sums satisfy SBP."""
+    """Conservation verification: weighted column sums satisfy the discrete-conservation (telescoping/flux) condition."""
     updated_rows, solution_dict, w_syms, result = e8u_pipeline
     w_exprs = [solution_dict[w] for w in w_syms]
     t = result.t  # 11
@@ -791,9 +791,9 @@ def test_E8u_conservation_column_sums(e8u_pipeline):
         )
         col_sum += _interior_contribution(j, r, p, result.interior_coeffs)
         if j == 0:
-            assert cancel(col_sum + 1) == 0, f"Column {j} SBP failed"
+            assert cancel(col_sum + 1) == 0, f"Column {j} conservation failed"
         else:
-            assert cancel(col_sum) == 0, f"Column {j} SBP failed"
+            assert cancel(col_sum) == 0, f"Column {j} conservation failed"
 
 
 def test_E8u_polynomial_exactness(e8u_pipeline):

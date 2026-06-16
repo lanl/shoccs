@@ -1075,7 +1075,7 @@ class TestConstructCutCellStencil:
             ur.B_u, ur.interior, ur.p, ur.q, ur.nu, 1, psi
         )
         m = result.matrix
-        # SBP weights: w = [psi, 1, 1, 1]
+        # conservation (quadrature) weights: w = [psi, 1, 1, 1]
         for j in [3, 4]:
             col_sum = psi * m[0, j] + m[1, j] + m[2, j] + m[3, j]
             assert simplify(col_sum) == 0, (

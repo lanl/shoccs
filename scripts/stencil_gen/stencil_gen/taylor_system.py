@@ -1,7 +1,7 @@
 """Taylor system builder for boundary stencil derivation.
 
 Constructs the Vandermonde-like linear system from Taylor expansion matching
-for a single boundary row of an SBP finite difference operator.
+for a single boundary row of a TEMO (truncation-error-matching) finite difference operator.
 """
 
 from sympy import Matrix, Rational, factorial
