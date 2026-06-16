@@ -29,8 +29,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sympy import Expr, Matrix, Rational, Symbol, cancel, diff, factorial, solve, symbols
+from sympy import Expr, Matrix, Rational, Symbol, cancel, diff, factorial
 
+from stencil_gen.conservation import solve_cut_cell_conservation_dof
 from stencil_gen.taylor_system import _interp_rhs
 
 
@@ -450,51 +451,24 @@ def _poly_deriv_row(deltas: list, target, y: Symbol, free_a, free_b) -> list:
     return [cancel(c) for c in derivative_from_interp(interp_row, y)]
 
 
-def _conservation_X(psi: Symbol, d0, d1, d2):
-    """Solve the SBP/conservation coupling for the f'[2] row's non-wall DOF X.
-
-    The constraint is BILINEAR in (X, da_2):
-
-        X*(1 + 2*psi) + X*d2*(3 + 2*psi)
-          = d0*d1*(3 + 2*psi) - d0*(3 + 2*psi) + d1*(1 + 2*psi) + d2*(3 + 2*psi)
-
-    Solving the linear-in-X relation introduces the denominator
-    (1 + 2*psi + (3 + 2*psi)*d2) — da_2 in the denominator — and the da_i*da_j
-    cross terms seen in the committed nbs_dirichlet.  THIS is the mechanism
-    behind the Dirichlet bilinearity.
-
-    Provenance / honest status: this is the E2 specialisation of Mathematica
-    ``conservationCutCell`` (taylor.wl:763-768), which forms ``m[1,1]*w[1]+1==0``
-    with the column-sum constraints — itself bilinear in (weights x coeffs), the
-    SAME (X x d2) bilinearity.  The closed form below was validated two ways
-    (symbolic cancel()==0 vs the e2D oracle for all 8 coeffs, and exact on random
-    rational samples) but NOT re-derived weight-by-weight from the SBP norm: the
-    defining ``PolyE2x1.wl`` cut-cell weights are not in the repo.  Fully closing
-    this = porting conservationCutCell's left-matrix + cut-cell-norm weights to
-    sympy (scheme-agnostic follow-up; see docs/poly_interp_design.md §6.6).
-    """
-    X = Symbol("_dir_X")
-    lhs = X * (1 + 2 * psi) + X * d2 * (3 + 2 * psi)
-    rhs = (
-        d0 * d1 * (3 + 2 * psi)
-        - d0 * (3 + 2 * psi)
-        + d1 * (1 + 2 * psi)
-        + d2 * (3 + 2 * psi)
-    )
-    (sol,) = solve(lhs - rhs, X)
-    return cancel(sol)
-
-
 def derive_dirichlet_coeffs(psi: Symbol) -> list:
     """DERIVE the (R-1)*T=8 Dirichlet-derivative coefficients in da_0..da_2, psi.
 
     Generation-path counterpart to the ``dirichlet_coeffs_symbolic`` oracle:
     every value is produced by the poly recipe (derive_cut_cell_interp_row →
-    derivative_from_interp) plus ONE conservation solve, rather than copied from
-    the committed C++.  Column / row order matches the C++ exactly.
+    derivative_from_interp) plus the cut-cell discrete-conservation solve, rather
+    than copied from the committed C++.  Column / row order matches the C++.
 
-    * row 0 (f'[2]) is BILINEAR: free DOFs are (X from conservation, da_0 wall blend).
-    * row 1 (f'[3]) is purely linear: free DOFs are (da_1 shared, da_2 wall blend).
+    * row 0 (f'[2]) carries the conservation DOF ``X`` (zero-wall variant free
+      param) and ``da_0`` (zero-node0 variant wall blend).
+    * row 1 (f'[3]) is purely linear in ``da_1`` (shared) and ``da_2`` (wall blend).
+
+    ``X`` is fixed BY CONSTRUCTION via ``solve_cut_cell_conservation_dof``: the
+    realized Dirichlet rows stacked on the E2_1 interior band must satisfy the
+    telescoping/flux property — the wall column weighted-sum equals ``-1`` and the
+    fully-covered interior grid columns sum to zero.  The bilinear ``X·da`` coupling
+    in the committed nbs_dirichlet (and the ``(1 + 2*psi + (3 + 2*psi)*da_2)``
+    denominator) is produced by that flux condition, not by hand-coded constants.
     """
     y = Symbol("y")
     da = [Symbol(f"da_{k}") for k in range(3)]
@@ -502,9 +476,19 @@ def derive_dirichlet_coeffs(psi: Symbol) -> list:
     T = 4
     deltas = build_cut_cell_interp_deltas(T, psi, left=True)  # [-psi, 0, 1, 2]
 
-    X = _conservation_X(psi, d0, d1, d2)
-    row0 = _poly_deriv_row(deltas, deltas[1] + y, y, free_a=X, free_b=d0)
-    row1 = _poly_deriv_row(deltas, deltas[1] + y, y, free_a=d1, free_b=d2)
+    X = Symbol("_dir_X")
+    row0 = [cancel(c) for c in _poly_deriv_row(deltas, deltas[1] + y, y, free_a=X, free_b=d0)]
+    row1 = [cancel(c) for c in _poly_deriv_row(deltas, deltas[1] + y, y, free_a=d1, free_b=d2)]
+
+    X_sol = solve_cut_cell_conservation_dof(
+        [row0, row1],
+        interior_coeffs=[Rational(-1, 2), Rational(0), Rational(1, 2)],
+        p=1,
+        free_dof=X,
+        psi=psi,
+        nu=1,
+    )
+    row0 = [cancel(c.subs(X, X_sol)) for c in row0]
     return row0 + row1
 
 

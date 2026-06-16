@@ -157,7 +157,7 @@ class UniformResult:
     nu : int
         Derivative order.
     weights : list[Expr] | None
-        SBP quadrature weights [w_0, ..., w_{r-1}] when conservation is
+        conservation (quadrature) weights [w_0, ..., w_{r-1}] when conservation is
         enforced, else None.
     elim_subs : dict | None
         When conservation is enforced, maps each eliminated build symbol
@@ -338,9 +338,9 @@ def derive_uniform_boundary_for_temo(
     alpha_symbols : list of Symbol, optional
         Free alpha symbols to use.  If None, creates alpha_0..alpha_{n-1}.
     conserve : bool
-        If True, enforce SBP conservation on the uniform boundary.
+        If True, enforce discrete conservation on the uniform boundary.
         This eliminates one alpha per compatibility condition, yielding
-        fewer free parameters and SBP-compatible quadrature weights.
+        fewer free parameters and conservation-compatible (quadrature) weights.
     zeros : set of int, optional
         Indices into the alpha symbol list to set to zero post-hoc.
         Mutually exclusive with ``conserve=True``.
@@ -469,7 +469,7 @@ def derive_uniform_boundary_for_temo(
     interior_result = derive_interior(s, p, nu)
     interior = full_gamma_array(interior_result)
 
-    # --- SBP conservation for nextra == 0 (compatibility-condition method) ---
+    # --- Discrete conservation for nextra == 0 (compatibility-condition method) ---
     weights = None
     elim_subs = None
     build_symbols = None
@@ -2247,12 +2247,12 @@ def build_cut_cell_conservation_system(
     interior_coeffs: list,
     psi: Symbol,
 ) -> tuple[list[Expr], list[Symbol]]:
-    """Build conservation (SBP) constraint equations for a cut-cell stencil.
+    """Build discrete-conservation (telescoping/flux) constraint equations for a cut-cell stencil.
 
     The cut-cell T-frame has columns:
       col 0 = wall (delta) point,
       col j (j >= 1) = grid point j-1.
-    Conservation (SBP property) applies to grid-point columns only, excluding
+    Discrete conservation (the telescoping/flux property) applies to grid-point columns only, excluding
     the wall column and the last grid-point column (analogous to the uniform
     case which checks columns 0..t-2).
 
@@ -2303,7 +2303,7 @@ def build_cut_cell_conservation_system(
 
         # Conservation target depends on derivative order
         if g == 0 and nu == 1:
-            # SBP property for 1st derivative: grid point 0 sums to -1
+            # Telescoping/flux property for 1st derivative: grid point 0 sums to -1
             target = S.NegativeOne
         else:
             # All other columns sum to 0; for nu=2, ALL columns sum to 0
@@ -2444,7 +2444,7 @@ class CutCellResult:
         alpha symbol(s) to replacement expressions (in terms of other
         non-conserved alphas, before renaming).  None otherwise.
     weights : list or None
-        SBP quadrature weights [w_0, ..., w_{r-1}] when conservation is
+        conservation (quadrature) weights [w_0, ..., w_{r-1}] when conservation is
         enforced, else None.
     """
 
@@ -3064,7 +3064,7 @@ def assemble_cut_cell_result(
     conservation_subs : dict or None
         Substitution mapping from eliminated alphas (see ``CutCellResult``).
     weights : list or None
-        SBP quadrature weights (see ``CutCellResult``).
+        conservation (quadrature) weights (see ``CutCellResult``).
 
     Returns
     -------
@@ -3113,7 +3113,7 @@ def derive_cut_cell_scheme(
         When *conserve* is True the count must match the post-conservation
         number of free parameters (fewer than non-conserved).
     conserve : bool
-        If True (default), enforce SBP conservation on the uniform boundary
+        If True (default), enforce discrete conservation on the uniform boundary
         and propagate to the cut-cell stencil post-TEMO.  The TEMO pipeline
         runs with the non-conserved (linear) B_u, and the conservation
         substitution is applied afterwards to avoid quadratic-alpha issues

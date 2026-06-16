@@ -8,7 +8,7 @@ ia/fa decoupling under d/dy, and degree-1 interpolation exactness.
 import os
 import sys
 
-from sympy import Rational, Symbol, cancel, diff, factorial
+from sympy import Rational, Symbol, cancel, diff, factorial, solve
 
 from stencil_gen.interior import derive_interior, full_gamma_array
 from stencil_gen.interp import (
@@ -220,3 +220,44 @@ def test_dirichlet_derived_matches_oracle():
     assert len(derived) == len(oracle) == 8
     for k, (a, b) in enumerate(zip(derived, oracle)):
         assert cancel(a - b) == 0, f"dirichlet c[{k}] derived != oracle: {cancel(a - b)}"
+
+
+def test_dirichlet_discrete_conservation_symbolic():
+    """The realized poly Dirichlet+interior left-matrix satisfies discrete
+    conservation (telescoping/flux): with conservation (quadrature) weights, the
+    WALL column weighted-sum == -1 and every fully-covered interior grid-point
+    column == 0, symbolically in psi and da_0..da_2."""
+    da = [Symbol(f"da_{k}") for k in range(3)]
+    coeffs = derive_dirichlet_coeffs(psi)            # 8 = 2 rows x 4 cols
+    row0, row1 = coeffs[:4], coeffs[4:]
+    interior = [Rational(-1, 2), Rational(0), Rational(1, 2)]
+    # realized matrix: 2 Dirichlet rows on T-frame deltas [-psi,0,1,2] (col0=wall),
+    # plus interior band rows centered at grid cols 3,4 so cols 1,2 are covered.
+    NC = 6
+
+    def band(c0):
+        r = [Rational(0)] * NC
+        for k, c in enumerate(interior):
+            col = c0 + (k - 1)
+            if 0 <= col < NC:
+                r[col] = c
+        return r
+
+    def pad(rw):
+        return list(rw) + [Rational(0)] * (NC - len(rw))
+
+    wa, wb = Symbol("w_a"), Symbol("w_b")
+    M = [pad(row0), pad(row1), band(3), band(4)]
+    wts = [wa, wb, Rational(1), Rational(1)]
+
+    def colsum(col):
+        return cancel(sum(wts[i] * M[i][col] for i in range(4)))
+
+    # solve the two fully-covered interior cols for the conservation weights
+    sol = solve([colsum(1), colsum(2)], [wa, wb], dict=True)[0]
+    # interior columns (1,2,3) == 0
+    for col in (1, 2, 3):
+        assert cancel(colsum(col).subs(sol)) == 0, f"interior col {col} != 0"
+    # wall column weighted-sum == -1 (the boundary flux)
+    wall = cancel((wa * row0[0] + wb * row1[0]).subs(sol))
+    assert cancel(wall + 1) == 0, f"wall flux != -1: {wall}"

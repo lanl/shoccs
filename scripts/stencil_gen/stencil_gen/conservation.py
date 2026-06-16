@@ -1,13 +1,16 @@
-"""Conservation (SBP) constraint solver for boundary stencils.
+"""Discrete-conservation (telescoping/flux) constraint solver for boundary stencils.
 
 Provides:
 - build_conservation_system: constructs the conservation constraint equations
   from boundary rows and interior coefficients.
 - solve_conservation: solves the constraint system for quadrature weights and
   last-row placeholder symbols.
+- solve_cut_cell_conservation_dof: the scheme-agnostic cut-cell port of
+  Mathematica ``conservationCutCell`` (taylor.wl:763-771) that fixes a free
+  closure DOF from the wall-column flux condition and the interior column sums.
 """
 
-from sympy import Expr, Rational, S, Symbol, cancel, expand, linear_eq_to_matrix, symbols
+from sympy import Expr, Rational, S, Symbol, cancel, expand, linear_eq_to_matrix, solve, symbols
 
 from stencil_gen._util import solve_linear
 
@@ -39,7 +42,7 @@ def build_conservation_system(
     boundary_rows: list[BoundaryRow],
     interior_coeffs: list[Rational],
 ) -> tuple[list[Expr], list[Symbol], list[Symbol]]:
-    """Build the conservation (SBP) constraint equations.
+    """Build the discrete-conservation (telescoping/flux) constraint equations.
 
     Parameters
     ----------
@@ -78,7 +81,7 @@ def build_conservation_system(
         ic = _interior_contribution(j, r, p, interior_coeffs)
         col_sum += ic
 
-        # SBP condition: column 0 sums to -1, all others sum to 0
+        # Discrete-conservation (telescoping/flux) condition: column 0 sums to -1, all others sum to 0
         if j == 0:
             col_sum += 1  # move -1 to left side => +1
 
@@ -163,3 +166,124 @@ def solve_conservation(
     updated_rows.append(updated_last)
 
     return solution_dict, updated_rows
+
+
+def solve_cut_cell_conservation_dof(
+    closure_rows: list[list[Expr]],
+    interior_coeffs: list[Rational],
+    p: int,
+    free_dof: Symbol,
+    psi: Symbol,
+    *,
+    nu: int = 1,
+) -> Expr:
+    """Fix a free closure DOF from the cut-cell discrete-conservation conditions.
+
+    Scheme-agnostic port of Mathematica ``conservationCutCell`` (taylor.wl:763-771)
+    for the cut-cell branch: the realized closure rows plus the interior band must
+    satisfy the telescoping/flux property under the conservation (quadrature)
+    weights — the WALL column weighted-sum equals the boundary flux (``-1`` for a
+    1st-derivative operator) and every fully-covered interior grid-point column
+    sums to zero.
+
+    The closure rows live in the cut-cell T-frame:
+      col 0 = wall point, col j (j >= 1) = grid point j-1.
+    Exactly one entry across all rows is parameterized by ``free_dof``; the other
+    entries are realized in the remaining free closure parameters.  The interior
+    band is laid as extra rows (the ``toLeftMatrix``/``toBand`` step) so that the
+    grid-point columns within the closure width are fully covered.
+
+    Recipe (mirrors taylor.wl):
+      1. Build the realized left-matrix = ``closure_rows`` stacked on interior band
+         rows centered so the first fully-covered grid columns are reached.
+      2. Assign one symbolic conservation weight per closure row and weight 1 to
+         the interior rows (``w_0`` of the cut-cell row is carried as the realized
+         coefficient itself — the rows already encode it).
+      3. ``conservationUniform``: solve the fully-covered interior grid columns for
+         the closure weights.  This step is bilinear in (weight, ``free_dof``) but
+         solves to a single clean branch for the E2 poly case.
+      4. ``conservationCutCell``: substitute the weights into the wall-column sum
+         and impose it equals ``-nu``-flux (``-1`` for ``nu == 1``).  Solve that
+         single equation for ``free_dof``.
+
+    Parameters
+    ----------
+    closure_rows : list[list[Expr]]
+        The realized cut-cell closure rows, each of length ``T`` (col 0 = wall).
+        Exactly one entry is parameterized by ``free_dof``.
+    interior_coeffs : list[Rational]
+        The ``2*p + 1`` interior stencil coefficients.
+    p : int
+        Interior half-bandwidth.
+    free_dof : Symbol
+        The single closure DOF to be fixed by conservation.
+    psi : Symbol
+        The cut-cell parameter (kept symbolic throughout).
+    nu : int
+        Derivative order (only ``nu == 1`` is exercised; sets the wall flux).
+
+    Returns
+    -------
+    Expr
+        The solved ``free_dof`` expression in (psi, remaining closure params).
+    """
+    n_rows = len(closure_rows)
+    T = len(closure_rows[0])
+
+    # Realized left-matrix columns.  The closure block spans T-frame cols 0..T-1.
+    # The interior band rows pick up where the closure block ends: the first band
+    # row is centered on T-frame column T-1 (the grid column just past the last
+    # closure grid point), so the fully-covered interior grid columns 1..T-2
+    # receive their complete stencil once the band is added.  Extend p columns
+    # beyond so every covered column reaches its full footprint.
+    n_band = T  # enough rows to cover cols 1..T-2 plus the next p columns
+    NC = T + n_band  # column count of the realized left-matrix
+    band_center0 = T - 1  # first interior band row centered at T-frame column T-1
+
+    def _band_row(center: int) -> list[Expr]:
+        row = [S.Zero] * NC
+        for k, c in enumerate(interior_coeffs):
+            col = center + (k - p)
+            if 0 <= col < NC:
+                row[col] = c
+        return row
+
+    def _pad(row: list[Expr]) -> list[Expr]:
+        return list(row) + [S.Zero] * (NC - len(row))
+
+    matrix = [_pad(r) for r in closure_rows]
+    for m in range(n_band):
+        matrix.append(_band_row(band_center0 + m))
+
+    # One conservation weight per closure row; interior band rows weight 1.
+    w_syms = list(symbols(f"w_0:{n_rows}"))
+    weights = list(w_syms) + [S.One] * n_band
+
+    def _col_sum(col: int) -> Expr:
+        return cancel(sum(weights[i] * matrix[i][col] for i in range(len(matrix))))
+
+    # conservationUniform: fully-covered interior grid columns are T-frame cols
+    # 1..T-2 (grid points 0..T-3).  Solve them for the closure weights.
+    interior_cols = list(range(1, T - 1))
+    assert len(interior_cols) == n_rows, (
+        f"interior column count {len(interior_cols)} != weight count {n_rows}"
+    )
+    interior_eqs = [_col_sum(j) for j in interior_cols]
+    branches = solve(interior_eqs, w_syms, dict=True)
+    assert len(branches) == 1, (
+        f"Expected unique weight solution, got {len(branches)} branches"
+    )
+    weight_sol = branches[0]
+
+    # conservationCutCell: the wall-column sum (col 0) is the boundary flux.  The
+    # interior band rows contribute nothing to col 0 (they are centered past it),
+    # so the flux is the weighted sum of the closure rows' wall entries.
+    wall = cancel(
+        sum(w_syms[i] * closure_rows[i][0] for i in range(n_rows)).subs(weight_sol)
+    )
+    flux_target = S.NegativeOne if nu == 1 else S.Zero
+    dof_branches = solve(wall - flux_target, free_dof)
+    assert len(dof_branches) == 1, (
+        f"Expected unique DOF solution, got {len(dof_branches)} branches"
+    )
+    return cancel(dof_branches[0])

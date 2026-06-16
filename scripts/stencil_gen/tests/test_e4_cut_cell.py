@@ -1143,7 +1143,7 @@ class TestE4CutCellSchemeWithZeros:
     "test_e4_1_conservation_with_zeros."
 ))
 def test_e4_1_conservation_fails_without_zeros():
-    """E4_1 cut-cell stencil violates discrete conservation (SBP property).
+    """E4_1 cut-cell stencil violates discrete conservation (telescoping/flux property).
 
     Conservation applies to grid-point columns (T-frame cols 1..T-2):
         sum_i w_i * B[i, g+1] + IC(g) = target(g)
@@ -1153,7 +1153,7 @@ def test_e4_1_conservation_fails_without_zeros():
     Target: -1 at grid point 0, 0 elsewhere.
 
     The T-frame col 0 is the wall (delta) column, which is NOT a grid
-    point and is excluded from the SBP conservation check.
+    point and is excluded from the discrete-conservation check.
     """
     psi = Symbol("psi")
     ur = derive_uniform_boundary_for_temo(E4_1)
@@ -1419,7 +1419,7 @@ class TestBuildCutCellConservationSystem:
 
         Validates the column mapping fix from 23.3b end-to-end: the corrected
         grid-point column range (T-frame cols 1..T-2) gives a consistent square
-        system whose solution yields psi-dependent SBP weights.
+        system whose solution yields psi-dependent conservation (quadrature) weights.
         """
         psi = Symbol("psi")
         ur = derive_uniform_boundary_for_temo(E2_1)
@@ -1723,7 +1723,7 @@ class TestE4UniformConservation:
             )
 
     def test_conservation_holds(self, conserved):
-        """Weighted column sums satisfy the SBP conservation condition."""
+        """Weighted column sums satisfy the discrete-conservation condition."""
         B_u = conserved.B_u
         r, t = B_u.shape
         for j in range(t - 1):
@@ -1781,7 +1781,7 @@ class TestCutCellConservationAfterUniform:
     all of them simultaneously.
 
     This matches the Phase 23.3c-ii finding: TEMO construction does NOT
-    preserve the SBP conservation property automatically.
+    preserve the discrete-conservation property automatically.
     """
 
     @pytest.fixture(scope="class")

@@ -15,7 +15,7 @@ Interior derivation (Taylor matching) --> exact rational coefficients
 Uniform boundary derivation (underdetermined Taylor systems + free alpha params)
     |
     v
-Conservation (SBP) constraints --> eliminate last-row placeholders, compute weights
+Discrete-conservation (telescoping/flux) constraints --> eliminate last-row placeholders, compute weights
     |
     v
 TEMO cut-cell extension (psi-parameterized stencils for embedded boundaries)
@@ -48,7 +48,7 @@ Generated C++ output lands in `scripts/stencil_gen/output/` and replaces files i
 | `taylor_system.py` | Vandermonde-like Taylor matching systems | `build_taylor_system(i, t, q, nu)` |
 | `interior.py` | Interior stencil coefficients | `derive_interior(s, p, nu)`, `full_gamma_array()`, `full_delta_array()` |
 | `boundary.py` | Boundary stencil derivation (underdetermined) | `solve_boundary_row()`, `derive_boundary(p, nu, s)` |
-| `conservation.py` | SBP conservation constraints | `build_conservation_system()`, `solve_conservation()` |
+| `conservation.py` | Discrete-conservation (telescoping/flux) constraints | `build_conservation_system()`, `solve_conservation()` |
 | `temo.py` | TEMO cut-cell extension + uniform boundary for TEMO | `derive_cut_cell_scheme()`, `derive_cut_cell_mathematica()`, `derive_e2_uniform_boundary()`, `derive_uniform_boundary_for_temo()` |
 
 ### Code Generation
@@ -184,10 +184,10 @@ list of free alpha symbols.
 
 **Input:** Boundary rows, interior coefficients, scheme dimensions.
 
-**Method:** The SBP (summation-by-parts) conservation condition requires that
+**Method:** The discrete-conservation (telescoping/flux) condition requires that
 weighted column sums of the full operator vanish for interior columns, and equal
--1 for column 0. This yields `t-1` linear equations in the quadrature weights
-`w_0..w_{r-1}` and the last row's `phi` placeholders.
+-1 for column 0. This yields `t-1` linear equations in the conservation
+(quadrature) weights `w_0..w_{r-1}` and the last row's `phi` placeholders.
 
 The key challenge is **bilinear terms** `w_{r-1} * phi_k` (product of two unknowns).
 These are linearized via the theta-substitution trick: define `theta_k = w_{r-1} * phi_k`,
@@ -213,7 +213,7 @@ Key sub-steps:
 3. **Row solving** (`solve_temo_row` or `solve_temo_row_polynomial`): solve each
    cut-cell row, finding coefficients as rational functions of `psi`.
 4. **Cut-cell conservation** (`build_cut_cell_conservation_system`,
-   `solve_cut_cell_conservation`): enforce SBP on the cut-cell operator.
+   `solve_cut_cell_conservation`): enforce discrete conservation (the telescoping/flux condition) on the cut-cell operator.
 5. **Assembly** (`assemble_cut_cell_result`): package floating, Dirichlet, and
    Neumann variants into `CutCellResult`.
 
