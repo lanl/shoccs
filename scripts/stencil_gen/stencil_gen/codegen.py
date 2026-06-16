@@ -260,6 +260,11 @@ class StencilGenSpec:
     interp_P: int = 0
     interp_T: int = 0
     scalar_params: list[str] = field(default_factory=list)
+    # Interp bodies. None => emit the existing no-op stubs (back-compat).
+    interp_interior_pos: list | None = None  # y>0 branch weights, length interp_P
+    interp_interior_neg: list | None = None  # y<=0 branch weights, length interp_P
+    interp_wall_left_rows: list | None = None  # (R-1) rows, each length T, Expr in y/psi/fa/ia
+    interp_wall_right_rows: list | None = None  # (R-1) rows, mirror
 
 
 def _emit_header(spec: StencilGenSpec) -> str:
@@ -346,8 +351,82 @@ def _emit_struct_preamble(spec: StencilGenSpec) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _emit_query_methods(spec: StencilGenSpec) -> str:
-    """Emit query_max, query, query_interp, and interpolation stubs."""
+def generate_interp_interior_method(
+    pos: list, neg: list, printer: StencilCodePrinter
+) -> str:
+    """Emit the interp_interior() method body (matches polyE2_1.cpp:46-56).
+
+    Two sign branches selecting a 2-point bracketing window, subspan(0, len(pos)),
+    no h, no CSE (literals direct).
+    """
+    indent, indent8 = "    ", "        "
+    lines = [
+        f"{indent}std::span<const real> interp_interior(real y, std::span<real> c) const",
+        f"{indent}{{",
+        f"{indent8}if (y > 0) {{",
+    ]
+    for j, c in enumerate(pos):
+        lines.append(f"{indent8}    c[{j}] = {printer.doprint(c)};")
+    lines.append(f"{indent8}}} else {{")
+    for j, c in enumerate(neg):
+        lines.append(f"{indent8}    c[{j}] = {printer.doprint(c)};")
+    lines += [
+        f"{indent8}}}",
+        f"{indent8}return c.subspan(0, {len(pos)});",
+        f"{indent}}}",
+    ]
+    return "\n".join(lines)
+
+
+def _emit_interp_switch(rows: list, printer: StencilCodePrinter, depth: int) -> list:
+    """Emit `const real tN = …;` CSE pool (over the whole branch) + switch(i)."""
+    ind = "    " * depth
+    flat = [e for row in rows for e in row]  # CSE over the whole branch
+    repls, reduced = apply_cse(flat, start=5)  # start=5 matches the hand file
+    lines = [f"{ind}const real {sym.name} = {printer.doprint(e)};" for sym, e in repls]
+    lines.append(f"{ind}switch (i) {{")
+    k = 0
+    for ci, row in enumerate(rows):
+        lines.append(f"{ind}case {ci}:")
+        for j in range(len(row)):
+            lines.append(f"{ind}    c[{j}] = {printer.doprint(reduced[k])};")
+            k += 1
+        lines.append(f"{ind}    break;")
+    lines.append(f"{ind}}}")
+    return lines
+
+
+def generate_interp_wall_method(
+    spec: StencilGenSpec, printer: StencilCodePrinter
+) -> str:
+    """Emit the interp_wall() method (matches polyE2_1.cpp:58-139).
+
+    Inverted vs nbs: ``if (right) {…} else {…}`` outermost, ``switch (i)`` inside,
+    CSE applied per branch over the whole branch's coeff list.  Behavioral
+    asymmetry (must NOT copy generate_nbs_method): no /h, no *= -1 + reverse —
+    the right branch is a separately derived mirror.  The wall column moves:
+    left → c[0] carries 1/(1+psi); right → c[T-1].
+    """
+    indent, indent8 = "    ", "        "
+    out = [
+        f"{indent}std::span<const real>",
+        f"{indent}interp_wall(int i, real y, real psi, std::span<real> c, bool right) const",
+        f"{indent}{{",
+        f"{indent8}if (right) {{",
+    ]
+    out += _emit_interp_switch(spec.interp_wall_right_rows, printer, depth=3)
+    out.append(f"{indent8}}} else {{")
+    out += _emit_interp_switch(spec.interp_wall_left_rows, printer, depth=3)
+    out += [
+        f"{indent8}}}",
+        f"{indent8}return c.subspan(0, {spec.interp_T});",
+        f"{indent}}}",
+    ]
+    return "\n".join(out)
+
+
+def _emit_query_methods(spec: StencilGenSpec, printer: StencilCodePrinter) -> str:
+    """Emit query_max, query, query_interp, and interpolation methods."""
     indent = "    "
     indent8 = "        "
     lines = [
@@ -376,17 +455,30 @@ def _emit_query_methods(spec: StencilGenSpec) -> str:
     else:
         lines.append(f"{indent}interp_info query_interp() const {{ return {{}}; }}")
 
-    lines.extend(
-        [
-            "",
-            f"{indent}std::span<const real> interp_interior(real, std::span<real> c) const {{ return c; }}",
-            "",
-            f"{indent}std::span<const real> interp_wall(int, real, real, std::span<real> c, bool) const",
-            f"{indent}{{",
-            f"{indent8}return c;",
-            f"{indent}}}",
-        ]
-    )
+    lines.append("")
+    if spec.interp_interior_pos is not None:
+        lines.append(
+            generate_interp_interior_method(
+                spec.interp_interior_pos, spec.interp_interior_neg, printer
+            )
+        )
+    else:
+        lines.append(
+            f"{indent}std::span<const real> interp_interior(real, std::span<real> c) const {{ return c; }}"
+        )
+
+    lines.append("")
+    if spec.interp_wall_left_rows is not None:
+        lines.append(generate_interp_wall_method(spec, printer))
+    else:
+        lines.extend(
+            [
+                f"{indent}std::span<const real> interp_wall(int, real, real, std::span<real> c, bool) const",
+                f"{indent}{{",
+                f"{indent8}return c;",
+                f"{indent}}}",
+            ]
+        )
 
     return "\n".join(lines) + "\n"
 
@@ -554,7 +646,7 @@ def generate_stencil_cpp(spec: StencilGenSpec) -> str:
         [
             _emit_header(spec),
             _emit_struct_preamble(spec),
-            _emit_query_methods(spec),
+            _emit_query_methods(spec, printer),
             _emit_interior_method(spec),
             _emit_nbs_dispatcher(spec),
             _emit_nbs_methods(spec, printer),

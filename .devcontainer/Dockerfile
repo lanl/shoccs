@@ -144,7 +144,7 @@ RUN --mount=type=cache,target=/home/user/spack/var/spack/cache,uid=1000,gid=1000
     spack repo update builtin --commit 1b13532cdcb78de32ef23a83a05d2ab144bd0702 && \
     spack repo list && \
     spack concretize && \
-    spack install -j $(nproc) --only dependencies
+    spack install -j $(nproc) --only dependencies --fail-fast
 
 
 # =============================================================================
