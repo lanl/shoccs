@@ -91,5 +91,6 @@ def build_symbol_map(
         smap[Symbol(name)] = name
     if has_psi:
         smap[Symbol("psi")] = "psi"
+    smap[Symbol("y")] = "y"
     smap[Symbol("h")] = "h"
     return smap

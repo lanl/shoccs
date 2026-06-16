@@ -27,7 +27,24 @@ def main():
             print("Usage: python -m stencil_gen generate <scheme>")
             sys.exit(1)
         scheme = sys.argv[2]
-        print(f"TODO: generate {scheme}")
+        if scheme == "polyE2_1":
+            import os
+
+            from stencil_gen.codegen import generate_stencil_cpp
+            from stencil_gen.interp import build_polyE2_1_spec
+
+            spec = build_polyE2_1_spec()
+            code = generate_stencil_cpp(spec)
+            out_dir = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output"
+            )
+            os.makedirs(out_dir, exist_ok=True)
+            out_path = os.path.join(out_dir, "polyE2_1.cpp")
+            with open(out_path, "w") as f:
+                f.write(code)
+            print(f"Wrote {out_path}")
+        else:
+            print(f"TODO: generate {scheme}")
     elif command == "validate":
         print("TODO: validate against existing C++")
     else:

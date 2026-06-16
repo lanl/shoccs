@@ -551,6 +551,44 @@ def test_full_struct_poly():
     assert "interp_info query_interp() const { return {2, 4}; }" in code
 
 
+def test_poly_spec_no_interp_bodies_emits_stubs():
+    """With interp_* fields None, poly_spec emits the no-op interp stubs."""
+    code = generate_stencil_cpp(poly_spec)
+    assert (
+        "std::span<const real> interp_interior(real, std::span<real> c) const { return c; }"
+        in code
+    )
+    assert "std::span<const real> interp_wall(int, real, real, std::span<real> c, bool) const" in code
+
+
+def test_poly_spec_with_interp_bodies():
+    """Populating the interp_* fields emits the real interp bodies (§4.2)."""
+    from stencil_gen.interp import build_polyE2_1_spec
+
+    code = generate_stencil_cpp(build_polyE2_1_spec())
+    assert "interp_info query_interp() const { return {2, 4}; }" in code
+    assert (
+        "std::span<const real> interp_interior(real y, std::span<real> c) const"
+        in code
+    )
+    assert "if (y > 0) {" in code
+    assert "return c.subspan(0, 2);" in code
+    assert (
+        "interp_wall(int i, real y, real psi, std::span<real> c, bool right) const"
+        in code
+    )
+    assert "if (right) {" in code
+    assert "switch (i) {" in code
+    assert "case 0:" in code
+    assert "case 1:" in code
+    assert "return c.subspan(0, 4);" in code
+    assert "const real t5 =" in code
+    # negative: interp_wall has no /h and no reverse
+    body = code.split("interp_wall(int i", 1)[1].split("interior(real h", 1)[0]
+    assert "/= h" not in body
+    assert "std::ranges::reverse" not in body
+
+
 # ── 21.4a: Non-uniform single-param constructor/factory tests ────────
 
 

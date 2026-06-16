@@ -12,6 +12,27 @@ def _unit_rhs(n_eqs: int, nu: int) -> Matrix:
     return Matrix(n_eqs, 1, lambda k, _: Rational(1) if k == nu else Rational(0))
 
 
+def _interp_rhs(n_eqs: int, y) -> Matrix:
+    """Column vector rhs[k] = y**k / k! — the Taylor-evaluation functional at offset y.
+
+    Derivation: f[i+y] = Σ_k f^(k)[i] y^k/k!, so to reproduce f[i] (and its
+    moments) the coefficients must satisfy Σ_j c_j (j-i)^k = y^k, i.e.
+    rhs[k] = y^k/k!.  This is the interpolation analogue of ``_unit_rhs``.
+    ``factorial`` is already imported above.
+    """
+    return Matrix(n_eqs, 1, lambda k, _: y**k / factorial(k))
+
+
+def build_interp_system(i: int, t: int, q: int, y) -> tuple[Matrix, Matrix]:
+    """Interpolation analogue of ``build_taylor_system``.
+
+    Reuses the Vandermonde matrix V verbatim (it is independent of the RHS) and
+    swaps the RHS to the eval-at-y functional. Returns (V, rhs).
+    """
+    V, _ = build_taylor_system(i, t, q, nu=1)  # reuse the matrix only
+    return V, _interp_rhs(q + 1, y)
+
+
 def build_taylor_system(
     i: int,
     t: int,
