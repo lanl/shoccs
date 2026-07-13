@@ -10,9 +10,12 @@ from sympy import Rational, Symbol
 from stencil_gen.cutcell_eval import CutCellEvaluator, make_cutcell_evaluator
 from stencil_gen.cutcell_normal_modes import (
     CutCellInfeasible,
+    CutCellPsiSweep,
     _validate_closure,
     _vanishing_denominators,
+    default_psi_grid,
     kreiss_cutcell_check,
+    kreiss_margin_over_psi,
 )
 from stencil_gen.gks_kreiss import KreissResult
 from stencil_gen.temo import (
@@ -438,6 +441,171 @@ class TestKreissCutcellCheck:
     def test_psi_out_of_range(self, alpha_zero, psi):
         with pytest.raises(ValueError, match="psi"):
             kreiss_cutcell_check(E2_1, alpha_zero, psi)
+
+
+# ---------------------------------------------------------------------------
+# Plan 48 item 1.3: worst-case-over-psi margin
+# ---------------------------------------------------------------------------
+
+
+class TestKreissMarginOverPsi:
+    """Plan 48 item 1.3: kreiss_margin_over_psi / default_psi_grid.
+
+    Test names contain 'margin' or 'psi_sweep' so the plan's focused run
+    (``-k "psi_sweep or margin"``) selects them.
+    """
+
+    @pytest.fixture()
+    def alpha_zero(self, e2_evaluator):
+        return {s: 0.0 for s in e2_evaluator.alpha_symbols}
+
+    def test_default_psi_grid_margin_coverage(self):
+        """The default grid is the plan-specified 20-point set: near-zero
+        cluster ∪ Chebyshev-11 on [0.05, 0.95] ∪ near-one cluster, sorted,
+        matched to the C++ clamp [1e-4, 1 - 1e-4]."""
+        grid = default_psi_grid()
+        assert grid.shape == (20,)
+        assert np.all(np.diff(grid) > 0), "grid must be sorted, duplicate-free"
+        assert grid[0] == pytest.approx(1e-4)
+        assert grid[-1] == pytest.approx(1.0 - 1e-4)
+
+        near_zero = [1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2]
+        cheb = 0.5 + 0.45 * np.cos(np.pi * np.arange(11) / 10)
+        near_one = [0.99, 0.999, 0.9999]
+        for p in [*near_zero, *cheb, *near_one]:
+            assert np.any(np.isclose(grid, p, rtol=0, atol=1e-15)), (
+                f"default grid missing plan-specified point {p}"
+            )
+        # Chebyshev-Lobatto block includes the [0.05, 0.95] endpoints.
+        assert np.any(np.isclose(grid, 0.05))
+        assert np.any(np.isclose(grid, 0.95))
+
+    def test_margin_e2_1_alpha0_default_grid(self, alpha_zero):
+        """E2_1 at alpha = 0 (plan-35 baseline): stable and feasible across
+        the full default psi grid; worst-case bookkeeping consistent with
+        the per-psi results."""
+        sweep = kreiss_margin_over_psi(
+            E2_1, alpha_zero, s_grid_params=_CUT_GRID
+        )
+        assert isinstance(sweep, CutCellPsiSweep)
+        assert sweep.any_unstable is False
+        assert sweep.infeasible_psi == []
+
+        grid = default_psi_grid()
+        assert sorted(sweep.per_psi) == [float(p) for p in grid]
+        for psi, res in sweep.per_psi.items():
+            assert isinstance(res, KreissResult), f"psi={psi}"
+            assert res.is_stable is True, f"false-unstable at psi={psi}"
+
+        # worst_sigma_min / worst_psi are the min/argmin of the per-psi
+        # (finite) witness margins.
+        finite = {
+            p: float(r.witness_sigma_min)
+            for p, r in sweep.per_psi.items()
+            if np.isfinite(r.witness_sigma_min)
+        }
+        expected_psi = min(finite, key=finite.get)
+        assert sweep.worst_psi == expected_psi
+        assert sweep.worst_sigma_min == pytest.approx(finite[expected_psi])
+        assert 0.0 < sweep.worst_sigma_min < np.inf
+        # The psi -> 1 row-coincidence degeneracy makes the near-one edge
+        # the worst case for this closure (measured during item 1.2).
+        assert sweep.worst_psi == pytest.approx(1.0 - 1e-4)
+
+    def test_margin_custom_psi_grid(self, alpha_zero):
+        """A caller-supplied grid is used verbatim (float-keyed per_psi)."""
+        grid = [0.1, 0.5, 0.9]
+        sweep = kreiss_margin_over_psi(
+            E2_1, alpha_zero, psi_grid=grid, s_grid_params=_CUT_GRID
+        )
+        assert sorted(sweep.per_psi) == grid
+        assert sweep.worst_psi in grid
+        assert sweep.any_unstable is False
+        assert sweep.infeasible_psi == []
+
+    def test_psi_sweep_partitions_infeasible(self, e2_evaluator, alpha_zero,
+                                             monkeypatch):
+        """Infeasible psi points are listed in infeasible_psi, carried as
+        CutCellInfeasible in per_psi, and excluded from the margin — a
+        parameterization failure never folds into worst_sigma_min
+        (plan 48 item 1.3, reusing the 1.2 feasibility guard)."""
+        monkeypatch.setattr(
+            e2_evaluator, "denominators",
+            frozenset({Symbol("psi") - Rational(1, 2)}),
+        )
+        sweep = kreiss_margin_over_psi(
+            E2_1, alpha_zero, psi_grid=[0.25, 0.5, 0.75],
+            s_grid_params=_CUT_GRID,
+        )
+        assert sweep.infeasible_psi == [0.5]
+        assert isinstance(sweep.per_psi[0.5], CutCellInfeasible)
+        assert isinstance(sweep.per_psi[0.25], KreissResult)
+        assert isinstance(sweep.per_psi[0.75], KreissResult)
+        assert sweep.worst_psi in (0.25, 0.75)
+        assert np.isfinite(sweep.worst_sigma_min)
+        assert sweep.any_unstable is False
+
+    def test_psi_sweep_all_infeasible(self, e2_evaluator, alpha_zero,
+                                      monkeypatch):
+        """All-infeasible sweep: no margin (inf / None), not 'unstable'."""
+        monkeypatch.setattr(
+            e2_evaluator, "denominators",
+            frozenset({Symbol("psi") - Rational(1, 2)}),
+        )
+        sweep = kreiss_margin_over_psi(
+            E2_1, alpha_zero, psi_grid=[0.5], s_grid_params=_CUT_GRID
+        )
+        assert sweep.infeasible_psi == [0.5]
+        assert sweep.worst_psi is None
+        assert np.isinf(sweep.worst_sigma_min)
+        assert sweep.any_unstable is False
+
+    def test_psi_sweep_any_unstable_aggregation(self, alpha_zero, monkeypatch):
+        """any_unstable aggregates per-psi verdicts; an anomaly-driven fail
+        (witness_sigma_min = inf) flips the flag without polluting the
+        finite-margin bookkeeping."""
+        import stencil_gen.cutcell_normal_modes as cnm
+
+        def fake_check(scheme, alpha, psi, **kwargs):
+            if psi == 0.5:
+                # Anomaly-driven conservative fail (item 0.1 shape).
+                return KreissResult(
+                    is_stable=False,
+                    witness_s=0.4 + 0.0j,
+                    witness_sigma_min=float("inf"),
+                    imaginary_axis_perturbation_verdict="defective",
+                    defective_kappa_detected=True,
+                )
+            return KreissResult(
+                is_stable=True,
+                witness_s=1e-3j,
+                witness_sigma_min=0.1 * psi,
+            )
+
+        monkeypatch.setattr(cnm, "kreiss_cutcell_check", fake_check)
+        sweep = cnm.kreiss_margin_over_psi(
+            E2_1, alpha_zero, psi_grid=[0.25, 0.5, 0.75]
+        )
+        assert sweep.any_unstable is True
+        assert sweep.infeasible_psi == []
+        # inf margin at the unstable point does not become the argmin.
+        assert sweep.worst_psi == 0.25
+        assert sweep.worst_sigma_min == pytest.approx(0.1 * 0.25)
+
+    def test_psi_sweep_empty_grid_raises(self, alpha_zero):
+        with pytest.raises(ValueError, match="psi_grid"):
+            kreiss_margin_over_psi(E2_1, alpha_zero, psi_grid=[])
+
+    def test_psi_sweep_forwards_kreiss_kwargs(self, alpha_zero):
+        """s_grid_params reach kreiss_stability_check through the sweep."""
+        sweep = kreiss_margin_over_psi(
+            E2_1, alpha_zero, psi_grid=[0.5], s_grid_params=_CUT_GRID
+        )
+        result = sweep.per_psi[0.5]
+        # make_s_grid's shape depends on its parameters; assert the sweep
+        # used the non-default grid by comparing against a default-grid run.
+        default = kreiss_cutcell_check(E2_1, alpha_zero, 0.5)
+        assert result.s_grid_shape != default.s_grid_shape
 
 
 @pytest.mark.slow
