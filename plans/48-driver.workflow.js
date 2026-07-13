@@ -22,7 +22,10 @@ const ITEMS = [
   { id: '0.3', phase: 'Phase 0', title: 'Feed all differing closure rows to L2', tests: 'tests/test_gks_kreiss.py tests/test_brady2d_stability.py' },
   { id: '0.4', phase: 'Phase 0', title: 'Near-origin treatment replaces disk mask', tests: 'tests/test_gks_kreiss.py' },
   { id: '1.1', phase: 'Phase 1', title: 'Cached lambdified cut-cell evaluator', tests: 'tests/test_cutcell_eval.py' },
-  { id: '1.2', phase: 'Phase 1', title: 'psi-parameterized Kreiss check', tests: 'tests/test_cutcell_eval.py' },
+  // 0.5 was added after 1.2's first attempt blocked on gks_kreiss.py substrate defects.
+  // It is placed AFTER 1.1 in execution order so the resume cache prefix (0.1..1.1) replays.
+  { id: '0.5', phase: 'Phase 0', title: 'Witness-search robustness for augmented Kreiss', tests: 'tests/test_gks_kreiss.py tests/test_cutcell_eval.py' },
+  { id: '1.2', phase: 'Phase 1', title: 'psi-parameterized Kreiss check (after 0.5 substrate fixes)', tests: 'tests/test_cutcell_eval.py' },
   { id: '1.3', phase: 'Phase 1', title: 'Worst-case-over-psi margin', tests: 'tests/test_cutcell_eval.py -k "psi_sweep or margin"' },
   { id: '1.4', phase: 'Phase 1', title: 'Calibration / control experiment', tests: null, kind: 'findings' },
   { id: '2.1', phase: 'Phase 2', title: 'Mode partition', tests: 'tests/test_reflection.py -k mode_split' },

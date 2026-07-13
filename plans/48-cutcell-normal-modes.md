@@ -95,6 +95,26 @@ Choose w so that det M(s) has a known zero at s = 1 (mirror the existing enginee
 
 **Run:** `pytest tests/test_gks_kreiss.py -x -q`
 
+### 0.5 Witness-search robustness for the augmented Kreiss matrix (added 2026-07-13 after item 1.2 blocked)
+
+**File:** `stencil_gen/gks_kreiss.py`, `tests/test_gks_kreiss.py` (tests may import `make_cutcell_evaluator` from 1.1; production changes stay in gks_kreiss.py). **Runs after 1.1; blocks 1.2.**
+
+**Problem (diagnosed by the blocked 1.2 attempt; dense eigenvalues at N ∈ {20,40,80,160} confirm E2_1 α=0 is stable at all five test ψ, max Re λ ≤ 8e-6, so these are all false-positive mechanisms):**
+1. For augmented m > p closures, σ_min(M(s)) → 0 as |s| → ∞ (measured σ_min·|s| → 1/4 for E2_1) while det M(s) → ∞ — root columns scale like κ^j ~ (2|s|)^{−j}, so the σ_min proxy structurally diverges from the determinant condition at large |s| and the grid argmin lands at the corner. (The square m = p matrix grows like |s| — no artifact, which is why 0.1–0.4 tests never saw this.)
+2. `_refine_witness` Nelder-Mead is unbounded and descends that slope to |s| ~ 1e153–1e155 where σ underflows to exactly 0 → `is_stable=False`, verdict `no_candidates` (ψ ∈ {1e-3, 0.1}; generic in α).
+3. NM probes points at Re(s) ~ 1e-13 on the E2 sub-sonic axis segment (|ω| < 1: both κ roots exactly unimodular → count_mismatch anomalies); `_triage_anomalies` sends these to `_classify_imag_axis`, which item 0.4 established has zero discrimination near the origin → deterministic false `outgoing_mode_detected` (ψ = 0.9).
+4. Item 0.4's structural test covers only the conservative x_const = (1,…,1, e_{κ→1}) zero. The wall-eliminated Dirichlet cut block has a **different** structural double zero at s = 0 for all ψ: every closure row annihilates *tail* constants (Σ_{j ≥ m−p} w_ij ≡ 0 identically in ψ), null vector (0_nodal, e_{κ→1}) — rows do NOT annihilate full constants, so `_classify_near_origin` rejects it; at ψ = 0.9999 the ψ→1 row-coincidence degeneracy shrinks σ_min at the |s| = 1e-3 barrier below sigma_tol → false `near_origin_violation`.
+
+**Change:**
+(a) **Column-equilibrate** M(s) before the SVD (scale each column to unit ∞-norm; det-zero locations are invariant since det(MD) = det(M)·det(D) with det D > 0; σ_min becomes a meaningful relative margin at all |s|). **Bound the witness search** to the provable eigensolution region: any GKS eigensolution with a decaying tail attains its sup at some node k, giving |s| ≤ S_max := max over all rows (closure and interior) of Σ_j |w_ij| (derive this sup-norm/Gershgorin bound in the docstring); mask grid points and clamp/reject NM iterates beyond |s| ≤ S_max (+ small margin).
+(b) Clamp NM probe points to Re(s) ≥ eps_imag (consistent with `make_s_grid`'s strip) — reflect, don't evaluate, below it.
+(c) Route near-origin anomalies (|s| < 0.1) through the structural discrimination of 0.4/(d) below, never `_classify_imag_axis`.
+(d) **Generalize the structural benign-zero test:** classify a near-origin σ_min dip as benign iff the right singular vector aligns (angle < tol) with x_const = (1,…,1, e_{κ→1}) [conservative full-constant zero, row sums ≈ 0] OR with x_tail = (0_nodal, e_{κ→1}) [Dirichlet tail-constant zero, Σ_{j ≥ m−p} w_ij ≈ 0], with the matching row-sum identity verified. Handle the double zero: fit the vanishing order ν ∈ {1, 2} along a ray into the RHP and report the deflated margin σ_min(s)/|s|^ν; the ψ→1 degeneracy must not trip sigma_tol.
+
+**Tests:** (i) the 1.2 diagnostic as regression: E2_1 α=0 Dirichlet rows via `make_cutcell_evaluator` at ψ ∈ {1e-3, 0.1, 0.5, 0.9, 0.9999} → `kreiss_stability_check(..., row_indices=…)` returns `is_stable=True` at all five, cross-checked in-test against dense eigenvalues at N=40; (ii) large-|s|: equilibrated σ_min at |s| = 1e3 is O(1), not O(1/|s|); (iii) the 0.2 engineered det-zero at s=1 still caught post-equilibration; (iv) returned `witness_s` always satisfies |s| ≤ S_max; (v) all 0.1–0.4 tests green unchanged.
+
+**Run:** `pytest tests/test_gks_kreiss.py tests/test_cutcell_eval.py -x -q`
+
 ---
 
 ## Phase 1 — Cut-cell ingestion (item 1)
@@ -122,7 +142,7 @@ Internally: dispatch by `scheme.zeros` exactly as production does (`derive_cut_c
 
 **Run:** `pytest tests/test_cutcell_eval.py -x -q`
 
-### 1.2 ψ-parameterized Kreiss check
+### 1.2 ψ-parameterized Kreiss check *(precondition: item 0.5 — a first attempt without it blocked with deterministic false-unstable verdicts at 4 of 5 ψ)*
 
 **File:** `stencil_gen/cutcell_eval.py` (or new `stencil_gen/cutcell_normal_modes.py` if cutcell_eval.py exceeds ~300 lines), tests in `tests/test_cutcell_eval.py`.
 
@@ -332,6 +352,10 @@ Optimizer wiring (bounds, denominator-positivity constraints via Sturm sequences
 ## Findings log
 
 *(Appended by calibration items 0.3, 1.4, 2.5, 4.3, 4.4.5, 4.5 during execution.)*
+
+### 2026-07-13 — Item 1.2 first attempt blocked; four gks_kreiss.py substrate defects diagnosed (→ item 0.5)
+
+The 1.2 wrapper was implemented per spec and cross-validated: **dense eigenvalues of the assembled E2_1 α=0 half-line operator at N ∈ {20,40,80,160} confirm stability at all five test ψ (max Re λ ≤ 8e-6)** — plan-35's conclusion survives a direct check — while `kreiss_stability_check` returned false-unstable at 4 of 5 ψ via four distinct mechanisms: (1) σ_min(M)→0 as |s|→∞ for augmented m>p matrices (σ_min·|s| → 1/4) while det→∞; (2) unbounded NM witness runaway to |s|~1e155 with σ underflow; (3) near-origin count_mismatch anomalies (E2 sub-sonic axis, both roots unimodular) triaged through the zero-discrimination `_classify_imag_axis` → false outgoing at ψ=0.9; (4) an uncovered second structural zero — the Dirichlet tail-constant κ=1 double zero at s=0 (Σ_{j≥m−p} w_ij ≡ 0 in ψ), null vector (0_nodal, e_{κ→1}) — tripping sigma_tol at ψ=0.9999 via the ψ→1 row-coincidence degeneracy. ψ=0.5 passed only by accident (σ at the 1e-3 barrier 8.8e-8, 9× above tol, same s² zero). Fixes specified as item 0.5; the wrapper itself verified end-to-end and reverted pending 0.5.
 
 ### 0.3 (2026-07-13) — All differing closure rows fed to L2: NO verdicts flipped
 
