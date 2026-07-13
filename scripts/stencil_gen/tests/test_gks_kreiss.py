@@ -6,14 +6,19 @@ import pytest
 from stencil_gen.gks_kreiss import (
     KreissResult,
     DefectiveKappaError,
+    _classify_benign_zero,
     _classify_imag_axis,
     _classify_near_origin,
+    _column_equilibrate,
     _constant_mode_vector,
     _fit_vanishing_order,
     _kappa_roots_from_poly,
     _refine_witness,
     _rows_annihilate_constants,
+    _rows_annihilate_tail_constants,
     _sweep_grid,
+    _triage_anomalies,
+    eigensolution_s_bound,
     kappa_roots,
     kreiss_matrix,
     kreiss_matrix_general,
@@ -1526,3 +1531,408 @@ class TestNearOriginTreatment:
 
         sig = inspect.signature(kreiss_stability_check)
         assert sig.parameters["min_s_magnitude"].default == pytest.approx(1e-3)
+
+
+# ---------------------------------------------------------------------------
+# Plan 48 item 0.5: witness-search robustness for the augmented Kreiss matrix
+# ---------------------------------------------------------------------------
+
+# Grid used by the cut-cell regression checks (matches the 0.3 calibration
+# grid; odd n_imag puts Im = 0 on the grid).
+_CUT_GRID = {"s_max": 10.0, "n_radial": 30, "n_imag": 81, "imag_max": 15.0}
+
+# psi values of the item-1.2 diagnostic (plan 48 item 0.5 test i).
+_CUT_PSI = [1e-3, 0.1, 0.5, 0.9, 0.9999]
+
+
+@pytest.fixture(scope="module")
+def e2_1_cut():
+    """E2_1 alpha=0 cut-cell evaluator + interior (plan 48 items 1.1/0.5).
+
+    make_cutcell_evaluator is lru_cached, so this costs the ~0.03 s E2_1
+    derivation once per session.
+    """
+    from stencil_gen.cutcell_eval import make_cutcell_evaluator
+    from stencil_gen.temo import E2_1
+
+    ev = make_cutcell_evaluator(E2_1)
+    alpha = {s: 0.0 for s in ev.alpha_symbols}
+    iw, io = ev.interior()
+    return ev, alpha, iw, io
+
+
+class TestWitnessSearchRobustness:
+    """Plan 48 item 0.5: the four augmented-matrix false-positive mechanisms.
+
+    Diagnosed by the blocked item-1.2 attempt on the E2_1 alpha=0 Dirichlet
+    cut block (dense eigenvalues confirm stability at all five test psi):
+
+    1. sigma_min(M(s)) -> 0 as |s| -> inf for m > p (sigma_min*|s| -> 1/4
+       for E2_1) while det M -> inf  →  column equilibration (0.5a);
+    2. unbounded Nelder-Mead runaway to |s| ~ 1e155 with sigma underflow
+       →  |s| <= S_max eigensolution bound (0.5a);
+    3. NM probes at Re(s) ~ 1e-13 on the sub-sonic axis → count_mismatch
+       anomalies → zero-discrimination _classify_imag_axis → false
+       outgoing  →  Re(s) >= eps_imag reflection (0.5b) + structural
+       near-origin anomaly triage (0.5c);
+    4. the Dirichlet tail-constant structural zero at s = 0 (uncovered by
+       0.4's x_const test) tripping sigma_tol at the psi -> 1 degeneracy
+       →  generalized benign-zero test with x_tail (0.5d).
+    """
+
+    _UPWIND_W = np.array([-1.0, 1.0])
+    _UPWIND_O = np.array([-1, 0])
+
+    # The 0.2 engineered m=2 closure with det M(s) = 0 at s = 1.
+    _ENGINEERED_UNSTABLE_ROWS = [
+        (np.array([0.0, -2.0]), np.array([0, 1])),
+        (np.array([-1.0, 1.0]), np.array([0, 1])),
+    ]
+
+    @staticmethod
+    def _halfline_operator(ev, alpha, iw, io, psi, n=40):
+        """Assemble the N x N cut-cell half-line operator at *psi*.
+
+        Mirrors tests/test_group_velocity.py's _build_cut_cell_diff_matrix:
+        cut Dirichlet closure rows at the left (wall column already
+        eliminated by the evaluator), centered interior, reflected uniform
+        tension-sigma=0 closure at the right (known stable, so any
+        instability is the left closure's).
+        """
+        from stencil_gen.phs import uniform_boundary_weights_rbf
+
+        rows, _ = ev.rows(psi, alpha)
+        r = len(rows)
+        t = ev.dims.t
+        D = np.zeros((n, n))
+        for i, (w, cols) in enumerate(rows):
+            D[i, cols] = w
+        for i in range(r, n - r):
+            D[i, i + io] = iw
+        sign = (-1.0) ** ev.scheme.nu
+        for i in range(r):
+            w = uniform_boundary_weights_rbf(
+                i, t, ev.scheme.nu, ev.scheme.q, 0.0, kernel="tension"
+            )
+            for j in range(t):
+                D[n - 1 - i, n - 1 - j] = sign * float(w[j])
+        return D
+
+    # ---------------------------------------------------------------
+    # Plan test (i): the 1.2 diagnostic as regression
+    # ---------------------------------------------------------------
+
+    @pytest.mark.parametrize("psi", _CUT_PSI)
+    def test_cutcell_e2_1_alpha0_stable(self, e2_1_cut, psi):
+        """E2_1 alpha=0 Dirichlet rows are GKS-stable at all five psi.
+
+        Before item 0.5 this returned false-unstable at 4 of 5 psi
+        (verdict 'no_candidates' at psi in {1e-3, 0.1} via the NM runaway,
+        false 'outgoing_mode_detected' at psi = 0.9 via mechanism 3, false
+        'near_origin_violation' at psi = 0.9999 via mechanism 4).
+        Cross-checked in-test against dense eigenvalues of the assembled
+        half-line operator at N = 40 (plan 48 item 0.5 test i; the plan-35
+        stability conclusion, max Re lambda <= 8e-6 at N up to 160).
+        """
+        ev, alpha, iw, io = e2_1_cut
+        rows, row_indices = ev.rows(psi, alpha)
+        assert len(rows) == 3  # m = R - 1 = 3 > p = 1
+
+        result = kreiss_stability_check(
+            iw, io, rows,
+            s_grid_params=_CUT_GRID,
+            row_indices=list(row_indices),
+        )
+
+        assert result.is_stable is True, (
+            f"false-unstable at psi={psi}: verdict "
+            f"{result.imaginary_axis_perturbation_verdict!r} / "
+            f"{result.near_origin_verdict!r}, witness {result.witness_s}, "
+            f"sigma {result.witness_sigma_min:.3e}"
+        )
+        # No spurious anomalies (mechanism 3 is gone at the source)
+        assert result.defective_kappa_detected is False
+
+        # Plan test (iv): the witness respects the eigensolution bound
+        s_max = eigensolution_s_bound(iw, rows)
+        assert abs(result.witness_s) <= s_max * (1 + 1e-6), (
+            f"witness |s|={abs(result.witness_s):.3e} beyond S_max={s_max:.3e}"
+        )
+
+        # Dense-eigenvalue cross-check at N=40 (semi-discrete u_t = -D u)
+        D = self._halfline_operator(*e2_1_cut, psi)
+        max_re = float(np.max(np.real(np.linalg.eigvals(-D))))
+        assert max_re < 1e-5, (
+            f"dense eigenvalues contradict GKS verdict at psi={psi}: "
+            f"max Re = {max_re:.3e}"
+        )
+
+    def test_cutcell_psi_to_1_degeneracy_is_tail_constant_zero(self, e2_1_cut):
+        """Mechanism 4 regression: at psi = 0.9999 the near-origin dip is
+        the structural Dirichlet tail-constant zero, not a violation.
+
+        The psi -> 1 row-coincidence degeneracy shrinks sigma_min at the
+        |s| = 1e-3 barrier below sigma_tol; before item 0.5d the x_const
+        test rejected it (the rows do NOT annihilate full constants) and
+        the check returned a false 'near_origin_violation'.
+        """
+        ev, alpha, iw, io = e2_1_cut
+        rows, row_indices = ev.rows(0.9999, alpha)
+
+        result = kreiss_stability_check(
+            iw, io, rows,
+            s_grid_params=_CUT_GRID,
+            row_indices=list(row_indices),
+        )
+
+        assert result.is_stable is True
+        assert result.near_origin_verdict == "tail_constant_zero"
+        assert np.isfinite(result.deflated_margin)
+        assert result.deflated_margin > 0
+        # Double zero deflated by the vanishing root column: nu in [1, 2]
+        assert 0.5 < result.vanishing_order < 2.5
+
+    # ---------------------------------------------------------------
+    # Plan test (ii): equilibrated sigma_min is O(1) at large |s|
+    # ---------------------------------------------------------------
+
+    def test_cutcell_equilibrated_sigma_large_s(self, e2_1_cut):
+        """Mechanism 1: raw sigma_min decays like 1/(4|s|) for the augmented
+        E2_1 matrix while the equilibrated sigma_min is O(1) (plan test ii).
+        """
+        ev, alpha, iw, io = e2_1_cut
+        rows, row_indices = ev.rows(0.5, alpha)
+        s = complex(1e3, 0.0)
+
+        raw = min_singular_value(
+            iw, io, rows, s, row_indices=list(row_indices)
+        )
+        eq = min_singular_value(
+            iw, io, rows, s, row_indices=list(row_indices), equilibrate=True
+        )
+
+        # The structural artifact: sigma_min * |s| -> 1/4
+        assert raw == pytest.approx(0.25 / abs(s), rel=0.05)
+        # Equilibrated: an O(1) relative margin, not O(1/|s|)
+        assert eq > 0.5
+
+    def test_column_equilibrate_unit_norms(self):
+        """_column_equilibrate scales columns to unit infinity-norm and
+        leaves exactly-zero columns untouched (genuine singularity keeps
+        sigma_min = 0)."""
+        M = np.array([[2.0, 0.0], [-4.0, 0.0]], dtype=complex)
+        M_eq = _column_equilibrate(M)
+        np.testing.assert_allclose(np.max(np.abs(M_eq[:, 0])), 1.0)
+        np.testing.assert_allclose(M_eq[:, 1], 0.0)
+        assert np.linalg.svd(M_eq, compute_uv=False)[-1] == 0.0
+
+    # ---------------------------------------------------------------
+    # Plan test (iii): genuine zeros still caught post-equilibration
+    # ---------------------------------------------------------------
+
+    def test_engineered_zero_still_caught_equilibrated(self):
+        """The 0.2 engineered det-zero at s = 1 survives equilibration:
+        det(MD) = det(M) det(D) with det D > 0 (plan test iii)."""
+        sigma_eq = min_singular_value(
+            self._UPWIND_W, self._UPWIND_O, self._ENGINEERED_UNSTABLE_ROWS,
+            s=1.0, equilibrate=True,
+        )
+        assert sigma_eq < 1e-12
+
+        # Full orchestrator (equilibrated + bounded since m=2 > p=1)
+        result = kreiss_stability_check(
+            self._UPWIND_W, self._UPWIND_O, self._ENGINEERED_UNSTABLE_ROWS,
+            s_grid_params={"s_max": 5.0, "n_radial": 30, "n_imag": 81,
+                           "imag_max": 5.0},
+        )
+        assert result.is_stable is False
+        assert result.witness_sigma_min < 1e-6
+        assert abs(result.witness_s - 1.0) < 0.1
+
+        # Plan test (iv): the found witness respects the bound
+        s_max = eigensolution_s_bound(
+            self._UPWIND_W, self._ENGINEERED_UNSTABLE_ROWS
+        )
+        assert s_max == pytest.approx(2.0)  # interior |w| sum = closure = 2
+        assert abs(result.witness_s) <= s_max * (1 + 1e-6)
+
+    # ---------------------------------------------------------------
+    # Plan test (iv): eigensolution bound
+    # ---------------------------------------------------------------
+
+    def test_eigensolution_s_bound_hand_computed(self):
+        """S_max is the max l1 row sum over interior AND closure rows."""
+        rows = [
+            (np.array([3.0, -1.5]), np.array([0, 1])),
+            (np.array([-1.0, 1.0]), np.array([0, 1])),
+        ]
+        # interior sum = 2, row sums = 4.5 and 2 -> S_max = 4.5
+        assert eigensolution_s_bound(self._UPWIND_W, rows) == pytest.approx(4.5)
+        # closure rows all smaller than the interior -> interior wins
+        assert eigensolution_s_bound(
+            self._UPWIND_W, [(np.array([1.0]), np.array([0]))]
+        ) == pytest.approx(2.0)
+
+    def test_refine_witness_rejects_beyond_bound(self, e2_1_cut):
+        """Mechanism 2: with s_max_bound set, Nelder-Mead cannot run away
+        down the raw (unequilibrated) large-|s| slope of the augmented
+        matrix — before item 0.5 it descended to |s| ~ 1e155 where sigma
+        underflowed to exactly 0."""
+        ev, alpha, iw, io = e2_1_cut
+        rows, row_indices = ev.rows(0.5, alpha)
+        s_bound = eigensolution_s_bound(iw, rows)
+
+        # Unbounded + unequilibrated (the pre-0.5 configuration): NM runs
+        # away down the sigma ~ 1/(4|s|) slope from a feasible start.
+        runaway = _refine_witness(
+            iw, io, rows,
+            s_start=complex(0.9 * s_bound, 0.0),
+            min_s_magnitude=1e-3,
+            row_indices=list(row_indices),
+        )
+        assert abs(runaway) > 10 * s_bound  # the diagnosed failure mode
+
+        # Bounded: the refined witness respects |s| <= S_max.
+        refined = _refine_witness(
+            iw, io, rows,
+            s_start=complex(0.9 * s_bound, 0.0),
+            min_s_magnitude=1e-3,
+            row_indices=list(row_indices),
+            s_max_bound=s_bound,
+        )
+        assert abs(refined) <= s_bound * (1 + 1e-6)
+
+    # ---------------------------------------------------------------
+    # Mechanism 3: Re(s) >= eps_imag reflection (0.5b) and structural
+    # anomaly triage (0.5c)
+    # ---------------------------------------------------------------
+
+    def test_refine_witness_clamps_re_to_eps_imag(self, e2_1_cut):
+        """NM probes are reflected at Re(s) = eps_imag: refining the E2_1
+        psi = 0.9 closure from an axis start records NO anomalies (before
+        0.5b the probes at Re ~ 1e-13 found every root unimodular to
+        rounding -> count_mismatch -> deterministic false outgoing)."""
+        ev, alpha, iw, io = e2_1_cut
+        rows, row_indices = ev.rows(0.9, alpha)
+
+        anomalies = []
+        refined = _refine_witness(
+            iw, io, rows,
+            s_start=complex(1e-6, 0.5),
+            min_s_magnitude=1e-3,
+            anomalies=anomalies,
+            row_indices=list(row_indices),
+            equilibrate=True,
+            eps_imag=1e-6,
+            s_max_bound=eigensolution_s_bound(iw, rows),
+        )
+        assert refined.real >= 1e-6 * (1 - 1e-12)
+        assert anomalies == [], (
+            f"NM probed below the eps_imag strip: {anomalies[:3]}"
+        )
+
+    def test_near_origin_anomaly_triaged_structurally(self, e2_1_cut):
+        """0.5c: a near-origin count_mismatch anomaly (|s| < 0.1) is routed
+        through the structural benign-zero test, never _classify_imag_axis
+        (which item 0.4 established has zero discrimination there)."""
+        ev, alpha, iw, io = e2_1_cut
+        rows, row_indices = ev.rows(0.9, alpha)
+
+        # E2 sub-sonic axis knife edge: both roots unimodular to rounding
+        s_bad = complex(1e-13, 0.05)
+        sigma, status = min_singular_value_ex(
+            iw, io, rows, s_bad, row_indices=list(row_indices)
+        )
+        assert status == "count_mismatch"
+
+        triaged = _triage_anomalies(
+            iw, io, [(s_bad, status)],
+            boundary_rows=rows, row_indices=list(row_indices),
+        )
+        assert len(triaged) == 1
+        s_a, status_a, classification = triaged[0]
+        assert s_a == s_bad and status_a == "count_mismatch"
+        # Resolved benign via the Dirichlet tail-constant structural zero;
+        # _classify_imag_axis would have returned its violation label here.
+        assert classification == "tail_constant_zero"
+        assert _classify_imag_axis(iw, io, s_bad) == "outgoing_mode_detected"
+
+    def test_near_origin_anomaly_without_structural_zero_unresolved(self):
+        """A near-origin anomaly on a closure with NO structural benign
+        zero stays 'not_classified' (conservative fail path)."""
+        boundary_rows = [
+            (np.array([1.0]), np.array([0])),
+            (np.array([-1.0, 1.0]), np.array([0, 1])),
+        ]
+        triaged = _triage_anomalies(
+            self._UPWIND_W, self._UPWIND_O,
+            [(complex(1e-13, 0.05), "count_mismatch")],
+            boundary_rows=boundary_rows,
+        )
+        assert triaged[0][2] == "not_classified"
+
+    # ---------------------------------------------------------------
+    # Mechanism 4 helpers: generalized benign-zero test (0.5d)
+    # ---------------------------------------------------------------
+
+    def test_rows_annihilate_tail_constants(self, e2_1_cut):
+        """Tail row sums (j >= m - p) vanish identically for the E2_1
+        Dirichlet cut rows at every psi; the full row sums do NOT (the
+        eliminated wall weight is missing), which is why 0.4's x_const
+        test rejects the cut block."""
+        ev, alpha, iw, io = e2_1_cut
+        for psi in _CUT_PSI:
+            rows, _ = ev.rows(psi, alpha)
+            n_nodal = len(rows) - 1  # m - p = 3 - 1
+            assert _rows_annihilate_tail_constants(rows, n_nodal) is True
+            assert _rows_annihilate_constants(rows) is False
+
+    def test_rows_annihilate_tail_constants_rejects(self):
+        """Nonzero tail sums are rejected (n_nodal = 1: tail is j >= 1)."""
+        rows = [
+            (np.array([0.1, -0.1]), np.array([0, 1])),
+            (np.array([0.15, -0.15]), np.array([0, 1])),
+        ]
+        assert _rows_annihilate_tail_constants(rows, 1) is False
+        # Vacuous tail support passes
+        assert _rows_annihilate_tail_constants(
+            [(np.array([1.0]), np.array([0]))], 1
+        ) is True
+
+    def test_classify_benign_zero_tail_constant(self, e2_1_cut):
+        """The E2_1 cut block's near-origin dip classifies as the
+        tail-constant zero: sigma_min right singular vector aligned with
+        x_tail = (0_nodal, e_{kappa->1})."""
+        ev, alpha, iw, io = e2_1_cut
+        rows, row_indices = ev.rows(0.5, alpha)
+        kind, angle = _classify_benign_zero(
+            iw, io, rows, complex(1e-3, 0.0), row_indices=list(row_indices)
+        )
+        assert kind == "tail_constant_zero"
+        assert angle < 1e-2
+
+    def test_classify_benign_zero_consistency(self):
+        """The telescoping closure still classifies as the (0.4-style)
+        consistency zero through the generalized test."""
+        rows = [
+            (np.array([-1.0, 1.0]), np.array([0, 1])),
+            (np.array([-1.0, 1.0]), np.array([0, 1])),
+        ]
+        kind, angle = _classify_benign_zero(
+            self._UPWIND_W, self._UPWIND_O, rows, complex(1e-3, 0.0)
+        )
+        assert kind == "consistency_zero"
+        assert angle < 1e-2
+
+    def test_classify_benign_zero_genuine_zero_none(self):
+        """The 0.4 engineered genuine zero at s = 0.05 aligns with neither
+        x_const nor x_tail: kind 'none' (still a real witness)."""
+        rows = [
+            (np.array([0.1, -0.1]), np.array([0, 1])),
+            (np.array([0.15, -0.15]), np.array([0, 1])),
+        ]
+        kind, angle = _classify_benign_zero(
+            self._UPWIND_W, self._UPWIND_O, rows, complex(0.05, 0.0)
+        )
+        assert kind == "none"
+        assert angle > 0.1

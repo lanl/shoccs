@@ -49,6 +49,42 @@ near-null vector NOT aligned with x_const and is reported as a real
 witness. Consistency zeros additionally get a vanishing-order fit
 sigma_min(s) ~ |s|^nu along a ray into the right half-plane and a
 deflated margin sigma_min(s)/|s|^nu (diagnostics only, not a gate).
+
+Witness-search robustness for the augmented matrix (plan 48 item 0.5):
+four false-positive mechanisms specific to augmented m > p closures are
+fixed here (diagnosed on the E2_1 alpha=0 Dirichlet cut block, which
+dense eigenvalues confirm is stable):
+
+(a) For m > p, sigma_min(M(s)) -> 0 as |s| -> infinity (root columns
+    scale like kappa^j ~ (2|s|)^{-j}) while det M(s) -> infinity, so the
+    raw sigma_min proxy structurally diverges from the determinant
+    condition at large |s|.  Fix: column-equilibrate M(s) to unit
+    infinity-norm columns before the SVD on the augmented path
+    (det(M D) = det(M) det(D) with det D > 0, so det-zero locations are
+    invariant and sigma_min becomes a meaningful relative margin at all
+    |s|).  The square m = p matrix grows like |s| — no artifact — and is
+    left unequilibrated.  Additionally the witness search is bounded to
+    the provable eigensolution region |s| <= S_max (see
+    eigensolution_s_bound): grid points beyond the bound are masked and
+    Nelder-Mead iterates beyond it are rejected, preventing the
+    unbounded-runaway/underflow failure (|s| ~ 1e155, sigma -> exactly 0).
+(b) Nelder-Mead probe points are reflected to Re(s) >= eps_imag
+    (consistent with make_s_grid's strip): probes at Re(s) ~ 1e-13 on a
+    centered interior's sub-sonic axis segment find every root unimodular
+    to rounding (count_mismatch anomalies) whose _classify_imag_axis
+    triage has zero discrimination.
+(c) Near-origin anomalies (|s| < _NEAR_ORIGIN_RADIUS) are routed through
+    the structural benign-zero discrimination, never _classify_imag_axis.
+(d) The structural benign-zero test is generalized: a near-origin
+    sigma_min dip is benign iff the right singular vector aligns with
+    x_const = (1, ..., 1, e_{kappa->1}) [conservative full-constant zero,
+    row sums ~ 0] OR with x_tail = (0_nodal, e_{kappa->1}) [Dirichlet
+    tail-constant zero, sum_{j >= m-p} w_ij ~ 0 — the wall-eliminated
+    Dirichlet cut block has this structural (double) zero at s = 0 for
+    all psi], with the matching row-sum identity verified.  The
+    vanishing-order fit / deflated margin covers the double zero; the
+    psi -> 1 row-coincidence degeneracy therefore no longer trips
+    sigma_tol.
 """
 
 from __future__ import annotations
@@ -94,7 +130,10 @@ class KreissResult:
     """The s value at which the minimum sigma_min was found (None if stable)."""
 
     witness_sigma_min: float = float("inf")
-    """The minimum singular value at the witness point."""
+    """The minimum singular value at the witness point. For augmented
+    (m > p) closures this is the column-equilibrated relative margin
+    (plan 48 item 0.5a); for square m = p closures it is the raw
+    sigma_min."""
 
     imaginary_axis_perturbation_verdict: str = "not_checked"
     """One of: 'not_checked', 'no_candidates', 'all_incoming',
@@ -112,9 +151,12 @@ class KreissResult:
     anomalous_points: tuple = ()
     """Deduplicated anomalous s-points as (s, status, classification) triples.
     status is 'defective' or 'count_mismatch' (see min_singular_value_ex);
-    classification is the _classify_imag_axis verdict for points on/near the
-    imaginary axis, or 'not_classified' for points in the interior of the
-    right half-plane where the perturbation test does not apply."""
+    classification is 'consistency_zero'/'tail_constant_zero' for
+    near-origin points resolved by the structural benign-zero
+    discrimination (plan 48 item 0.5c), the _classify_imag_axis verdict
+    for other points on/near the imaginary axis, or 'not_classified' for
+    points in the interior of the right half-plane where the perturbation
+    test does not apply."""
 
     s_grid_shape: tuple[int, ...] = ()
     """Shape of the s-grid used for the sweep."""
@@ -141,23 +183,31 @@ class KreissResult:
       mode AND all closure rows annihilate constants — the structural
       kappa = 1 consistency zero of a conservative closure, not a GKS
       violation (is_stable is unaffected by the small sigma_min there).
+    - 'tail_constant_zero': the near-null vector aligns with
+      x_tail = (0_nodal, e_{kappa->1}) AND all closure rows annihilate
+      tail constants (sum_{j >= m-p} w_ij ~ 0) — the structural s = 0
+      (double) zero of a wall-eliminated Dirichlet cut block, not a GKS
+      violation (plan 48 item 0.5d).
     - 'near_origin_violation': sigma_min < sigma_tol at a near-origin
-      witness that is NOT the consistency zero — a genuine GKS
+      witness that is NOT a structural benign zero — a genuine GKS
       eigensolution near z ~ 1 (is_stable = False).
-    - 'no_violation': near-origin witness, not the consistency zero, but
-      sigma_min >= sigma_tol — nothing singular there."""
+    - 'no_violation': near-origin witness, not a structural benign zero,
+      but sigma_min >= sigma_tol — nothing singular there."""
 
     vanishing_order: float = float("nan")
     """Fitted exponent nu of sigma_min(s) ~ |s|^nu along a ray into the
-    right half-plane, computed only for 'consistency_zero' witnesses.
-    The plan-48 reference case (m = 2 telescoping closure) gives nu ~ 2;
-    empirically nu grows with the number of constant-annihilating closure
-    rows (nu ~ m for the RBF closures). Diagnostic only, not a gate."""
+    right half-plane, computed only for structural benign-zero witnesses
+    ('consistency_zero' / 'tail_constant_zero'). The plan-48 reference
+    case (m = 2 telescoping closure) gives nu ~ 2, as does the Dirichlet
+    tail-constant double zero; empirically nu grows with the number of
+    annihilating closure rows and near degeneracies (nu ~ 3 at the
+    cut-cell psi -> 1 row coincidence). Diagnostic only, not a gate."""
 
     deflated_margin: float = float("inf")
     """sigma_min(witness_s) / |witness_s|^vanishing_order — the
-    consistency-zero-deflated stability margin at the witness (only for
-    'consistency_zero' witnesses; inf otherwise)."""
+    benign-zero-deflated stability margin at the witness (only for
+    'consistency_zero' / 'tail_constant_zero' witnesses; inf
+    otherwise)."""
 
 
 # ---------------------------------------------------------------------------
@@ -405,6 +455,52 @@ def kreiss_matrix_general(
     return M
 
 
+def _column_equilibrate(M: np.ndarray) -> np.ndarray:
+    """Scale each column of M to unit infinity-norm (plan 48 item 0.5a).
+
+    det(M D) = det(M) det(D) with D = diag(1/max_i |M[i,j]|) and
+    det D > 0, so determinant-zero locations are invariant; sigma_min of
+    the equilibrated matrix is a meaningful *relative* margin at all |s|,
+    fixing the augmented-matrix artifact sigma_min(M) -> 0 as
+    |s| -> infinity while det M -> infinity (root columns scale like
+    kappa^j).  Exactly-zero columns are left unscaled (the matrix is
+    genuinely singular there and sigma_min = 0 must be preserved).
+    """
+    scale = np.max(np.abs(M), axis=0)
+    scale[scale == 0.0] = 1.0
+    return M / scale
+
+
+def eigensolution_s_bound(
+    interior_weights: np.ndarray,
+    boundary_rows: list[BoundaryRow],
+) -> float:
+    """Sup-norm (Gershgorin) bound on |s| for any GKS eigensolution.
+
+    Plan 48 item 0.5a. Let u_n(t) = e^{st} phi_n be a nontrivial GKS
+    eigensolution with a decaying tail (Re(s) > 0 forces |kappa_l| < 1,
+    so sup_n |phi_n| is attained at some finite node k). Every grid node
+    carries exactly one semi-discrete equation
+    s phi_k = -sum_j w_{kj} phi_j (a closure row or the interior
+    stencil), so evaluating at the argmax node k gives
+
+        |s| |phi_k| <= sum_j |w_{kj}| max_j |phi_j| = (sum_j |w_{kj}|) |phi_k|,
+
+    hence |s| <= S_max := max over all rows (closure AND interior) of the
+    l1 row sum sum_j |w_{ij}|.  Equivalently |s| <= ||L||_inf for the
+    semi-discrete operator L.  Any candidate witness with |s| > S_max is
+    provably not a GKS eigensolution: the witness search masks grid
+    points and rejects Nelder-Mead iterates beyond this bound, which is
+    what stops the unbounded large-|s| runaway of the equilibration-free
+    sigma_min proxy (assumes, as everywhere in this module, that the
+    closure rows plus interior rows cover every grid node).
+    """
+    bound = float(np.sum(np.abs(np.asarray(interior_weights, dtype=complex))))
+    for weights, _ in boundary_rows:
+        bound = max(bound, float(np.sum(np.abs(np.asarray(weights, dtype=complex)))))
+    return bound
+
+
 def min_singular_value_ex(
     interior_weights: np.ndarray,
     interior_offsets: np.ndarray,
@@ -412,6 +508,7 @@ def min_singular_value_ex(
     s: complex,
     *,
     row_indices: Optional[list[int]] = None,
+    equilibrate: bool = False,
 ) -> tuple[float, str]:
     """Compute sigma_min(M(s)) with an explicit anomaly status.
 
@@ -430,6 +527,13 @@ def min_singular_value_ex(
     row_indices : list[int], optional
         Grid node n_i of each closure row (default 0..m-1); forwarded to
         kreiss_matrix_general.
+    equilibrate : bool
+        Column-equilibrate M(s) to unit infinity-norm columns before the
+        SVD (plan 48 item 0.5a). Determinant-zero locations are invariant;
+        sigma becomes a relative margin that stays O(1) at large |s| for
+        augmented m > p matrices instead of decaying like 1/|s|. Default
+        False (raw sigma_min, backward compatible); kreiss_stability_check
+        enables it on the augmented path.
 
     Returns
     -------
@@ -460,6 +564,8 @@ def min_singular_value_ex(
         return np.inf, "defective"
     except ValueError:
         return np.inf, "count_mismatch"
+    if equilibrate:
+        M = _column_equilibrate(M)
     svs = np.linalg.svd(M, compute_uv=False)
     return float(svs[-1]), "ok"
 
@@ -471,18 +577,21 @@ def min_singular_value(
     s: complex,
     *,
     row_indices: Optional[list[int]] = None,
+    equilibrate: bool = False,
 ) -> float:
     """Compute sigma_min(M(s)), the minimum singular value of the Kreiss matrix.
 
     Thin compatibility wrapper around min_singular_value_ex that discards the
     anomaly status (and inherits its m == p / m != p dispatch, plan 48 item
-    0.2). Returns np.inf on DefectiveKappaError or root-count mismatch;
-    callers that must distinguish anomalies from genuinely large sigma_min
-    should use min_singular_value_ex instead.
+    0.2, and the optional column equilibration, plan 48 item 0.5a). Returns
+    np.inf on DefectiveKappaError or root-count mismatch; callers that must
+    distinguish anomalies from genuinely large sigma_min should use
+    min_singular_value_ex instead.
     """
     sigma, _ = min_singular_value_ex(
         interior_weights, interior_offsets, boundary_rows, s,
         row_indices=row_indices,
+        equilibrate=equilibrate,
     )
     return sigma
 
@@ -523,6 +632,8 @@ def _sweep_grid(
     *,
     anomalies: Optional[list] = None,
     row_indices: Optional[list[int]] = None,
+    equilibrate: bool = False,
+    s_max_bound: float = np.inf,
 ) -> tuple[np.ndarray, int]:
     """Evaluate min_singular_value at every point of s_grid.
 
@@ -537,6 +648,14 @@ def _sweep_grid(
     row_indices : list[int], optional
         Grid node of each closure row; forwarded to min_singular_value_ex
         (plan 48 item 0.2).
+    equilibrate : bool
+        Column-equilibrate M(s) before the SVD (plan 48 item 0.5a);
+        forwarded to min_singular_value_ex.
+    s_max_bound : float
+        Grid points with |s| > s_max_bound are masked to sigma=inf
+        without evaluation (plan 48 item 0.5a): they lie beyond the
+        provable eigensolution bound (see eigensolution_s_bound), so
+        neither witnesses nor anomalies there are meaningful.
 
     Returns
     -------
@@ -548,9 +667,13 @@ def _sweep_grid(
     flat = s_grid.ravel()
     sigma_flat = np.empty(len(flat))
     for i, s in enumerate(flat):
+        if abs(s) > s_max_bound:
+            sigma_flat[i] = np.inf
+            continue
         sigma_flat[i], status = min_singular_value_ex(
             interior_weights, interior_offsets, boundary_rows, s,
             row_indices=row_indices,
+            equilibrate=equilibrate,
         )
         if status != "ok" and anomalies is not None:
             anomalies.append((complex(s), status))
@@ -568,13 +691,23 @@ def _refine_witness(
     min_s_magnitude: float = 0.0,
     anomalies: Optional[list] = None,
     row_indices: Optional[list[int]] = None,
+    equilibrate: bool = False,
+    eps_imag: float = 0.0,
+    s_max_bound: float = np.inf,
 ) -> complex:
     """Refine a candidate witness s via Nelder-Mead minimization of log(sigma_min).
 
-    Constrains Re(s) >= 0 by reflecting into the right half-plane.
-    Optionally constrains |s| >= min_s_magnitude by adding a barrier penalty,
-    preventing convergence to the trivial zero at s=0 that exists for all
-    consistent first-derivative operators.
+    Constrains Re(s) >= eps_imag by reflecting into the half-plane
+    Re(s) >= eps_imag (plan 48 item 0.5b: probes below make_s_grid's
+    strip land on knife edges where a centered interior's roots are all
+    unimodular to rounding, producing spurious count_mismatch anomalies —
+    reflect, don't evaluate). Optionally constrains |s| >= min_s_magnitude
+    and |s| <= s_max_bound by barrier penalties: the former prevents
+    convergence to the trivial zero at s=0 that exists for all consistent
+    first-derivative operators, the latter rejects iterates beyond the
+    provable eigensolution bound (plan 48 item 0.5a; see
+    eigensolution_s_bound), stopping the large-|s| runaway of augmented
+    matrices.
 
     Parameters
     ----------
@@ -592,6 +725,17 @@ def _refine_witness(
     row_indices : list[int], optional
         Grid node of each closure row; forwarded to min_singular_value_ex
         (plan 48 item 0.2).
+    equilibrate : bool
+        Column-equilibrate M(s) before the SVD (plan 48 item 0.5a);
+        forwarded to min_singular_value_ex.
+    eps_imag : float
+        Reflection line for Re(s): probe points with Re(s) < eps_imag are
+        reflected to eps_imag + |Re(s) - eps_imag| before evaluation
+        (plan 48 item 0.5b). Default 0.0 reproduces the original
+        reflection into the closed right half-plane.
+    s_max_bound : float
+        Barrier: iterates with |s| > s_max_bound are rejected with a
+        large penalty, never evaluated (plan 48 item 0.5a).
 
     Returns
     -------
@@ -601,16 +745,19 @@ def _refine_witness(
     from scipy.optimize import minimize
 
     def objective(re_im: np.ndarray) -> float:
-        # Reflect Re(s) < 0 into the right half-plane
-        re_s = abs(re_im[0])
+        # Reflect Re(s) < eps_imag into the half-plane Re(s) >= eps_imag
+        re_s = eps_imag + abs(re_im[0] - eps_imag)
         im_s = re_im[1]
         s = complex(re_s, im_s)
-        # Barrier to keep |s| > min_s_magnitude
+        # Barrier to keep min_s_magnitude < |s| <= s_max_bound
         if min_s_magnitude > 0 and abs(s) < min_s_magnitude:
             return 100.0  # large penalty
+        if abs(s) > s_max_bound:
+            return 100.0  # beyond the provable eigensolution region
         sv, status = min_singular_value_ex(
             interior_weights, interior_offsets, boundary_rows, s,
             row_indices=row_indices,
+            equilibrate=equilibrate,
         )
         if status != "ok" and anomalies is not None:
             anomalies.append((s, status))
@@ -619,7 +766,7 @@ def _refine_witness(
     x0 = np.array([s_start.real, s_start.imag])
     result = minimize(objective, x0, method="Nelder-Mead",
                       options={"xatol": 1e-10, "fatol": 1e-12, "maxiter": 2000})
-    return complex(abs(result.x[0]), result.x[1])
+    return complex(eps_imag + abs(result.x[0] - eps_imag), result.x[1])
 
 
 def _classify_imag_axis(
@@ -702,23 +849,41 @@ _ANOMALY_AXIS_TOL = 1e-3
 """Re(s) threshold below which an anomalous point counts as on/near the
 imaginary axis and is classified with _classify_imag_axis."""
 
+_NEAR_ORIGIN_NUDGE_RE = 1e-4
+"""Re(s) floor used when structurally classifying a near-origin anomaly
+(plan 48 item 0.5c): the Kreiss matrix is not computable at the anomaly
+itself (root-count knife edge on the axis), so the benign-zero test is
+evaluated at the nudged point max(Re(s), _NEAR_ORIGIN_NUDGE_RE) + i Im(s),
+inside the open right half-plane where the structural root count holds."""
+
+_BENIGN_ANOMALY_CLASSES = ("all_incoming", "consistency_zero",
+                           "tail_constant_zero")
+"""Anomaly classifications that resolve an anomalous point as benign."""
+
 
 def _triage_anomalies(
     interior_weights: np.ndarray,
     interior_offsets: np.ndarray,
     anomalies: list,
+    *,
+    boundary_rows: Optional[list[BoundaryRow]] = None,
+    row_indices: Optional[list[int]] = None,
 ) -> tuple:
     """Deduplicate and classify anomalous s-points from sweep/refinement.
 
     Each anomaly is a ``(s, status)`` pair with status in
-    {'defective', 'count_mismatch'}. Points on/near the imaginary axis
+    {'defective', 'count_mismatch'}. Near-origin points
+    (|s| < _NEAR_ORIGIN_RADIUS) are routed through the structural
+    benign-zero discrimination, NEVER _classify_imag_axis (plan 48 item
+    0.5c — item 0.4 established the perturbation classifier has zero
+    discrimination there); other points on/near the imaginary axis
     (Re(s) <= _ANOMALY_AXIS_TOL) are classified with _classify_imag_axis;
     points in the interior of the right half-plane cannot be classified by
     the imaginary-axis perturbation test and are marked 'not_classified'.
 
     Returns a tuple of ``(s, status, classification)`` triples. Only a
-    classification of 'all_incoming' resolves an anomaly as benign;
-    'outgoing_mode_detected' is a violation; anything else
+    classification in _BENIGN_ANOMALY_CLASSES resolves an anomaly as
+    benign; 'outgoing_mode_detected' is a violation; anything else
     ('defective', 'no_candidates', 'not_classified') leaves the anomaly
     unresolved and the caller must fail conservatively (plan 48 item 0.1).
     """
@@ -729,7 +894,14 @@ def _triage_anomalies(
         if key in seen:
             continue
         seen.add(key)
-        if abs(s_a.real) <= _ANOMALY_AXIS_TOL:
+        if abs(s_a) < _NEAR_ORIGIN_RADIUS and boundary_rows is not None:
+            s_eval = complex(max(s_a.real, _NEAR_ORIGIN_NUDGE_RE), s_a.imag)
+            kind, _ = _classify_benign_zero(
+                interior_weights, interior_offsets, boundary_rows, s_eval,
+                row_indices=row_indices,
+            )
+            classification = kind if kind != "none" else "not_classified"
+        elif abs(s_a.real) <= _ANOMALY_AXIS_TOL:
             classification = _classify_imag_axis(
                 interior_weights, interior_offsets, s_a
             )
@@ -826,6 +998,11 @@ def _classify_near_origin(
     with x_const (or lives in a non-conservative closure) and is a real
     witness.
 
+    Note: kreiss_stability_check now routes near-origin candidates
+    through the generalized _classify_benign_zero (plan 48 item 0.5d),
+    which additionally recognizes the Dirichlet tail-constant zero; this
+    function is retained as the item-0.4 x_const-only test.
+
     Returns
     -------
     (is_consistency_zero, angle) : tuple[bool, float]
@@ -857,6 +1034,123 @@ def _classify_near_origin(
     return is_cz, angle
 
 
+def _tail_constant_mode_vector(
+    interior_weights: np.ndarray,
+    interior_offsets: np.ndarray,
+    boundary_rows: list[BoundaryRow],
+    s: complex,
+) -> np.ndarray:
+    """Build the normalized tail-constant coordinate vector x_tail.
+
+    Plan 48 item 0.5d: in the augmented coordinates
+    x = (phi_0, ..., phi_{m-p-1}, alpha_1, ..., alpha_p), the
+    wall-eliminated Dirichlet cut block has a structural (double) zero at
+    s = 0 with null vector x_tail = (0_nodal, e_{kappa->1}) — nodal
+    entries 0, amplitude 1 on the admissible root continuing to kappa = 1
+    as s -> 0 (argmin |kappa - 1| at this s) — whenever every closure row
+    annihilates *tail* constants (sum_{j >= m-p} w_ij = 0; the rows do
+    NOT annihilate full constants, so the 0.4 x_const test rejects it).
+    """
+    p = -int(np.min(np.asarray(interior_offsets, dtype=int)))
+    m = len(boundary_rows)
+    n_nodal = m - p
+    _, admissible, _ = kappa_roots(interior_weights, interior_offsets, s)
+    if len(admissible) == 0:
+        raise ValueError(f"No admissible roots at s={s}; cannot build x_tail")
+    ell_star = int(np.argmin(np.abs(admissible - 1.0)))
+    x = np.zeros(m, dtype=complex)
+    x[n_nodal + ell_star] = 1.0
+    return x
+
+
+def _rows_annihilate_tail_constants(
+    boundary_rows: list[BoundaryRow], n_nodal: int,
+) -> bool:
+    """True iff every closure row has tail row sum sum_{j >= n_nodal} w ~ 0.
+
+    The structural tail-constant zero at s = 0 (plan 48 item 0.5d) exists
+    only when the closure rows annihilate constants restricted to the tail
+    nodes j >= n_nodal = m - p, where the mode ansatz
+    phi_n = sum alpha_l kappa_l^n applies. Rows with no tail support pass
+    vacuously (their tail sum is exactly 0).
+    """
+    for weights, col_offsets in boundary_rows:
+        w = np.asarray(weights, dtype=complex)
+        cols = np.asarray(col_offsets, dtype=int)
+        tail_sum = np.sum(w[cols >= n_nodal])
+        if abs(tail_sum) > _ROWSUM_TOL * max(1.0, float(np.sum(np.abs(w)))):
+            return False
+    return True
+
+
+def _classify_benign_zero(
+    interior_weights: np.ndarray,
+    interior_offsets: np.ndarray,
+    boundary_rows: list[BoundaryRow],
+    s: complex,
+    *,
+    row_indices: Optional[list[int]] = None,
+    angle_tol: float = _CONST_ANGLE_TOL,
+) -> tuple[str, float]:
+    """Generalized structural benign-zero discrimination (plan 48 item 0.5d).
+
+    A near-origin sigma_min dip is a structural benign zero — not a GKS
+    violation — iff the sigma_min right singular vector of M(s) aligns
+    (angle < angle_tol) with
+
+    - x_const = (1, ..., 1, e_{kappa->1}) AND every closure row
+      annihilates full constants (row sums ~ 0): the kappa = 1
+      consistency zero of a conservative/telescoping closure (item 0.4);
+      OR
+    - x_tail = (0_nodal, e_{kappa->1}) AND every closure row annihilates
+      tail constants (sum_{j >= m-p} w_ij ~ 0): the s = 0 (double) zero
+      of a wall-eliminated Dirichlet cut block (item 0.5d),
+
+    with the matching row-sum identity verified in each branch. A genuine
+    near-origin violation aligns with neither and remains a real witness.
+
+    Returns
+    -------
+    (kind, angle) : tuple[str, float]
+        kind is 'consistency_zero', 'tail_constant_zero', or 'none';
+        angle is the alignment angle (radians) to the matched vector, or
+        the smaller of the two candidate angles when kind is 'none' (nan
+        if M(s) was not computable, in which case kind is 'none').
+    """
+    p = -int(np.min(np.asarray(interior_offsets, dtype=int)))
+    m = len(boundary_rows)
+    n_nodal = m - p
+    try:
+        if m != p or row_indices is not None:
+            M = kreiss_matrix_general(
+                interior_weights, interior_offsets, boundary_rows, s,
+                row_indices=row_indices,
+            )
+        else:
+            M = kreiss_matrix(interior_weights, interior_offsets, boundary_rows, s)
+        x_const = _constant_mode_vector(
+            interior_weights, interior_offsets, boundary_rows, s
+        )
+        x_tail = _tail_constant_mode_vector(
+            interior_weights, interior_offsets, boundary_rows, s
+        )
+    except (DefectiveKappaError, ValueError):
+        return "none", float("nan")
+
+    _, _, Vh = np.linalg.svd(M)
+    v = Vh[-1, :].conj()  # right singular vector for sigma_min
+    angle_const = float(np.arccos(min(1.0, abs(np.vdot(v, x_const)))))
+    angle_tail = float(np.arccos(min(1.0, abs(np.vdot(v, x_tail)))))
+
+    if angle_const < angle_tol and _rows_annihilate_constants(boundary_rows):
+        return "consistency_zero", angle_const
+    if angle_tail < angle_tol and _rows_annihilate_tail_constants(
+        boundary_rows, n_nodal
+    ):
+        return "tail_constant_zero", angle_tail
+    return "none", min(angle_const, angle_tail)
+
+
 def _fit_vanishing_order(
     interior_weights: np.ndarray,
     interior_offsets: np.ndarray,
@@ -865,19 +1159,23 @@ def _fit_vanishing_order(
     witness_sigma: float,
     *,
     row_indices: Optional[list[int]] = None,
+    equilibrate: bool = False,
     t_min: float = 1e-3,
     t_max: float = 3e-2,
     n_pts: int = 6,
 ) -> tuple[float, float]:
     """Fit sigma_min(s) ~ |s|^nu along a ray into the right half-plane.
 
-    Corroborates a consistency-zero classification (plan 48 item 0.4): the
-    structural zero vanishes algebraically, with nu ~ 2 for the m = 2
-    telescoping reference closure (empirically nu grows with the number of
-    constant-annihilating rows, nu ~ m for the RBF closures). The ray is
-    the positive real axis — the vanishing order is direction-independent
-    to leading order, and the real axis avoids the imaginary-axis
-    root-count knife edge.
+    Corroborates a structural benign-zero classification (plan 48 items
+    0.4/0.5d): the structural zero vanishes algebraically, with nu ~ 2
+    for the m = 2 telescoping reference closure and for the Dirichlet
+    tail-constant double zero (empirically nu grows with the number of
+    annihilating rows and near degeneracies, e.g. nu ~ 3 at the cut-cell
+    psi -> 1 row coincidence). The ray is the positive real axis — the
+    vanishing order is direction-independent to leading order, and the
+    real axis avoids the imaginary-axis root-count knife edge. The
+    ``equilibrate`` flag must match the caller's sigma_min convention so
+    the deflated margin is consistent with witness_sigma.
 
     Returns
     -------
@@ -892,6 +1190,7 @@ def _fit_vanishing_order(
         sigma, status = min_singular_value_ex(
             interior_weights, interior_offsets, boundary_rows, complex(t, 0.0),
             row_indices=row_indices,
+            equilibrate=equilibrate,
         )
         if status == "ok" and np.isfinite(sigma) and sigma > 0:
             log_t.append(np.log(t))
@@ -958,32 +1257,50 @@ def kreiss_stability_check(
         Grid node n_i of each closure row (default 0..m-1); forwarded to
         the sigma_min evaluations (plan 48 item 0.2).
 
-    Near-origin treatment (plan 48 item 0.4)
-    ----------------------------------------
+    Witness-search robustness (plan 48 item 0.5)
+    --------------------------------------------
+    On the augmented path (m != p or row_indices given) every sigma_min
+    evaluation is column-equilibrated (see _column_equilibrate) so the
+    margin stays O(1) at large |s| instead of structurally decaying like
+    1/|s|. The witness search is restricted to the provable eigensolution
+    region |s| <= S_max = eigensolution_s_bound(...): grid points beyond
+    it are masked without evaluation and Nelder-Mead iterates beyond it
+    are rejected. Nelder-Mead probes are additionally reflected to
+    Re(s) >= eps_imag (the make_s_grid strip), avoiding the sub-sonic
+    axis knife edge where every root is unimodular to rounding.
+
+    Near-origin treatment (plan 48 items 0.4 / 0.5d)
+    ------------------------------------------------
     Any candidate witness with |s| < _NEAR_ORIGIN_RADIUS = 0.1 is
     discriminated STRUCTURALLY (never via the perturbation classifier,
-    which cannot distinguish the consistency zero from a violation there):
-    it is the structural consistency zero iff the sigma_min right singular
-    vector aligns with the constant-mode vector x_const AND all closure
-    rows annihilate constants — then is_stable is unaffected by the small
-    sigma_min and a vanishing-order fit / deflated margin is reported.
-    Otherwise the witness is genuine: sigma_min < sigma_tol there means
-    is_stable=False with near_origin_verdict='near_origin_violation'.
+    which cannot distinguish structural zeros from violations there) via
+    _classify_benign_zero: it is benign iff the sigma_min right singular
+    vector aligns with x_const (conservative consistency zero, row sums
+    ~ 0) or with x_tail (Dirichlet tail-constant zero, tail row sums
+    ~ 0), with the matching row-sum identity verified — then is_stable is
+    unaffected by the small sigma_min and a vanishing-order fit /
+    deflated margin is reported. Otherwise the witness is genuine:
+    sigma_min < sigma_tol there means is_stable=False with
+    near_origin_verdict='near_origin_violation'.
 
-    Anomaly handling (plan 48 item 0.1)
-    -----------------------------------
+    Anomaly handling (plan 48 items 0.1 / 0.5c)
+    -------------------------------------------
     Points where sigma_min is not computable (defective admissible roots or
     admissible-root count != boundary-row count) are recorded during the
     sweep and refinement, deduplicated, and triaged:
 
-    - a near-axis anomaly classified 'all_incoming' is benign (the anomaly
-      is a knife-edge artifact of modes that are incoming just off the axis);
+    - a near-origin anomaly (|s| < 0.1) is routed through the structural
+      benign-zero discrimination (never _classify_imag_axis): a
+      'consistency_zero'/'tail_constant_zero' classification is benign;
+    - any other near-axis anomaly classified 'all_incoming' is benign (the
+      anomaly is a knife-edge artifact of modes that are incoming just off
+      the axis);
     - a near-axis anomaly classified 'outgoing_mode_detected' is a GKS
       violation;
     - any other anomaly (off-axis, or near-axis with 'defective' /
-      'no_candidates') is unresolved: the check NEVER reports
-      is_stable=True while unresolved anomalies exist — the verdict becomes
-      'defective' (conservative fail).
+      'no_candidates' / 'not_classified') is unresolved: the check NEVER
+      reports is_stable=True while unresolved anomalies exist — the
+      verdict becomes 'defective' (conservative fail).
 
     Whenever any anomaly was recorded, defective_kappa_detected is True and
     the triaged points are exposed in KreissResult.anomalous_points.
@@ -996,23 +1313,41 @@ def kreiss_stability_check(
     # only in the square m == p case; plan 48 item 0.2).
     p_structural = -int(np.min(np.asarray(interior_offsets, dtype=int)))
 
+    # Augmented path (plan 48 item 0.5a): equilibrate the sigma_min proxy.
+    # The square m == p matrix grows like |s| (no large-|s| artifact) and
+    # keeps the raw sigma_min for backward compatibility.
+    m = len(boundary_rows)
+    equilibrate = (m != p_structural) or (row_indices is not None)
+
+    # Provable eigensolution bound |s| <= S_max (sup-norm/Gershgorin; see
+    # eigensolution_s_bound). Tiny relative margin so a zero exactly at
+    # the bound is not excluded by rounding.
+    s_bound = eigensolution_s_bound(interior_weights, boundary_rows) * (1 + 1e-9)
+
     grid_kw = s_grid_params or {}
     s_grid = make_s_grid(**grid_kw)
+    eps_imag = float(grid_kw.get("eps_imag", 1e-6))
 
     anomalies: list = []
     sigma_field, _ = _sweep_grid(
         interior_weights, interior_offsets, boundary_rows, s_grid,
         anomalies=anomalies,
         row_indices=row_indices,
+        equilibrate=equilibrate,
+        s_max_bound=s_bound,
     )
 
     flat_sigma = sigma_field.ravel()
     flat_s = s_grid.ravel()
 
-    # Mask out the trivial zero near s=0 (constant-mode artifact).
-    mask = np.abs(flat_s) >= min_s_magnitude
+    # Mask out the trivial zero near s=0 (constant-mode artifact) and the
+    # region beyond the eigensolution bound (plan 48 item 0.5a).
+    mask = (np.abs(flat_s) >= min_s_magnitude) & (np.abs(flat_s) <= s_bound)
     if not np.any(mask):
-        logger.warning("All grid points masked by min_s_magnitude=%.2e", min_s_magnitude)
+        logger.warning(
+            "All grid points masked by min_s_magnitude=%.2e / s_bound=%.2e",
+            min_s_magnitude, s_bound,
+        )
         mask[:] = True  # fall back to unmasked
 
     masked_sigma = np.where(mask, flat_sigma, np.inf)
@@ -1029,16 +1364,23 @@ def kreiss_stability_check(
             min_s_magnitude=min_s_magnitude,
             anomalies=anomalies,
             row_indices=row_indices,
+            equilibrate=equilibrate,
+            eps_imag=eps_imag,
+            s_max_bound=s_bound,
         )
         min_sigma = min_singular_value(
             interior_weights, interior_offsets, boundary_rows, witness_s,
             row_indices=row_indices,
+            equilibrate=equilibrate,
         )
 
-    # Triage anomalous points: classify near-axis ones, and fail
-    # conservatively on anything unresolved (plan 48 item 0.1).
+    # Triage anomalous points: near-origin ones structurally (plan 48 item
+    # 0.5c), other near-axis ones with the perturbation classifier, and
+    # fail conservatively on anything unresolved (plan 48 item 0.1).
     anomalous_points = _triage_anomalies(
-        interior_weights, interior_offsets, anomalies
+        interior_weights, interior_offsets, anomalies,
+        boundary_rows=boundary_rows,
+        row_indices=row_indices,
     )
     any_anomaly = len(anomalous_points) > 0
     axis_violations = [
@@ -1047,7 +1389,7 @@ def kreiss_stability_check(
     ]
     unresolved = [
         (s_a, status) for s_a, status, cls in anomalous_points
-        if cls not in ("all_incoming", "outgoing_mode_detected")
+        if cls not in _BENIGN_ANOMALY_CLASSES + ("outgoing_mode_detected",)
     ]
 
     if axis_violations:
@@ -1080,26 +1422,27 @@ def kreiss_stability_check(
             n_admissible_roots=p_structural,
         )
 
-    # Near-origin candidate witness: discriminate the structural
-    # consistency zero STRUCTURALLY, never via the perturbation classifier
-    # (plan 48 item 0.4). This runs regardless of sigma_tol so that a
-    # conservative closure's near-origin dip is classified (and its
-    # deflated margin reported) even when sigma_min is above tolerance.
+    # Near-origin candidate witness: discriminate structural benign zeros
+    # STRUCTURALLY, never via the perturbation classifier (plan 48 items
+    # 0.4 / 0.5d). This runs regardless of sigma_tol so that a structural
+    # near-origin dip is classified (and its deflated margin reported)
+    # even when sigma_min is above tolerance.
     if abs(witness_s) < _NEAR_ORIGIN_RADIUS and np.isfinite(min_sigma):
-        is_cz, angle = _classify_near_origin(
+        kind, angle = _classify_benign_zero(
             interior_weights, interior_offsets, boundary_rows, witness_s,
             row_indices=row_indices,
         )
-        if is_cz:
+        if kind != "none":
             nu, deflated = _fit_vanishing_order(
                 interior_weights, interior_offsets, boundary_rows,
                 witness_s, min_sigma,
                 row_indices=row_indices,
+                equilibrate=equilibrate,
             )
             logger.debug(
-                "Witness at s=%s is the structural consistency zero "
+                "Witness at s=%s is the structural %s "
                 "(angle=%.2e rad, nu=%.2f, deflated margin=%.3e)",
-                witness_s, angle, nu, deflated,
+                witness_s, kind, angle, nu, deflated,
             )
             return KreissResult(
                 is_stable=True,
@@ -1112,12 +1455,13 @@ def kreiss_stability_check(
                 sigma_min_field=sigma_field,
                 s_grid=s_grid,
                 n_admissible_roots=p_structural,
-                near_origin_verdict="consistency_zero",
+                near_origin_verdict=kind,
                 vanishing_order=nu,
                 deflated_margin=deflated,
             )
-        # Not the consistency zero: a genuine near-origin zero is a real
-        # witness (near-null vector not aligned with x_const).
+        # Not a structural benign zero: a genuine near-origin zero is a
+        # real witness (near-null vector aligned with neither x_const nor
+        # x_tail).
         return KreissResult(
             is_stable=min_sigma >= sigma_tol,
             witness_s=witness_s,
