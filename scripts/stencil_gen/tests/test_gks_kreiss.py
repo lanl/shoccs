@@ -15,6 +15,7 @@ from stencil_gen.gks_kreiss import (
     kreiss_stability_check,
     make_s_grid,
     min_singular_value,
+    min_singular_value_ex,
 )
 
 
@@ -653,6 +654,155 @@ class TestKreissStabilityCheck:
         assert result.is_stable is True
         assert result.witness_s is not None
         assert result.witness_sigma_min > 0
+
+
+class TestMinSingularValueEx:
+    """Tests for min_singular_value_ex (plan 48 item 0.1)."""
+
+    def test_ok_status_matches_wrapper(self):
+        """On a regular point, status is 'ok' and sigma matches the wrapper."""
+        interior_weights = np.array([-1.0, 1.0])
+        interior_offsets = np.array([-1, 0])
+        boundary_rows = [(np.array([2.0, -1.0]), np.array([0, 1]))]
+        s = 1.0
+
+        sigma, status = min_singular_value_ex(
+            interior_weights, interior_offsets, boundary_rows, s
+        )
+        assert status == "ok"
+        assert sigma == pytest.approx(2.5)
+        assert sigma == min_singular_value(
+            interior_weights, interior_offsets, boundary_rows, s
+        )
+
+    def test_defective_status(self):
+        """Defective admissible roots return (inf, 'defective'), never sigma=0.
+
+        Engineered stencil with Q(kappa; s=0.4) = (kappa - 0.3)^2 (kappa - 5):
+        double admissible root at kappa = 0.3 (see test_defective_raises).
+        """
+        interior_weights = np.array([-0.45, 3.09, -6.0, 1.0])
+        interior_offsets = np.array([-2, -1, 0, 1])
+        boundary_rows = [
+            (np.array([1.0]), np.array([0])),
+            (np.array([1.0]), np.array([0])),
+        ]
+
+        sigma, status = min_singular_value_ex(
+            interior_weights, interior_offsets, boundary_rows, s=0.4
+        )
+        assert status == "defective"
+        assert sigma == np.inf  # flagged, NOT mapped to 0 (no false witness)
+
+    def test_count_mismatch_status(self):
+        """Root-count/boundary-row mismatch returns (inf, 'count_mismatch')."""
+        # Upwind has 1 admissible root at s=1, but we provide 2 boundary rows
+        interior_weights = np.array([-1.0, 1.0])
+        interior_offsets = np.array([-1, 0])
+        boundary_rows = [
+            (np.array([1.0]), np.array([0])),
+            (np.array([1.0]), np.array([0])),
+        ]
+
+        sigma, status = min_singular_value_ex(
+            interior_weights, interior_offsets, boundary_rows, s=1.0
+        )
+        assert status == "count_mismatch"
+        assert sigma == np.inf
+
+
+class TestDefectiveKappaObservability:
+    """Defective/anomalous kappa points are observable, not 'maximally stable'.
+
+    Plan 48 item 0.1: previously min_singular_value returned inf on
+    DefectiveKappaError/ValueError, so anomalous s-points could never be
+    selected as witnesses and an engineered double-root closure came back
+    is_stable=True, defective_kappa_detected=False. Now anomalies are
+    recorded in a side list, near-axis ones are classified, and the check
+    fails conservatively (verdict 'defective') while any remain unclassified.
+    """
+
+    # Engineered stencil: Q(kappa; s) = w_{-2} + w_{-1} k + (w_0 + s) k^2 + w_1 k^3
+    # equals (kappa - 0.3)^2 (kappa - 5) at s = 0.4 — a double ADMISSIBLE root
+    # at kappa = 0.3 (same construction as TestKreissMatrix.test_defective_raises).
+    _IW = np.array([-0.45, 3.09, -6.0, 1.0])
+    _IO = np.array([-2, -1, 0, 1])
+    _BROWS = [
+        (np.array([1.0]), np.array([0])),
+        (np.array([1.0]), np.array([0])),
+    ]
+    # Grid engineered to contain s = 0.4 + 0j exactly: the logspace radial
+    # sweep ends at 10**log10(0.4) == 0.4, and odd n_imag puts Im = 0 on
+    # the grid.
+    _GRID_PARAMS = {"s_max": 0.4, "n_radial": 10, "n_imag": 21, "imag_max": 5.0}
+
+    def test_sweep_grid_records_anomalies(self):
+        """_sweep_grid appends anomalous grid points to the side list."""
+        grid = make_s_grid(**self._GRID_PARAMS)
+        anomalies = []
+        sigma_field, _ = _sweep_grid(
+            self._IW, self._IO, self._BROWS, grid, anomalies=anomalies
+        )
+
+        assert len(anomalies) == 1
+        s_a, status = anomalies[0]
+        assert abs(s_a - 0.4) < 1e-9
+        assert status == "defective"
+        # The anomalous point carries sigma = inf in the field (not 0)
+        flat = grid.ravel()
+        idx = int(np.argmin(np.abs(flat - 0.4)))
+        assert sigma_field.ravel()[idx] == np.inf
+
+    def test_engineered_double_root_flagged_unstable(self):
+        """Double admissible root at kappa=0.3, s=0.4: conservative fail.
+
+        This is the empirical reproduction from the plan-48 gap analysis:
+        before item 0.1 this returned is_stable=True,
+        defective_kappa_detected=False.
+        """
+        result = kreiss_stability_check(
+            self._IW, self._IO, self._BROWS,
+            s_grid_params=self._GRID_PARAMS,
+        )
+
+        assert result.defective_kappa_detected is True
+        assert result.is_stable is False
+        assert result.imaginary_axis_perturbation_verdict == "defective"
+        # The off-axis defective point is recorded and marked unclassifiable
+        assert any(
+            abs(s_a - 0.4) < 1e-9
+            and status == "defective"
+            and classification == "not_classified"
+            for s_a, status, classification in result.anomalous_points
+        )
+
+    def test_engineered_double_root_no_refine(self):
+        """Same verdict with refine=False (sweep-only path)."""
+        result = kreiss_stability_check(
+            self._IW, self._IO, self._BROWS,
+            s_grid_params=self._GRID_PARAMS,
+            refine=False,
+        )
+
+        assert result.defective_kappa_detected is True
+        assert result.is_stable is False
+        assert result.imaginary_axis_perturbation_verdict == "defective"
+
+    def test_stable_scheme_reports_no_anomalies(self):
+        """Upwind + Dirichlet: no anomalies recorded, flags stay False/empty."""
+        interior_weights = np.array([-1.0, 1.0])
+        interior_offsets = np.array([-1, 0])
+        boundary_rows = [(np.array([1.0]), np.array([0]))]
+
+        result = kreiss_stability_check(
+            interior_weights, interior_offsets, boundary_rows,
+            s_grid_params={"s_max": 5.0, "n_radial": 10, "n_imag": 20,
+                           "imag_max": 10.0},
+        )
+
+        assert result.is_stable is True
+        assert result.defective_kappa_detected is False
+        assert result.anomalous_points == ()
 
 
 def _extract_stencil_data_from_D(D, p):
