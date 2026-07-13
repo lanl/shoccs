@@ -12,6 +12,21 @@ boundary rows, and sigma_min(M(s)) is the Kreiss determinant condition
 indicator. The boundary closure is GKS-stable iff sigma_min(M(s)) > 0 for
 all s with Re(s) >= 0, with imaginary-axis perturbation used to classify
 tangent modes per Trefethen p. 207.
+
+Augmented Kreiss matrix (plan 48 item 0.2): real closures typically have
+more rows that differ from the interior than admissible roots (m > p, with
+p = L_left = -min(interior offsets) the admissible-root count for
+Re(s) > 0). The interior recurrence then constrains the mode ansatz only
+for n >= m - p, so the general decaying solution is
+
+    phi_n = sum_{l=1..p} alpha_l kappa_l^n   for n >= m - p,
+
+with phi_0 .. phi_{m-p-1} free nodal unknowns. The unknown vector
+x = (phi_0, ..., phi_{m-p-1}, alpha_1, ..., alpha_p) in C^m yields the
+augmented m x m matrix built by kreiss_matrix_general; a GKS eigensolution
+exists iff det M(s) = 0 for some Re(s) >= 0. For m = p this reduces
+exactly to kreiss_matrix, and all sigma_min-based entry points dispatch to
+the general matrix whenever m != p (or row_indices is given).
 """
 
 from __future__ import annotations
@@ -226,17 +241,142 @@ def kreiss_matrix(
     return M
 
 
+def kreiss_matrix_general(
+    interior_weights: np.ndarray,
+    interior_offsets: np.ndarray,
+    boundary_rows: list[BoundaryRow],
+    s: complex,
+    *,
+    row_indices: Optional[list[int]] = None,
+) -> np.ndarray:
+    """Build the augmented m x m Kreiss matrix for m closure rows >= p roots.
+
+    Sign convention: this module analyzes u_t = -sum_k a_k u_{n+k} (the
+    kappa_roots docstring convention); under the "raw operator weights"
+    reading all w-signs flip.
+
+    Let p = number of admissible roots for Re(s) > 0 = L_left =
+    -min(interior offsets). (This equals the half-width only for centered
+    interiors; the L_left definition is the general one and is used
+    throughout.) On the left half-line with m closure rows i = 0..m-1 at
+    grid nodes n_i (``row_indices``, default n_i = i) and interior rows for
+    n >= m, the interior recurrence constrains the mode ansatz only on
+    n >= m - p, so the general decaying solution is
+
+        phi_n = sum_{l=1..p} alpha_l kappa_l^n   for n >= m - p,
+
+    with phi_0 .. phi_{m-p-1} free nodal unknowns. The unknown vector is
+    x = (phi_0, ..., phi_{m-p-1}, alpha_1, ..., alpha_p) in C^m, and row i
+    of M(s) is:
+
+    - nodal column q (q < m - p)::
+
+        M[i, q] = s * delta_{n_i, q} + w_{i, q}
+
+      (the temporal delta is against the row's grid node n_i, not the row
+      index i — they differ once row_indices is non-default; w_{i,q} = 0
+      if q is not in the row's support);
+
+    - root column l (0-based, stored at column m - p + l)::
+
+        M[i, m-p+l] = s * kappa_l^{n_i} * [n_i >= m-p]
+                      + sum_{j >= m-p, j in support(i)} w_{i,j} * kappa_l^j.
+
+    A GKS eigensolution exists iff det M(s) = 0 for some Re(s) >= 0
+    (imaginary-axis subtleties are handled by the perturbation classifier).
+    For m = p (and default row_indices) this reduces exactly to
+    kreiss_matrix.
+
+    Raises
+    ------
+    ValueError
+        If m < p, if row_indices has the wrong length, if a boundary row
+        references a negative grid node, or if the number of admissible
+        roots at this s differs from p = L_left (e.g. exactly on the
+        imaginary axis where a root sits on the unit circle).
+    DefectiveKappaError
+        If the admissible roots coalesce at this s.
+    """
+    offsets = np.asarray(interior_offsets, dtype=int)
+    p = -int(np.min(offsets))
+    m = len(boundary_rows)
+    if m < p:
+        raise ValueError(
+            f"Number of boundary rows ({m}) < admissible root count p={p}; "
+            "the augmented Kreiss matrix requires m >= p"
+        )
+    if row_indices is None:
+        row_indices = list(range(m))
+    if len(row_indices) != m:
+        raise ValueError(
+            f"row_indices has length {len(row_indices)} != number of "
+            f"boundary rows ({m})"
+        )
+
+    _, admissible, is_defective = kappa_roots(interior_weights, interior_offsets, s)
+    if is_defective:
+        raise DefectiveKappaError(
+            f"Defective admissible kappa roots at s={s}"
+        )
+    if len(admissible) != p:
+        raise ValueError(
+            f"Number of admissible roots ({len(admissible)}) != p = L_left "
+            f"({p}) at s={s}"
+        )
+
+    n_nodal = m - p
+    M = np.zeros((m, m), dtype=complex)
+    for i, (weights, col_offsets) in enumerate(boundary_rows):
+        weights = np.asarray(weights, dtype=complex)
+        col_offsets = np.asarray(col_offsets, dtype=int)
+        n_i = int(row_indices[i])
+        # Temporal contribution s * phi_{n_i}
+        if n_i < n_nodal:
+            M[i, n_i] += s
+        else:
+            for ell, kappa in enumerate(admissible):
+                M[i, n_nodal + ell] += s * kappa**n_i
+        # Spatial operator contribution sum_j w_{ij} phi_j
+        for w, j in zip(weights, col_offsets):
+            if j < 0:
+                raise ValueError(
+                    f"Boundary row {i} references negative grid node j={j}; "
+                    "left half-line closure rows must have offsets >= 0"
+                )
+            if j < n_nodal:
+                M[i, j] += w
+            else:
+                for ell, kappa in enumerate(admissible):
+                    M[i, n_nodal + ell] += w * kappa**j
+
+    return M
+
+
 def min_singular_value_ex(
     interior_weights: np.ndarray,
     interior_offsets: np.ndarray,
     boundary_rows: list[BoundaryRow],
     s: complex,
+    *,
+    row_indices: Optional[list[int]] = None,
 ) -> tuple[float, str]:
     """Compute sigma_min(M(s)) with an explicit anomaly status.
 
     Sign convention: the module analyzes u_t = -sum_k a_k u_{n+k} (see the
     kappa_roots docstring); under the "raw operator weights" reading all
     w-signs flip.
+
+    Dispatch (plan 48 item 0.2): with m = len(boundary_rows) closure rows
+    and p = L_left = -min(interior offsets) admissible roots, the square
+    kreiss_matrix is used when m == p and row_indices is None; otherwise
+    the augmented kreiss_matrix_general is used (m > p adds m - p nodal
+    unknowns; m < p is a hard mismatch reported as "count_mismatch").
+
+    Parameters
+    ----------
+    row_indices : list[int], optional
+        Grid node n_i of each closure row (default 0..m-1); forwarded to
+        kreiss_matrix_general.
 
     Returns
     -------
@@ -249,11 +389,20 @@ def min_singular_value_ex(
           NOT "maximally stable". Anomalies are deliberately not mapped to
           sigma=0, which would create false witnesses for the refiner to
           chase (plan 48 item 0.1).
-        - ``"count_mismatch"``: the number of admissible roots differs from
-          the number of boundary rows at this s; sigma is np.inf as above.
+        - ``"count_mismatch"``: the number of admissible roots at this s
+          differs from its structural count p = L_left (or m < p, which is
+          unresolvable); sigma is np.inf as above.
     """
+    p = -int(np.min(np.asarray(interior_offsets, dtype=int)))
+    m = len(boundary_rows)
     try:
-        M = kreiss_matrix(interior_weights, interior_offsets, boundary_rows, s)
+        if m != p or row_indices is not None:
+            M = kreiss_matrix_general(
+                interior_weights, interior_offsets, boundary_rows, s,
+                row_indices=row_indices,
+            )
+        else:
+            M = kreiss_matrix(interior_weights, interior_offsets, boundary_rows, s)
     except DefectiveKappaError:
         return np.inf, "defective"
     except ValueError:
@@ -267,16 +416,20 @@ def min_singular_value(
     interior_offsets: np.ndarray,
     boundary_rows: list[BoundaryRow],
     s: complex,
+    *,
+    row_indices: Optional[list[int]] = None,
 ) -> float:
     """Compute sigma_min(M(s)), the minimum singular value of the Kreiss matrix.
 
     Thin compatibility wrapper around min_singular_value_ex that discards the
-    anomaly status. Returns np.inf on DefectiveKappaError or shape mismatch;
+    anomaly status (and inherits its m == p / m != p dispatch, plan 48 item
+    0.2). Returns np.inf on DefectiveKappaError or root-count mismatch;
     callers that must distinguish anomalies from genuinely large sigma_min
     should use min_singular_value_ex instead.
     """
     sigma, _ = min_singular_value_ex(
-        interior_weights, interior_offsets, boundary_rows, s
+        interior_weights, interior_offsets, boundary_rows, s,
+        row_indices=row_indices,
     )
     return sigma
 
@@ -316,6 +469,7 @@ def _sweep_grid(
     s_grid: np.ndarray,
     *,
     anomalies: Optional[list] = None,
+    row_indices: Optional[list[int]] = None,
 ) -> tuple[np.ndarray, int]:
     """Evaluate min_singular_value at every point of s_grid.
 
@@ -327,6 +481,9 @@ def _sweep_grid(
         ``(s, status)``. Such points carry sigma=inf in the field so they
         can never be selected as a witness — the caller must inspect the
         side list to keep them observable (plan 48 item 0.1).
+    row_indices : list[int], optional
+        Grid node of each closure row; forwarded to min_singular_value_ex
+        (plan 48 item 0.2).
 
     Returns
     -------
@@ -339,7 +496,8 @@ def _sweep_grid(
     sigma_flat = np.empty(len(flat))
     for i, s in enumerate(flat):
         sigma_flat[i], status = min_singular_value_ex(
-            interior_weights, interior_offsets, boundary_rows, s
+            interior_weights, interior_offsets, boundary_rows, s,
+            row_indices=row_indices,
         )
         if status != "ok" and anomalies is not None:
             anomalies.append((complex(s), status))
@@ -356,6 +514,7 @@ def _refine_witness(
     *,
     min_s_magnitude: float = 0.0,
     anomalies: Optional[list] = None,
+    row_indices: Optional[list[int]] = None,
 ) -> complex:
     """Refine a candidate witness s via Nelder-Mead minimization of log(sigma_min).
 
@@ -377,6 +536,9 @@ def _refine_witness(
         is appended as ``(s, status)`` — see _sweep_grid. Anomalies carry
         sigma=inf (never sigma=0), so Nelder-Mead moves away from them
         rather than chasing false witnesses (plan 48 item 0.1).
+    row_indices : list[int], optional
+        Grid node of each closure row; forwarded to min_singular_value_ex
+        (plan 48 item 0.2).
 
     Returns
     -------
@@ -394,7 +556,8 @@ def _refine_witness(
         if min_s_magnitude > 0 and abs(s) < min_s_magnitude:
             return 100.0  # large penalty
         sv, status = min_singular_value_ex(
-            interior_weights, interior_offsets, boundary_rows, s
+            interior_weights, interior_offsets, boundary_rows, s,
+            row_indices=row_indices,
         )
         if status != "ok" and anomalies is not None:
             anomalies.append((s, status))
@@ -537,11 +700,16 @@ def kreiss_stability_check(
     sigma_tol: float = 1e-8,
     refine: bool = True,
     min_s_magnitude: float = 0.1,
+    row_indices: Optional[list[int]] = None,
 ) -> KreissResult:
     """Run the full Kreiss determinant stability check.
 
     Sweeps the s-grid, optionally refines any witness, classifies
     imaginary-axis modes, and returns a KreissResult.
+
+    Sign convention: the module analyzes u_t = -sum_k a_k u_{n+k} (see the
+    kappa_roots docstring); under the "raw operator weights" reading all
+    w-signs flip.
 
     Parameters
     ----------
@@ -551,6 +719,10 @@ def kreiss_stability_check(
         Grid offsets of the interior stencil (e.g., [-2, -1, 0, 1, 2]).
     boundary_rows : list[BoundaryRow]
         Each element is (weights, column_offsets) for one boundary row.
+        The row count m may exceed the admissible-root count
+        p = L_left = -min(interior_offsets): whenever m != p (or
+        row_indices is given) the augmented Kreiss matrix
+        kreiss_matrix_general is used (plan 48 item 0.2).
     s_grid_params : dict, optional
         Keyword arguments passed to make_s_grid.
     sigma_tol : float
@@ -563,6 +735,9 @@ def kreiss_stability_check(
         sigma_min(M(0)) = 0 because the constant mode kappa=1 satisfies
         both interior and boundary equations.  This universal zero is not
         a GKS violation.
+    row_indices : list[int], optional
+        Grid node n_i of each closure row (default 0..m-1); forwarded to
+        the sigma_min evaluations (plan 48 item 0.2).
 
     Anomaly handling (plan 48 item 0.1)
     -----------------------------------
@@ -586,6 +761,10 @@ def kreiss_stability_check(
 
     t0 = time.perf_counter()
 
+    # Structural admissible-root count p = L_left (equals len(boundary_rows)
+    # only in the square m == p case; plan 48 item 0.2).
+    p_structural = -int(np.min(np.asarray(interior_offsets, dtype=int)))
+
     grid_kw = s_grid_params or {}
     s_grid = make_s_grid(**grid_kw)
 
@@ -593,6 +772,7 @@ def kreiss_stability_check(
     sigma_field, _ = _sweep_grid(
         interior_weights, interior_offsets, boundary_rows, s_grid,
         anomalies=anomalies,
+        row_indices=row_indices,
     )
 
     flat_sigma = sigma_field.ravel()
@@ -617,9 +797,11 @@ def kreiss_stability_check(
             interior_weights, interior_offsets, boundary_rows, witness_s,
             min_s_magnitude=min_s_magnitude,
             anomalies=anomalies,
+            row_indices=row_indices,
         )
         min_sigma = min_singular_value(
-            interior_weights, interior_offsets, boundary_rows, witness_s
+            interior_weights, interior_offsets, boundary_rows, witness_s,
+            row_indices=row_indices,
         )
 
     # Triage anomalous points: classify near-axis ones, and fail
@@ -649,7 +831,7 @@ def kreiss_stability_check(
             compute_time=time.perf_counter() - t0,
             sigma_min_field=sigma_field,
             s_grid=s_grid,
-            n_admissible_roots=len(boundary_rows),
+            n_admissible_roots=p_structural,
         )
 
     if unresolved:
@@ -664,7 +846,7 @@ def kreiss_stability_check(
             compute_time=time.perf_counter() - t0,
             sigma_min_field=sigma_field,
             s_grid=s_grid,
-            n_admissible_roots=len(boundary_rows),
+            n_admissible_roots=p_structural,
         )
 
     # After refinement, apply sigma_tol to determine stability
@@ -679,7 +861,7 @@ def kreiss_stability_check(
             compute_time=time.perf_counter() - t0,
             sigma_min_field=sigma_field,
             s_grid=s_grid,
-            n_admissible_roots=len(boundary_rows),
+            n_admissible_roots=p_structural,
         )
 
     # Potential violation found — but if the refined witness drifted back
@@ -700,7 +882,7 @@ def kreiss_stability_check(
             compute_time=time.perf_counter() - t0,
             sigma_min_field=sigma_field,
             s_grid=s_grid,
-            n_admissible_roots=len(boundary_rows),
+            n_admissible_roots=p_structural,
         )
 
     # Classify imaginary-axis behavior at the witness
@@ -721,5 +903,5 @@ def kreiss_stability_check(
         compute_time=time.perf_counter() - t0,
         sigma_min_field=sigma_field,
         s_grid=s_grid,
-        n_admissible_roots=len(boundary_rows),
+        n_admissible_roots=p_structural,
     )
