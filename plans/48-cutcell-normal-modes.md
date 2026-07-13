@@ -332,3 +332,15 @@ Optimizer wiring (bounds, denominator-positivity constraints via Sturm sequences
 ## Findings log
 
 *(Appended by calibration items 0.3, 1.4, 2.5, 4.3, 4.4.5, 4.5 during execution.)*
+
+### 0.3 (2026-07-13) — All differing closure rows fed to L2: NO verdicts flipped
+
+`_extract_stencil_data` now extracts every left-end row of D that differs from the shifted interior row (m rows, `row_indices = 0..m−1`) and `layer2_kreiss_gks` dispatches to the augmented Kreiss matrix. Recalibration of the three flagged cases (E4, n=20, grid `s_max=10, n_radial=30, n_imag=80, imag_max=15`):
+
+| Case | rows fed (was → now) | GKS verdict (was → now) | witness σ_min (now) | L3 cross-check max Re eig(−D_bc), N∈{20,40,80} |
+|---|---|---|---|---|
+| tension σ=3.0 | 2 → 4 | stable → **stable** (no flip) | 1.92e-5 at s ≈ 0.0092 − 0.0996j | −4.9e-4, −6.3e-5, −7.8e-6 (all < 0, consistent) |
+| Gaussian ε=0.1 | 2 → 4 | stable → **stable** (no flip) | 3.95e-7 at s ≈ 1.2e-6 + 0.1j | +9.83e-2, +9.83e-2, +9.83e-2 (eigenvalue-unstable, still L3's catch) |
+| heuristic-vs-rigorous complementarity | n/a (test uses `gks_group_velocity_check` on D directly, no row extraction) | unchanged | — | — |
+
+Notes: (a) both witnesses sit at |s| ≈ 0.1, i.e. pinned against the `min_s_magnitude` mask — the near-origin σ_min dip is the structural consistency zero that item 0.4 will treat explicitly; the Gaussian all-rows σ_min (3.95e-7) is ~3× smaller than the first-p value (1.06e-6) but still above `sigma_tol=1e-8`. (b) classical E4 at the known-good α = [−0.77333…, 0.16240…] extracts m=3 (block row 3 equals the shifted interior row within 1e-10) and stays GKS-stable; L3 confirms (−1.9e-2, −1.9e-3, −1.8e-4). (c) E2 (tension σ=0) extracts m=3 vs p=1 and stays GKS-stable (σ_min 1.28e-3); L3 confirms (−1.9e-2, −1.2e-3, −1.1e-4).
