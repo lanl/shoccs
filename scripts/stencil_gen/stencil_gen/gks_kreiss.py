@@ -61,10 +61,20 @@ class KreissResult:
 
     imaginary_axis_perturbation_verdict: str = "not_checked"
     """One of: 'not_checked', 'no_candidates', 'all_incoming',
-    'outgoing_mode_detected', 'defective'."""
+    'outgoing_mode_detected', 'defective', 'trivial_zero'."""
 
     defective_kappa_detected: bool = False
-    """True if defective (repeated) admissible kappa roots were encountered."""
+    """True if anomalous kappa roots — defective (repeated) admissible roots
+    or an admissible-root count that mismatches the boundary-row count —
+    were encountered anywhere during the sweep or witness refinement
+    (plan 48 item 0.1: anomalies are observable, never masked as inf-stable)."""
+
+    anomalous_points: tuple = ()
+    """Deduplicated anomalous s-points as (s, status, classification) triples.
+    status is 'defective' or 'count_mismatch' (see min_singular_value_ex);
+    classification is the _classify_imag_axis verdict for points on/near the
+    imaginary axis, or 'not_classified' for points in the interior of the
+    right half-plane where the perturbation test does not apply."""
 
     s_grid_shape: tuple[int, ...] = ()
     """Shape of the s-grid used for the sweep."""
@@ -216,6 +226,42 @@ def kreiss_matrix(
     return M
 
 
+def min_singular_value_ex(
+    interior_weights: np.ndarray,
+    interior_offsets: np.ndarray,
+    boundary_rows: list[BoundaryRow],
+    s: complex,
+) -> tuple[float, str]:
+    """Compute sigma_min(M(s)) with an explicit anomaly status.
+
+    Sign convention: the module analyzes u_t = -sum_k a_k u_{n+k} (see the
+    kappa_roots docstring); under the "raw operator weights" reading all
+    w-signs flip.
+
+    Returns
+    -------
+    (sigma, status) : tuple[float, str]
+        status is one of:
+
+        - ``"ok"``: sigma is the genuine minimum singular value of M(s).
+        - ``"defective"``: admissible kappa roots coalesce at this s
+          (DefectiveKappaError); sigma is np.inf, meaning *not computable* —
+          NOT "maximally stable". Anomalies are deliberately not mapped to
+          sigma=0, which would create false witnesses for the refiner to
+          chase (plan 48 item 0.1).
+        - ``"count_mismatch"``: the number of admissible roots differs from
+          the number of boundary rows at this s; sigma is np.inf as above.
+    """
+    try:
+        M = kreiss_matrix(interior_weights, interior_offsets, boundary_rows, s)
+    except DefectiveKappaError:
+        return np.inf, "defective"
+    except ValueError:
+        return np.inf, "count_mismatch"
+    svs = np.linalg.svd(M, compute_uv=False)
+    return float(svs[-1]), "ok"
+
+
 def min_singular_value(
     interior_weights: np.ndarray,
     interior_offsets: np.ndarray,
@@ -224,14 +270,15 @@ def min_singular_value(
 ) -> float:
     """Compute sigma_min(M(s)), the minimum singular value of the Kreiss matrix.
 
-    Returns np.inf on DefectiveKappaError or shape mismatch.
+    Thin compatibility wrapper around min_singular_value_ex that discards the
+    anomaly status. Returns np.inf on DefectiveKappaError or shape mismatch;
+    callers that must distinguish anomalies from genuinely large sigma_min
+    should use min_singular_value_ex instead.
     """
-    try:
-        M = kreiss_matrix(interior_weights, interior_offsets, boundary_rows, s)
-    except (DefectiveKappaError, ValueError):
-        return np.inf
-    svs = np.linalg.svd(M, compute_uv=False)
-    return float(svs[-1])
+    sigma, _ = min_singular_value_ex(
+        interior_weights, interior_offsets, boundary_rows, s
+    )
+    return sigma
 
 
 def make_s_grid(
@@ -267,8 +314,19 @@ def _sweep_grid(
     interior_offsets: np.ndarray,
     boundary_rows: list[BoundaryRow],
     s_grid: np.ndarray,
+    *,
+    anomalies: Optional[list] = None,
 ) -> tuple[np.ndarray, int]:
     """Evaluate min_singular_value at every point of s_grid.
+
+    Parameters
+    ----------
+    anomalies : list, optional
+        Side list: every grid point where sigma_min is not computable
+        (status != "ok" from min_singular_value_ex) is appended as
+        ``(s, status)``. Such points carry sigma=inf in the field so they
+        can never be selected as a witness — the caller must inspect the
+        side list to keep them observable (plan 48 item 0.1).
 
     Returns
     -------
@@ -280,9 +338,11 @@ def _sweep_grid(
     flat = s_grid.ravel()
     sigma_flat = np.empty(len(flat))
     for i, s in enumerate(flat):
-        sigma_flat[i] = min_singular_value(
+        sigma_flat[i], status = min_singular_value_ex(
             interior_weights, interior_offsets, boundary_rows, s
         )
+        if status != "ok" and anomalies is not None:
+            anomalies.append((complex(s), status))
     sigma_field = sigma_flat.reshape(s_grid.shape)
     argmin_idx = int(np.argmin(sigma_flat))
     return sigma_field, argmin_idx
@@ -295,6 +355,7 @@ def _refine_witness(
     s_start: complex,
     *,
     min_s_magnitude: float = 0.0,
+    anomalies: Optional[list] = None,
 ) -> complex:
     """Refine a candidate witness s via Nelder-Mead minimization of log(sigma_min).
 
@@ -311,6 +372,11 @@ def _refine_witness(
         Initial guess for the witness (typically the grid-sweep argmin).
     min_s_magnitude : float
         Barrier to prevent convergence to the trivial zero at s=0.
+    anomalies : list, optional
+        Side list: every evaluation point where sigma_min is not computable
+        is appended as ``(s, status)`` — see _sweep_grid. Anomalies carry
+        sigma=inf (never sigma=0), so Nelder-Mead moves away from them
+        rather than chasing false witnesses (plan 48 item 0.1).
 
     Returns
     -------
@@ -327,9 +393,11 @@ def _refine_witness(
         # Barrier to keep |s| > min_s_magnitude
         if min_s_magnitude > 0 and abs(s) < min_s_magnitude:
             return 100.0  # large penalty
-        sv = min_singular_value(
+        sv, status = min_singular_value_ex(
             interior_weights, interior_offsets, boundary_rows, s
         )
+        if status != "ok" and anomalies is not None:
+            anomalies.append((s, status))
         return float(np.log(sv + 1e-300))
 
     x0 = np.array([s_start.real, s_start.imag])
@@ -414,6 +482,47 @@ def _classify_imag_axis(
     return "all_incoming"
 
 
+_ANOMALY_AXIS_TOL = 1e-3
+"""Re(s) threshold below which an anomalous point counts as on/near the
+imaginary axis and is classified with _classify_imag_axis."""
+
+
+def _triage_anomalies(
+    interior_weights: np.ndarray,
+    interior_offsets: np.ndarray,
+    anomalies: list,
+) -> tuple:
+    """Deduplicate and classify anomalous s-points from sweep/refinement.
+
+    Each anomaly is a ``(s, status)`` pair with status in
+    {'defective', 'count_mismatch'}. Points on/near the imaginary axis
+    (Re(s) <= _ANOMALY_AXIS_TOL) are classified with _classify_imag_axis;
+    points in the interior of the right half-plane cannot be classified by
+    the imaginary-axis perturbation test and are marked 'not_classified'.
+
+    Returns a tuple of ``(s, status, classification)`` triples. Only a
+    classification of 'all_incoming' resolves an anomaly as benign;
+    'outgoing_mode_detected' is a violation; anything else
+    ('defective', 'no_candidates', 'not_classified') leaves the anomaly
+    unresolved and the caller must fail conservatively (plan 48 item 0.1).
+    """
+    seen = set()
+    triaged = []
+    for s_a, status in anomalies:
+        key = (s_a, status)
+        if key in seen:
+            continue
+        seen.add(key)
+        if abs(s_a.real) <= _ANOMALY_AXIS_TOL:
+            classification = _classify_imag_axis(
+                interior_weights, interior_offsets, s_a
+            )
+        else:
+            classification = "not_classified"
+        triaged.append((s_a, status, classification))
+    return tuple(triaged)
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator (implemented in 41.3g)
 # ---------------------------------------------------------------------------
@@ -454,6 +563,24 @@ def kreiss_stability_check(
         sigma_min(M(0)) = 0 because the constant mode kappa=1 satisfies
         both interior and boundary equations.  This universal zero is not
         a GKS violation.
+
+    Anomaly handling (plan 48 item 0.1)
+    -----------------------------------
+    Points where sigma_min is not computable (defective admissible roots or
+    admissible-root count != boundary-row count) are recorded during the
+    sweep and refinement, deduplicated, and triaged:
+
+    - a near-axis anomaly classified 'all_incoming' is benign (the anomaly
+      is a knife-edge artifact of modes that are incoming just off the axis);
+    - a near-axis anomaly classified 'outgoing_mode_detected' is a GKS
+      violation;
+    - any other anomaly (off-axis, or near-axis with 'defective' /
+      'no_candidates') is unresolved: the check NEVER reports
+      is_stable=True while unresolved anomalies exist — the verdict becomes
+      'defective' (conservative fail).
+
+    Whenever any anomaly was recorded, defective_kappa_detected is True and
+    the triaged points are exposed in KreissResult.anomalous_points.
     """
     import time
 
@@ -462,18 +589,11 @@ def kreiss_stability_check(
     grid_kw = s_grid_params or {}
     s_grid = make_s_grid(**grid_kw)
 
-    try:
-        sigma_field, _ = _sweep_grid(
-            interior_weights, interior_offsets, boundary_rows, s_grid
-        )
-    except DefectiveKappaError:
-        return KreissResult(
-            is_stable=False,
-            defective_kappa_detected=True,
-            s_grid_shape=s_grid.shape,
-            compute_time=time.perf_counter() - t0,
-            s_grid=s_grid,
-        )
+    anomalies: list = []
+    sigma_field, _ = _sweep_grid(
+        interior_weights, interior_offsets, boundary_rows, s_grid,
+        anomalies=anomalies,
+    )
 
     flat_sigma = sigma_field.ravel()
     flat_s = s_grid.ravel()
@@ -493,25 +613,59 @@ def kreiss_stability_check(
     # The grid may not sample close enough to a genuine zero, so we always
     # refine (when requested) rather than applying a sweep-stage threshold.
     if refine:
-        try:
-            witness_s = _refine_witness(
-                interior_weights, interior_offsets, boundary_rows, witness_s,
-                min_s_magnitude=min_s_magnitude,
-            )
-            min_sigma = min_singular_value(
-                interior_weights, interior_offsets, boundary_rows, witness_s
-            )
-        except DefectiveKappaError:
-            return KreissResult(
-                is_stable=False,
-                witness_s=witness_s,
-                witness_sigma_min=min_sigma,
-                defective_kappa_detected=True,
-                s_grid_shape=s_grid.shape,
-                compute_time=time.perf_counter() - t0,
-                sigma_min_field=sigma_field,
-                s_grid=s_grid,
-            )
+        witness_s = _refine_witness(
+            interior_weights, interior_offsets, boundary_rows, witness_s,
+            min_s_magnitude=min_s_magnitude,
+            anomalies=anomalies,
+        )
+        min_sigma = min_singular_value(
+            interior_weights, interior_offsets, boundary_rows, witness_s
+        )
+
+    # Triage anomalous points: classify near-axis ones, and fail
+    # conservatively on anything unresolved (plan 48 item 0.1).
+    anomalous_points = _triage_anomalies(
+        interior_weights, interior_offsets, anomalies
+    )
+    any_anomaly = len(anomalous_points) > 0
+    axis_violations = [
+        s_a for s_a, _, cls in anomalous_points
+        if cls == "outgoing_mode_detected"
+    ]
+    unresolved = [
+        (s_a, status) for s_a, status, cls in anomalous_points
+        if cls not in ("all_incoming", "outgoing_mode_detected")
+    ]
+
+    if axis_violations:
+        return KreissResult(
+            is_stable=False,
+            witness_s=axis_violations[0],
+            witness_sigma_min=float("inf"),
+            imaginary_axis_perturbation_verdict="outgoing_mode_detected",
+            defective_kappa_detected=True,
+            anomalous_points=anomalous_points,
+            s_grid_shape=s_grid.shape,
+            compute_time=time.perf_counter() - t0,
+            sigma_min_field=sigma_field,
+            s_grid=s_grid,
+            n_admissible_roots=len(boundary_rows),
+        )
+
+    if unresolved:
+        return KreissResult(
+            is_stable=False,
+            witness_s=unresolved[0][0],
+            witness_sigma_min=float("inf"),
+            imaginary_axis_perturbation_verdict="defective",
+            defective_kappa_detected=True,
+            anomalous_points=anomalous_points,
+            s_grid_shape=s_grid.shape,
+            compute_time=time.perf_counter() - t0,
+            sigma_min_field=sigma_field,
+            s_grid=s_grid,
+            n_admissible_roots=len(boundary_rows),
+        )
 
     # After refinement, apply sigma_tol to determine stability
     if min_sigma >= sigma_tol:
@@ -519,6 +673,8 @@ def kreiss_stability_check(
             is_stable=True,
             witness_s=witness_s,
             witness_sigma_min=min_sigma,
+            defective_kappa_detected=any_anomaly,
+            anomalous_points=anomalous_points,
             s_grid_shape=s_grid.shape,
             compute_time=time.perf_counter() - t0,
             sigma_min_field=sigma_field,
@@ -538,6 +694,8 @@ def kreiss_stability_check(
             witness_s=witness_s,
             witness_sigma_min=min_sigma,
             imaginary_axis_perturbation_verdict="trivial_zero",
+            defective_kappa_detected=any_anomaly,
+            anomalous_points=anomalous_points,
             s_grid_shape=s_grid.shape,
             compute_time=time.perf_counter() - t0,
             sigma_min_field=sigma_field,
@@ -557,6 +715,8 @@ def kreiss_stability_check(
         witness_s=witness_s,
         witness_sigma_min=min_sigma,
         imaginary_axis_perturbation_verdict=imag_verdict,
+        defective_kappa_detected=any_anomaly,
+        anomalous_points=anomalous_points,
         s_grid_shape=s_grid.shape,
         compute_time=time.perf_counter() - t0,
         sigma_min_field=sigma_field,
