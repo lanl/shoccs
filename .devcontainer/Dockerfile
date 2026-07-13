@@ -28,10 +28,17 @@ ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
     CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
     UV_NATIVE_TLS=true
 
-# Add the LLVM apt repository for the requested clang version.
-RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | \
+# Add the LLVM apt repository for the requested clang version. The Debian
+# codename is derived from the base image (/etc/os-release) instead of being
+# hardcoded, so the repo stays correct across base-image bumps (e.g. the
+# python:3.11-slim tag moving bookworm -> trixie). When Debian's own archive
+# already ships the requested clang (e.g. clang-19 on trixie), apt installs that
+# and this repo simply acts as the fallback for clang versions newer than Debian
+# packages.
+RUN . /etc/os-release && \
+    wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | \
     gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-${CLANG_VERSION} main" \
+    echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-${CLANG_VERSION} main" \
     > /etc/apt/sources.list.d/llvm.list
 
 # Install compilers and build tools
