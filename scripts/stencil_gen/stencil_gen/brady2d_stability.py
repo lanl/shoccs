@@ -357,13 +357,23 @@ def layer1_interior_boundary_gv(
 
 
 def _extract_stencil_data(
-    D: np.ndarray, p: int,
-) -> tuple[np.ndarray, np.ndarray, list[BoundaryRow]]:
-    """Extract interior weights/offsets and boundary rows from a D matrix.
+    D: np.ndarray, p: int, *, tol: float = 1e-10,
+) -> tuple[np.ndarray, np.ndarray, list[BoundaryRow], list[int]]:
+    """Extract interior weights/offsets and ALL closure rows from a D matrix.
 
-    Uses the middle row for interior weights and the first p rows as
-    boundary rows (matching the number of admissible kappa roots for a
-    2p+1-point centered stencil in the GKS framework).
+    Uses the middle row for interior weights and extracts every left-end
+    row of D that differs from the (shifted) interior row — compared
+    against the middle row within a tolerance — as a boundary row
+    (plan 48 item 0.3). Real closures typically have more differing rows
+    than admissible kappa roots (m > p); feeding only the first p rows
+    analyzed the wrong operator. The rows are fed to the augmented Kreiss
+    matrix (plan 48 item 0.2) via ``row_indices``.
+
+    The returned closure block is the contiguous span 0..m-1 where m-1 is
+    the last differing row: any interior-matching row *inside* that span is
+    included verbatim (the augmented construction requires the interior
+    recurrence to hold only for grid nodes n >= m, and an interior row is
+    itself a valid closure row).
 
     Parameters
     ----------
@@ -371,23 +381,52 @@ def _extract_stencil_data(
         Full N×N differentiation matrix.
     p : int
         Interior half-bandwidth.
+    tol : float
+        Relative tolerance (scaled by max|interior weight|) for deciding
+        that a row differs from the shifted interior row.
 
     Returns
     -------
-    (interior_weights, interior_offsets, boundary_rows)
+    (interior_weights, interior_offsets, boundary_rows, row_indices)
+        ``row_indices[i]`` is the grid node of ``boundary_rows[i]``
+        (always ``list(range(m))`` here since the span is contiguous).
     """
     n = D.shape[0]
     mid = n // 2
     offsets = np.arange(-p, p + 1)
     interior_weights = D[mid, mid + offsets]
+    threshold = tol * max(1.0, float(np.max(np.abs(interior_weights))))
+
+    differing: list[int] = []
+    for i in range(mid):
+        expected = np.zeros(n)
+        cols = i + offsets
+        valid = (cols >= 0) & (cols < n)
+        expected[cols[valid]] = interior_weights[valid]
+        # Rows whose interior support would leave the grid always differ.
+        if not np.all(valid) or np.max(np.abs(D[i, :] - expected)) > threshold:
+            differing.append(i)
+
+    if not differing:
+        raise ValueError(
+            "No left-end row of D differs from the shifted interior row; "
+            "cannot extract a boundary closure"
+        )
+    m = differing[-1] + 1
+    if m > mid:
+        raise ValueError(
+            f"Closure rows extend to the middle of the grid (m={m} > "
+            f"mid={mid}); the interior reference row is not trustworthy — "
+            "increase n"
+        )
 
     boundary_rows: list[BoundaryRow] = []
-    for i in range(p):
+    for i in range(m):
         brow = D[i, :]
         bcols = np.nonzero(np.abs(brow) > 1e-15)[0]
         boundary_rows.append((brow[bcols], bcols))
 
-    return interior_weights, offsets, boundary_rows
+    return interior_weights, offsets, boundary_rows, list(range(m))
 
 
 def layer2_kreiss_gks(
@@ -399,8 +438,9 @@ def layer2_kreiss_gks(
     """L2: rigorous GKS Kreiss determinant stability check.
 
     Builds the 1D differentiation matrix, extracts the interior stencil and
-    boundary rows, and runs the full Kreiss determinant sweep to test for
-    boundary-closure instability.
+    ALL closure rows that differ from the interior (plan 48 item 0.3 — not
+    just the first p), and runs the full Kreiss determinant sweep on the
+    augmented Kreiss matrix to test for boundary-closure instability.
 
     Parameters
     ----------
@@ -427,11 +467,14 @@ def layer2_kreiss_gks(
         epsilon = params.get("sigma", params.get("epsilon", 0.0))
         D = build_diff_matrix_rbf(n, p, q, epsilon, kernel, nu, nextra)
 
-    interior_weights, interior_offsets, boundary_rows = _extract_stencil_data(D, p)
+    interior_weights, interior_offsets, boundary_rows, row_indices = (
+        _extract_stencil_data(D, p)
+    )
 
     return kreiss_stability_check(
         interior_weights, interior_offsets, boundary_rows,
         s_grid_params={"s_max": 10.0, "n_radial": 30, "n_imag": 80, "imag_max": 15.0},
+        row_indices=row_indices,
     )
 
 

@@ -719,11 +719,92 @@ class TestLayer7WithNonNormality:
         assert len(report.pseudospectral_abscissae) > 0
 
 
+class TestExtractStencilData:
+    """_extract_stencil_data feeds ALL differing closure rows (plan 48 item 0.3).
+
+    Previously only the first p rows were extracted, so L2 analyzed the
+    wrong operator (real closures have m > p rows that differ from the
+    interior: uniform RBF has 3 for E2/p=1 and 4 for E4/p=2).
+    """
+
+    def test_rbf_e4_extracts_all_four_rows(self):
+        """RBF E4 closure: all 4 differing rows extracted, not just p=2."""
+        from stencil_gen.brady2d_stability import _extract_stencil_data
+        from stencil_gen.phs import build_diff_matrix_rbf
+
+        D = build_diff_matrix_rbf(n=20, p=2, q=3, epsilon=3.0,
+                                  kernel="tension", nu=1, nextra=0)
+        iw, io, boundary_rows, row_indices = _extract_stencil_data(D, p=2)
+
+        assert len(boundary_rows) == 4
+        assert row_indices == [0, 1, 2, 3]
+        np.testing.assert_array_equal(io, np.arange(-2, 3))
+        # Each extracted row reproduces the corresponding row of D
+        for i, (w, cols) in enumerate(boundary_rows):
+            row = np.zeros(20)
+            row[cols] = w
+            np.testing.assert_allclose(row, D[i, :], atol=1e-15)
+
+    def test_rbf_e4_first_interior_row_matches_stencil(self):
+        """The first row NOT extracted equals the shifted interior stencil."""
+        from stencil_gen.brady2d_stability import _extract_stencil_data
+        from stencil_gen.phs import build_diff_matrix_rbf
+
+        D = build_diff_matrix_rbf(n=20, p=2, q=3, epsilon=3.0,
+                                  kernel="tension", nu=1, nextra=0)
+        iw, io, boundary_rows, row_indices = _extract_stencil_data(D, p=2)
+
+        m = len(boundary_rows)
+        expected = np.zeros(20)
+        expected[m + io] = iw
+        np.testing.assert_allclose(D[m, :], expected, atol=1e-12)
+
+    def test_classical_e4_trailing_interior_row_not_extracted(self):
+        """Classical E4: block row 3 equals the interior row, so m=3.
+
+        The classical (TEMO) E4 boundary block has 4 rows, but its last row
+        reduces to the shifted interior stencil within tolerance — the
+        differ-from-interior scan must stop at the last genuinely differing
+        row, not blindly take the whole block.
+        """
+        from stencil_gen.brady2d_stability import (
+            _build_classical_diff_matrix,
+            _extract_stencil_data,
+        )
+
+        alpha = [-0.7733323791884821, 0.1623961700641681]
+        D = _build_classical_diff_matrix(20, 2, 1, alpha)
+        iw, io, boundary_rows, row_indices = _extract_stencil_data(D, p=2)
+
+        assert len(boundary_rows) == 3
+        assert row_indices == [0, 1, 2]
+
+    def test_no_differing_rows_raises(self):
+        """A matrix with no differing left-end rows raises ValueError.
+
+        With a width-1 stencil (p=0) a scaled identity matrix has every row
+        exactly equal to the shifted interior row, so there is no closure
+        to extract.
+        """
+        from stencil_gen.brady2d_stability import _extract_stencil_data
+
+        with pytest.raises(ValueError, match="No left-end row"):
+            _extract_stencil_data(2.0 * np.eye(8), p=0)
+
+
 class TestLayer2:
-    """Layer 2: rigorous GKS Kreiss determinant stability check."""
+    """Layer 2: rigorous GKS Kreiss determinant stability check.
+
+    Plan 48 item 0.3 recalibration: L2 now feeds all differing closure rows
+    (m=4 for RBF E4) to the augmented Kreiss matrix instead of the first
+    p=2. Neither documented verdict flipped: tension sigma=3.0 stays
+    GKS-stable (cross-check: L3 max Re(eig(-D_bc)) < 0 at N in {20,40,80})
+    and Gaussian eps=0.1 stays GKS-stable-but-eigenvalue-unstable
+    (L3 max Re ~ +9.8e-2 at N in {20,40,80}).
+    """
 
     def test_tension_e4_stable(self):
-        """Tension E4 at sigma=3.0 is GKS-stable."""
+        """Tension E4 at sigma=3.0 is GKS-stable (verdict unchanged by 48/0.3)."""
         result = layer2_kreiss_gks("E4", "tension", {"sigma": 3.0})
         assert result.is_stable is True
 
@@ -732,6 +813,7 @@ class TestLayer2:
 
         The Gaussian eps=0.1 closure is boundary-stable in the GKS sense —
         its instability is caught at Layer 3 (eigenvalue check), not here.
+        Verdict unchanged by the plan 48 item 0.3 all-rows recalibration.
         """
         kv = _load_known_values()
         unstable = kv["E4_1"]["known_unstable"][0]

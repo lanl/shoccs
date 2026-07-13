@@ -1040,11 +1040,16 @@ class TestDefectiveKappaObservability:
         assert result.anomalous_points == ()
 
 
-def _extract_stencil_data_from_D(D, p):
-    """Extract interior weights/offsets and boundary rows from a D matrix.
+def _extract_stencil_data_from_D(D, p, tol=1e-10):
+    """Extract interior weights/offsets and ALL closure rows from a D matrix.
 
-    Uses the first p rows as boundary rows (matching the number of admissible
-    kappa roots for a 2p+1-point centered stencil in the GKS framework).
+    Test-local duplicate of brady2d_stability._extract_stencil_data.
+    Plan 48 item 0.3: extracts every left-end row of D that differs from
+    the (shifted) interior row — compared against the middle row within a
+    tolerance — instead of the first p rows, so the analyzed operator
+    matches the real closure. Contiguity: the returned block is rows
+    0..m-1 where m-1 is the last differing row (interior-matching rows
+    inside the span are included verbatim).
 
     Parameters
     ----------
@@ -1055,20 +1060,33 @@ def _extract_stencil_data_from_D(D, p):
 
     Returns
     -------
-    interior_weights, interior_offsets, boundary_rows
+    interior_weights, interior_offsets, boundary_rows, row_indices
     """
     n = D.shape[0]
     mid = n // 2
     io = np.arange(-p, p + 1)
     interior_weights = D[mid, mid + io]
+    threshold = tol * max(1.0, float(np.max(np.abs(interior_weights))))
+
+    differing = []
+    for i in range(mid):
+        expected = np.zeros(n)
+        cols = i + io
+        valid = (cols >= 0) & (cols < n)
+        expected[cols[valid]] = interior_weights[valid]
+        if not np.all(valid) or np.max(np.abs(D[i, :] - expected)) > threshold:
+            differing.append(i)
+
+    assert differing, "no closure rows found at the left end of D"
+    m = differing[-1] + 1
 
     boundary_rows = []
-    for i in range(p):
+    for i in range(m):
         brow = D[i, :]
         bcols = np.nonzero(np.abs(brow) > 1e-15)[0]
         boundary_rows.append((brow[bcols], bcols))
 
-    return interior_weights, io, boundary_rows
+    return interior_weights, io, boundary_rows, list(range(m))
 
 
 class TestKreissIntegration:
@@ -1084,20 +1102,32 @@ class TestKreissIntegration:
     """
 
     def test_classical_e4_passes(self):
-        """E4 classical closure is GKS-stable (Kreiss test passes)."""
+        """E4 classical closure is GKS-stable (Kreiss test passes).
+
+        Plan 48 item 0.3 recalibration: all m=4 differing closure rows are
+        now fed to the augmented Kreiss matrix (previously only the first
+        p=2, i.e. the wrong operator). The verdict did NOT flip — still
+        GKS-stable (witness sigma_min ~2e-5 at |s| ~ 0.1), consistent with
+        L3 dense eigenvalues max Re(eig(-D_bc)) < 0 at N in {20, 40, 80}.
+        """
         from stencil_gen.phs import build_diff_matrix_rbf
 
         # Use tension sigma=3.0 as the stable reference (RBF path, known stable)
         D = build_diff_matrix_rbf(n=20, p=2, q=3, epsilon=3.0,
                                    kernel="tension", nu=1, nextra=0)
-        interior_weights, interior_offsets, boundary_rows = (
+        interior_weights, interior_offsets, boundary_rows, row_indices = (
             _extract_stencil_data_from_D(D, p=2)
         )
+
+        # All 4 boundary rows differ from the interior for the RBF closure
+        assert len(boundary_rows) == 4
+        assert row_indices == [0, 1, 2, 3]
 
         result = kreiss_stability_check(
             interior_weights, interior_offsets, boundary_rows,
             s_grid_params={"s_max": 10.0, "n_radial": 30, "n_imag": 80,
                            "imag_max": 15.0},
+            row_indices=row_indices,
         )
 
         assert result.is_stable is True
@@ -1109,19 +1139,28 @@ class TestKreissIntegration:
         arises from left-right boundary interaction (caught at Layer 3),
         not from a single-boundary GKS violation. This test documents this
         important distinction.
+
+        Plan 48 item 0.3 recalibration: with all m=4 differing rows fed to
+        the augmented Kreiss matrix the verdict did NOT flip — still
+        GKS-stable (witness sigma_min ~4e-7 at |s| ~ 0.1), while L3 dense
+        eigenvalues confirm the finite-domain instability
+        (max Re(eig(-D_bc)) ~ +9.8e-2 at N in {20, 40, 80}).
         """
         from stencil_gen.phs import build_diff_matrix_rbf
 
         D = build_diff_matrix_rbf(n=20, p=2, q=3, epsilon=0.1,
                                    kernel="gaussian", nu=1, nextra=0)
-        interior_weights, interior_offsets, boundary_rows = (
+        interior_weights, interior_offsets, boundary_rows, row_indices = (
             _extract_stencil_data_from_D(D, p=2)
         )
+        assert len(boundary_rows) == 4
+        assert row_indices == [0, 1, 2, 3]
 
         result = kreiss_stability_check(
             interior_weights, interior_offsets, boundary_rows,
             s_grid_params={"s_max": 10.0, "n_radial": 30, "n_imag": 80,
                            "imag_max": 15.0},
+            row_indices=row_indices,
         )
 
         # GKS-stable — the instability is NOT a boundary-closure issue
@@ -1162,24 +1201,28 @@ class TestKreissIntegration:
             )
 
     def test_s_equals_zero_godunov_ryabenkii_reduction(self):
-        """At s=0, min_singular_value returns inf (no admissible roots ≠ n_boundary).
+        """At s=0, min_singular_value returns inf (admissible-root count != p).
 
         For the E4 centered stencil at s=0, one root is at kappa=1 (exactly
-        on the unit circle, not strictly inside), giving only 1 admissible root.
-        With 2 boundary rows, this is a shape mismatch → min_singular_value
-        returns inf. This is the Godunov-Ryabenkii condition: the boundary
-        closure does not support the trivial (constant) mode, which is correct.
+        on the unit circle, not strictly inside), giving only 1 admissible
+        root against the structural count p = L_left = 2 — a root-count
+        anomaly, so min_singular_value returns inf (plan 48 items 0.1/0.2;
+        after item 0.3 all m=4 differing rows are fed with row_indices, and
+        the augmented matrix reports the same count mismatch). This is the
+        Godunov-Ryabenkii condition: the boundary closure does not support
+        the trivial (constant) mode, which is correct.
         """
         from stencil_gen.phs import build_diff_matrix_rbf
 
         D = build_diff_matrix_rbf(n=20, p=2, q=3, epsilon=3.0,
                                    kernel="tension", nu=1, nextra=0)
-        interior_weights, interior_offsets, boundary_rows = (
+        interior_weights, interior_offsets, boundary_rows, row_indices = (
             _extract_stencil_data_from_D(D, p=2)
         )
 
         sv = min_singular_value(
-            interior_weights, interior_offsets, boundary_rows, s=0.0
+            interior_weights, interior_offsets, boundary_rows, s=0.0,
+            row_indices=row_indices,
         )
-        # At s=0, only 1 admissible root vs 2 boundary rows → inf (shape mismatch)
+        # At s=0, only 1 admissible root vs p=2 → inf (count mismatch)
         assert sv == np.inf, f"sigma_min(M(0)) = {sv}, expected inf"
