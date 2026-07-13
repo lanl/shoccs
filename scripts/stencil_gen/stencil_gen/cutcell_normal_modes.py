@@ -24,6 +24,13 @@ stability verdict.  Denominator vanishing is a *parameterization* failure —
 the symbolic solve degenerates there — and must never be conflated with GKS
 instability (the marker deliberately has no ``is_stable`` attribute).
 
+Worst-case-over-psi margin (plan 48 item 1.3): sweeping
+:func:`kreiss_cutcell_check` over a psi grid clustered near 0 (the ILW
+literature's critical regime) and matched to the C++ clamp
+``[1e-4, 1 - 1e-4]`` yields a single worst-cased margin
+(:class:`CutCellPsiSweep`) ready for the optimizer (wiring is plan 49).
+Infeasible psi points are partitioned out — never folded into the margin.
+
 No time integration happens here (plan 48 hard constraint): the check is
 purely resolvent/root-locus based via ``kreiss_stability_check``.
 """
@@ -40,7 +47,13 @@ from stencil_gen.cutcell_eval import CutCellEvaluator, make_cutcell_evaluator
 from stencil_gen.gks_kreiss import KreissResult, kreiss_stability_check
 from stencil_gen.temo import SchemeParams
 
-__all__ = ["CutCellInfeasible", "kreiss_cutcell_check"]
+__all__ = [
+    "CutCellInfeasible",
+    "CutCellPsiSweep",
+    "default_psi_grid",
+    "kreiss_cutcell_check",
+    "kreiss_margin_over_psi",
+]
 
 
 FEASIBILITY_TOL = 1e-12
@@ -243,4 +256,156 @@ def kreiss_cutcell_check(
         boundary_rows,
         row_indices=[int(i) for i in row_indices],
         **kreiss_kwargs,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Plan 48 item 1.3: worst-case-over-psi margin
+# ---------------------------------------------------------------------------
+
+
+def default_psi_grid() -> np.ndarray:
+    """The default psi grid for worst-case-over-psi sweeps (plan 48 item 1.3).
+
+    Clustered near 0 — the ILW literature identifies psi -> 0 (the wall
+    nearly on top of the first grid node) as the critical regime — and
+    matched to the C++ clamp ``[1e-4, 1 - 1e-4]``:
+
+        {1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2}
+        ∪ Chebyshev-11 on [0.05, 0.95]
+        ∪ {0.99, 0.999, 0.9999}
+
+    The Chebyshev-11 block uses the 11 Chebyshev–Lobatto (second-kind /
+    extrema) nodes ``0.5 + 0.45·cos(k·pi/10)``, k = 0..10, which include
+    the interval endpoints 0.05 and 0.95 exactly, so the bulk block abuts
+    the two clustered end blocks without a gap.
+
+    Returns
+    -------
+    np.ndarray
+        The 20 grid points, sorted ascending, all within
+        ``[1e-4, 1 - 1e-4]``.
+    """
+    near_zero = np.array([1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2])
+    cheb = 0.5 + 0.45 * np.cos(np.pi * np.arange(11) / 10)
+    near_one = np.array([0.99, 0.999, 0.9999])
+    return np.unique(np.concatenate([near_zero, cheb, near_one]))
+
+
+@dataclass(frozen=True)
+class CutCellPsiSweep:
+    """Worst-case-over-psi Kreiss margin for a cut-cell closure (item 1.3).
+
+    Aggregates per-psi :func:`kreiss_cutcell_check` results into the single
+    worst-cased margin the optimizer consumes (wiring is plan 49).  Two
+    orthogonal aggregations, never conflated:
+
+    - **stability**: ``any_unstable`` is True iff any feasible psi returned
+      ``is_stable=False`` (including anomaly-driven conservative fails,
+      whose ``witness_sigma_min`` is inf and therefore does not enter the
+      margin bookkeeping below);
+    - **margin**: ``worst_sigma_min`` / ``worst_psi`` are the min (and
+      argmin) over feasible psi of the per-psi ``witness_sigma_min`` —
+      the column-equilibrated relative margin for these augmented m > p
+      closures (plan 48 item 0.5a).  Only finite margins participate; if
+      no psi produced a finite margin, ``worst_sigma_min`` is inf and
+      ``worst_psi`` is None.
+
+    Infeasible psi points (vanishing structural denominator — a
+    *parameterization* failure, see :class:`CutCellInfeasible`) are listed
+    in ``infeasible_psi`` and excluded from both aggregations.
+    """
+
+    worst_sigma_min: float
+    """Min over feasible psi of the per-psi ``witness_sigma_min`` (inf if
+    no psi produced a finite margin)."""
+
+    worst_psi: float | None
+    """The psi attaining ``worst_sigma_min`` (None if no finite margin)."""
+
+    any_unstable: bool
+    """True iff any feasible psi returned ``is_stable=False``."""
+
+    infeasible_psi: list
+    """psi values where the parameterization is infeasible (in grid
+    order); their per-psi entries are :class:`CutCellInfeasible`."""
+
+    per_psi: dict
+    """Full per-psi results, keyed by float(psi):
+    ``KreissResult`` (feasible) or :class:`CutCellInfeasible`."""
+
+
+def kreiss_margin_over_psi(
+    scheme: SchemeParams,
+    alpha: dict,
+    psi_grid=None,
+    *,
+    feasibility_tol: float = FEASIBILITY_TOL,
+    **kreiss_kwargs,
+) -> CutCellPsiSweep:
+    """Worst-case the GKS Kreiss margin over a psi grid (plan 48 item 1.3).
+
+    Runs :func:`kreiss_cutcell_check` at each psi of *psi_grid* (default:
+    :func:`default_psi_grid` — clustered near 0, matched to the C++ clamp
+    ``[1e-4, 1 - 1e-4]``) and aggregates into a :class:`CutCellPsiSweep`.
+    Thanks to the cached evaluator (plan 48 item 1.1) the symbolic
+    derivation cost is paid once per scheme, not per grid point.
+
+    Parameters
+    ----------
+    scheme : SchemeParams
+        Cut-cell scheme (e.g. ``temo.E2_1``, ``temo.E4_1``).
+    alpha : dict
+        Mapping from alpha symbol (or name) to value; must cover all of
+        the scheme's free parameters.
+    psi_grid : sequence of float, optional
+        psi values to sweep; defaults to :func:`default_psi_grid`.
+        Must be non-empty.
+    feasibility_tol : float
+        |denominator| threshold for the per-psi feasibility guard.
+    **kreiss_kwargs
+        Forwarded to :func:`kreiss_cutcell_check` (and thence to
+        ``kreiss_stability_check``), e.g. ``s_grid_params``, ``sigma_tol``.
+
+    Returns
+    -------
+    CutCellPsiSweep
+        Worst-cased margin, stability flag, and the per-psi partition of
+        feasible verdicts vs. infeasible parameterization points.
+    """
+    if psi_grid is None:
+        psi_grid = default_psi_grid()
+    psi_values = [float(p) for p in psi_grid]
+    if not psi_values:
+        raise ValueError("psi_grid must contain at least one psi value")
+
+    per_psi: dict = {}
+    infeasible_psi: list = []
+    any_unstable = False
+    worst_sigma_min = float("inf")
+    worst_psi: float | None = None
+
+    for psi in psi_values:
+        result = kreiss_cutcell_check(
+            scheme, alpha, psi,
+            feasibility_tol=feasibility_tol,
+            **kreiss_kwargs,
+        )
+        per_psi[psi] = result
+        if isinstance(result, CutCellInfeasible):
+            infeasible_psi.append(psi)
+            continue
+        if not result.is_stable:
+            any_unstable = True
+        sigma = float(result.witness_sigma_min)
+        if np.isfinite(sigma) and sigma < worst_sigma_min:
+            worst_sigma_min = sigma
+            worst_psi = psi
+
+    return CutCellPsiSweep(
+        worst_sigma_min=worst_sigma_min,
+        worst_psi=worst_psi,
+        any_unstable=any_unstable,
+        infeasible_psi=infeasible_psi,
+        per_psi=per_psi,
     )
