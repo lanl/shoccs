@@ -1,12 +1,20 @@
-"""Tests for the cached lambdified cut-cell evaluator (plan 48 item 1.1)."""
+"""Tests for the cached lambdified cut-cell evaluator (plan 48 item 1.1)
+and the psi-parameterized Kreiss check built on it (plan 48 item 1.2)."""
 
 import time
 
 import numpy as np
 import pytest
-from sympy import Symbol
+from sympy import Rational, Symbol
 
 from stencil_gen.cutcell_eval import CutCellEvaluator, make_cutcell_evaluator
+from stencil_gen.cutcell_normal_modes import (
+    CutCellInfeasible,
+    _validate_closure,
+    _vanishing_denominators,
+    kreiss_cutcell_check,
+)
+from stencil_gen.gks_kreiss import KreissResult
 from stencil_gen.temo import (
     E2_1,
     E4_1,
@@ -268,3 +276,194 @@ class TestE4_1Evaluator:
         for psi in np.linspace(0.05, 0.9999, 20):
             ev.rows(float(psi), alpha)
         assert time.perf_counter() - t0 < 0.1
+
+
+# ---------------------------------------------------------------------------
+# Plan 48 item 1.2: psi-parameterized Kreiss check
+# ---------------------------------------------------------------------------
+
+# Matches the item-0.3/0.5 calibration grid (odd n_imag puts Im = 0 on the
+# grid).
+_CUT_GRID = {"s_max": 10.0, "n_radial": 30, "n_imag": 81, "imag_max": 15.0}
+
+# The plan-specified psi test set for the E2_1 alpha=0 baseline.
+_CUT_PSI = [1e-3, 0.1, 0.5, 0.9, 0.9999]
+
+
+def _halfline_operator(ev, alpha, psi, n=40):
+    """Assemble the N x N cut-cell half-line operator at *psi*.
+
+    Test-local assembly per plan 48 item 1.2 (the production interval
+    builder arrives in item 3.1): mirrors
+    tests/test_group_velocity.py's ``_build_cut_cell_diff_matrix`` — cut
+    Dirichlet closure rows at the left (wall column already eliminated by
+    the evaluator), centered interior, reflected uniform tension-sigma=0
+    closure at the right (known stable, so any instability is the left
+    closure's).
+    """
+    from stencil_gen.phs import uniform_boundary_weights_rbf
+
+    iw, io = ev.interior()
+    rows, _ = ev.rows(psi, alpha)
+    r = len(rows)
+    t = ev.dims.t
+    D = np.zeros((n, n))
+    for i, (w, cols) in enumerate(rows):
+        D[i, cols] = w
+    for i in range(r, n - r):
+        D[i, i + io] = iw
+    sign = (-1.0) ** ev.scheme.nu
+    for i in range(r):
+        w = uniform_boundary_weights_rbf(
+            i, t, ev.scheme.nu, ev.scheme.q, 0.0, kernel="tension"
+        )
+        for j in range(t):
+            D[n - 1 - i, n - 1 - j] = sign * float(w[j])
+    return D
+
+
+class TestKreissCutcellCheck:
+    """Plan 48 item 1.2: kreiss_cutcell_check on the E2_1 alpha=0 baseline."""
+
+    @pytest.fixture()
+    def alpha_zero(self, e2_evaluator):
+        return {s: 0.0 for s in e2_evaluator.alpha_symbols}
+
+    @pytest.mark.parametrize("psi", _CUT_PSI)
+    def test_e2_1_alpha0_stable(self, alpha_zero, psi):
+        """E2_1 at alpha = 0 (the plan-35 baseline configuration) is
+        GKS-stable across the psi range, including the near-wall
+        (psi -> 0) and row-coincidence (psi -> 1) regimes."""
+        result = kreiss_cutcell_check(
+            E2_1, alpha_zero, psi, s_grid_params=_CUT_GRID
+        )
+        assert isinstance(result, KreissResult)
+        assert not getattr(result, "infeasible", False)
+        assert result.is_stable is True, (
+            f"false-unstable at psi={psi}: verdict "
+            f"{result.imaginary_axis_perturbation_verdict!r} / "
+            f"{result.near_origin_verdict!r}, witness {result.witness_s}, "
+            f"sigma {result.witness_sigma_min:.3e}"
+        )
+        assert result.defective_kappa_detected is False
+
+    def test_dense_eigenvalue_cross_check(self, e2_evaluator, alpha_zero):
+        """Kreiss verdict agrees with dense eigenvalues of the assembled
+        half-line operator at N = 40 (plan 48 item 1.2 cross-check;
+        semi-discrete u_t = -D u, so stability is max Re eig(-D) <~ 0)."""
+        psi = 0.5
+        result = kreiss_cutcell_check(
+            E2_1, alpha_zero, psi, s_grid_params=_CUT_GRID
+        )
+        assert result.is_stable is True
+
+        D = _halfline_operator(e2_evaluator, alpha_zero, psi, n=40)
+        max_re = float(np.max(np.real(np.linalg.eigvals(-D))))
+        assert max_re < 1e-5, (
+            f"dense eigenvalues contradict GKS verdict at psi={psi}: "
+            f"max Re = {max_re:.3e}"
+        )
+
+    def test_validation_dims_e2_1(self, e2_evaluator, alpha_zero):
+        """E2_1 dimension contract: m = R - 1 = 3 rows = 2 nodal unknowns
+        + p = 1 admissible root (plan 48 item 1.2 validation)."""
+        rows, _ = e2_evaluator.rows(0.5, alpha_zero)
+        _, io = e2_evaluator.interior()
+        assert _validate_closure(e2_evaluator, rows, io) == (3, 1, 2)
+
+        result = kreiss_cutcell_check(
+            E2_1, alpha_zero, 0.5, s_grid_params=_CUT_GRID
+        )
+        assert result.n_admissible_roots == 1
+
+    def test_validation_rejects_row_count_mismatch(self, e2_evaluator,
+                                                   alpha_zero):
+        """A closure with the wrong row count fails the m = R - 1 check."""
+        rows, _ = e2_evaluator.rows(0.5, alpha_zero)
+        _, io = e2_evaluator.interior()
+        with pytest.raises(ValueError, match="R - 1"):
+            _validate_closure(e2_evaluator, rows[:-1], io)
+
+    def test_infeasible_marker(self, e2_evaluator, alpha_zero, monkeypatch):
+        """A vanishing denominator returns the distinct CutCellInfeasible
+        marker, never a stability verdict (plan 48 item 1.2 feasibility
+        guard).
+
+        E2_1's only structural denominator is psi + 1, which never vanishes
+        on (0, 1], so an engineered denominator psi - 1/2 is substituted on
+        the cached evaluator (monkeypatch restores it; the lambdify cache is
+        keyed on the denominator set's value, so the substitute is compiled
+        fresh).
+        """
+        monkeypatch.setattr(
+            e2_evaluator, "denominators",
+            frozenset({Symbol("psi") - Rational(1, 2)}),
+        )
+        result = kreiss_cutcell_check(E2_1, alpha_zero, 0.5)
+        assert isinstance(result, CutCellInfeasible)
+        assert result.infeasible is True
+        assert result.psi == 0.5
+        assert result.alpha == (
+            ("alpha_0", 0.0), ("alpha_1", 0.0),
+            ("alpha_2", 0.0), ("alpha_3", 0.0),
+        )
+        assert len(result.vanishing) == 1
+        den, value = result.vanishing[0]
+        assert den == Symbol("psi") - Rational(1, 2)
+        assert value == pytest.approx(0.0, abs=1e-12)
+        # A parameterization failure is not a stability verdict.
+        assert not hasattr(result, "is_stable")
+
+        # Away from the engineered zero the guard passes.
+        assert _vanishing_denominators(
+            e2_evaluator, 0.9, alpha_zero, 1e-12
+        ) == ()
+
+    def test_e2_1_feasible_across_psi(self, e2_evaluator, alpha_zero):
+        """E2_1's real denominator (psi + 1) never vanishes on (0, 1]."""
+        for psi in _CUT_PSI + [1.0]:
+            assert _vanishing_denominators(
+                e2_evaluator, psi, alpha_zero, 1e-12
+            ) == ()
+
+    def test_row_indices_override_rejected(self, alpha_zero):
+        """row_indices comes from the evaluator's Dirichlet row placement
+        and may not be overridden through kreiss_kwargs."""
+        with pytest.raises(TypeError, match="row_indices"):
+            kreiss_cutcell_check(
+                E2_1, alpha_zero, 0.5, row_indices=[0, 1, 2]
+            )
+
+    @pytest.mark.parametrize("psi", [0.0, -1.0, 1.5])
+    def test_psi_out_of_range(self, alpha_zero, psi):
+        with pytest.raises(ValueError, match="psi"):
+            kreiss_cutcell_check(E2_1, alpha_zero, psi)
+
+
+@pytest.mark.slow
+class TestKreissCutcellCheckE4_1:
+    """E4_1 variant of the item-1.2 wrapper (symbolic derivation > 170 s).
+
+    Only the plumbing contract is asserted here — dimension validation and
+    a feasible (non-infeasible) verdict object.  The E4_1 stability
+    calibration itself is plan 48 item 1.4 (findings item), so no
+    is_stable value is asserted.
+    """
+
+    @pytest.fixture(scope="class")
+    def e4_evaluator(self):
+        return make_cutcell_evaluator(E4_1)
+
+    def test_dims_and_verdict_object(self, e4_evaluator):
+        alpha = {s: 0.0 for s in e4_evaluator.alpha_symbols}
+        rows, _ = e4_evaluator.rows(0.5, alpha)
+        _, io = e4_evaluator.interior()
+        # m = R - 1 = 4 rows = 2 nodal unknowns + p = 2 admissible roots.
+        assert _validate_closure(e4_evaluator, rows, io) == (4, 2, 2)
+
+        result = kreiss_cutcell_check(
+            E4_1, alpha, 0.5, s_grid_params=_CUT_GRID
+        )
+        assert isinstance(result, KreissResult)
+        assert not getattr(result, "infeasible", False)
+        assert result.n_admissible_roots == 2
