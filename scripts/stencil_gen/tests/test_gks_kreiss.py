@@ -7,8 +7,12 @@ from stencil_gen.gks_kreiss import (
     KreissResult,
     DefectiveKappaError,
     _classify_imag_axis,
+    _classify_near_origin,
+    _constant_mode_vector,
+    _fit_vanishing_order,
     _kappa_roots_from_poly,
     _refine_witness,
+    _rows_annihilate_constants,
     _sweep_grid,
     kappa_roots,
     kreiss_matrix,
@@ -1109,6 +1113,12 @@ class TestKreissIntegration:
         p=2, i.e. the wrong operator). The verdict did NOT flip — still
         GKS-stable (witness sigma_min ~2e-5 at |s| ~ 0.1), consistent with
         L3 dense eigenvalues max Re(eig(-D_bc)) < 0 at N in {20, 40, 80}.
+
+        Plan 48 item 0.4 recalibration (test d): with min_s_magnitude
+        shrunk to 1e-3, the witness now refines to the barrier |s| ~ 1e-3
+        where the structural consistency zero lives (sigma_min ~2e-13) and
+        classifies as 'consistency_zero'. The verdict is unchanged:
+        GKS-stable.
         """
         from stencil_gen.phs import build_diff_matrix_rbf
 
@@ -1131,6 +1141,10 @@ class TestKreissIntegration:
         )
 
         assert result.is_stable is True
+        # Item 0.4: the near-origin dip is the structural consistency zero
+        assert result.near_origin_verdict == "consistency_zero"
+        assert np.isfinite(result.deflated_margin)
+        assert result.deflated_margin > 0
 
     def test_gaussian_known_unstable_passes_gks(self):
         """E4 Gaussian epsilon=0.1 is eigenvalue-unstable but GKS-stable.
@@ -1145,6 +1159,11 @@ class TestKreissIntegration:
         GKS-stable (witness sigma_min ~4e-7 at |s| ~ 0.1), while L3 dense
         eigenvalues confirm the finite-domain instability
         (max Re(eig(-D_bc)) ~ +9.8e-2 at N in {20, 40, 80}).
+
+        Plan 48 item 0.4 recalibration (test d): the witness now refines
+        to the |s| ~ 1e-3 barrier and classifies as the structural
+        consistency zero. Verdict unchanged: GKS-stable (the instability
+        remains L3's catch).
         """
         from stencil_gen.phs import build_diff_matrix_rbf
 
@@ -1165,6 +1184,8 @@ class TestKreissIntegration:
 
         # GKS-stable — the instability is NOT a boundary-closure issue
         assert result.is_stable is True
+        # Item 0.4: near-origin witness classified as the consistency zero
+        assert result.near_origin_verdict == "consistency_zero"
 
         # But eigenvalue check catches the actual instability
         from stencil_gen.phs import stability_eigenvalue_from_matrix
@@ -1226,3 +1247,282 @@ class TestKreissIntegration:
         )
         # At s=0, only 1 admissible root vs p=2 → inf (count mismatch)
         assert sv == np.inf, f"sigma_min(M(0)) = {sv}, expected inf"
+
+
+class TestNearOriginTreatment:
+    """Near-origin treatment replaces the |s| < 0.1 disk mask (plan 48 0.4).
+
+    Conservative (telescoping) closures have a structural determinant zero
+    at s = 0 (the kappa = 1 consistency mode). The old fix masked the whole
+    disk |s| < 0.1, excising exactly the z ~ 1 borderline where generalized
+    eigensolutions (Trefethen 1984 Thm 1b) live. Now min_s_magnitude
+    defaults to 1e-3 and near-origin candidate witnesses are discriminated
+    structurally: consistency zero iff the sigma_min right singular vector
+    aligns with the constant-mode vector x_const AND all closure rows
+    annihilate constants.
+
+    Plan test (a) — the Godunov-Ryabenkii s=0 reduction — is
+    TestKreissIntegration.test_s_equals_zero_godunov_ryabenkii_reduction
+    (unchanged). Plan test (d) — post-0.3 verdicts unchanged — extends
+    test_classical_e4_passes / test_gaussian_known_unstable_passes_gks
+    above and adds E2 / classical-E4 regressions below.
+
+    Sign convention throughout: u_t = -sum_k a_k u_{n+k}. Upwind interior
+    weights [-1, 1], offsets [-1, 0]: kappa(s) = 1/(1+s), p = L_left = 1.
+    """
+
+    _UPWIND_W = np.array([-1.0, 1.0])
+    _UPWIND_O = np.array([-1, 0])
+
+    # Engineered m=2 closure with a GENUINE determinant zero at s = 0.05
+    # whose null vector is not the constant mode (plan test b). Both rows
+    # annihilate constants (w01 = -w00, w10 = -w11), so the closure ALSO
+    # has the structural consistency zero at s = 0:
+    #   row 0: w = [0.1, -0.1] at {0, 1}    row 1: w = [0.15, -0.15] at {0, 1}
+    #   M(s) = [[s + 0.1, -0.1*kappa], [0.15, (s - 0.15)*kappa]]
+    #   det M = kappa*[(s + 0.1)(s - 0.15) + 0.015] = kappa*s*(s - 0.05)
+    # Zeros: s = 0 (consistency) and s = 0.05 (genuine GKS eigensolution).
+    # At s = 0.05 (kappa = 1/1.05) the null vector solves
+    #   (s + 0.1)*x0 = 0.1*kappa*x1  =>  x1/x0 = 0.15/(0.1*kappa) = 1.575,
+    # i.e. direction (1, 1.575) — angle ~0.22 rad from x_const = (1,1)/sqrt(2):
+    # NOT the constant mode, even though the rows are conservative.
+    _ZERO_005_ROWS = [
+        (np.array([0.1, -0.1]), np.array([0, 1])),
+        (np.array([0.15, -0.15]), np.array([0, 1])),
+    ]
+
+    # Telescoping conservative closure (plan test c): both closure rows are
+    # forward differences that annihilate constants.
+    #   row 0: w = [-1, 1] at {0, 1}    row 1 (interior row at node 1): same
+    #   M(s) = [[s - 1, kappa], [-1, (s + 1)*kappa]] with (s+1)*kappa = 1
+    #   det M = (s - 1) + kappa = s^2/(1 + s)
+    # Only zero in Re(s) >= 0 is the (double) structural zero at s = 0.
+    _TELESCOPING_ROWS = [
+        (np.array([-1.0, 1.0]), np.array([0, 1])),
+        (np.array([-1.0, 1.0]), np.array([0, 1])),
+    ]
+
+    # ---------------------------------------------------------------
+    # Helper units
+    # ---------------------------------------------------------------
+
+    def test_constant_mode_vector_upwind_m2(self):
+        """x_const for upwind m=2 is (1, 1)/sqrt(2): one nodal entry, one
+        amplitude on the single admissible root (which continues to 1)."""
+        x = _constant_mode_vector(
+            self._UPWIND_W, self._UPWIND_O, self._TELESCOPING_ROWS, 1e-3
+        )
+        np.testing.assert_allclose(x, np.array([1.0, 1.0]) / np.sqrt(2.0),
+                                   atol=1e-14)
+
+    def test_constant_mode_vector_m_equals_p(self):
+        """m = p: no nodal entries, pure amplitude vector [1]."""
+        x = _constant_mode_vector(
+            self._UPWIND_W, self._UPWIND_O,
+            [(np.array([1.0]), np.array([0]))], 1e-3,
+        )
+        np.testing.assert_allclose(x, np.array([1.0]), atol=1e-14)
+
+    def test_constant_mode_vector_selects_root_near_one(self):
+        """For a centered E2 interior (p=1) the admissible root at small
+        Re(s) > 0 is the one continuing to kappa = 1: kappa ~ 1 - s."""
+        iw = np.array([-0.5, 0.5])
+        io = np.array([-1, 1])
+        s = 1e-3
+        _, admissible, _ = kappa_roots(iw, io, s)
+        assert len(admissible) == 1
+        assert abs(admissible[0] - (1.0 - s)) < 1e-2
+        x = _constant_mode_vector(
+            iw, io,
+            [(np.array([-1.0, 1.0]), np.array([0, 1])),
+             (np.array([-1.0, 1.0]), np.array([0, 1]))],
+            s,
+        )
+        # m=2, p=1: one nodal entry + amplitude on the kappa~1 root
+        np.testing.assert_allclose(x, np.array([1.0, 1.0]) / np.sqrt(2.0),
+                                   atol=1e-14)
+
+    def test_x_const_near_null_for_telescoping(self):
+        """M(s) x_const = O(s^2) for the telescoping closure: the constant
+        mode nearly solves the closure equations near s = 0 (det = s^2/(1+s))."""
+        s = 1e-3
+        M = kreiss_matrix_general(
+            self._UPWIND_W, self._UPWIND_O, self._TELESCOPING_ROWS, s
+        )
+        x = _constant_mode_vector(
+            self._UPWIND_W, self._UPWIND_O, self._TELESCOPING_ROWS, s
+        )
+        assert np.linalg.norm(M @ x) < 1e-5
+
+    def test_rows_annihilate_constants(self):
+        """Row-sum test: conservative rows pass, a Dirichlet row fails."""
+        assert _rows_annihilate_constants(self._TELESCOPING_ROWS) is True
+        assert _rows_annihilate_constants(self._ZERO_005_ROWS) is True
+        assert _rows_annihilate_constants(
+            [(np.array([1.0]), np.array([0]))]
+        ) is False
+
+    def test_classifier_consistency_zero_aligned(self):
+        """Telescoping closure near s=0: aligned + conservative → consistency
+        zero, with a tiny alignment angle."""
+        is_cz, angle = _classify_near_origin(
+            self._UPWIND_W, self._UPWIND_O, self._TELESCOPING_ROWS, 1e-3
+        )
+        assert is_cz is True
+        assert angle < 1e-2
+
+    def test_classifier_genuine_zero_misaligned(self):
+        """Engineered zero at s=0.05: null vector (1, 1.575) is ~0.22 rad
+        from x_const → NOT the consistency zero, despite conservative rows."""
+        is_cz, angle = _classify_near_origin(
+            self._UPWIND_W, self._UPWIND_O, self._ZERO_005_ROWS, 0.05
+        )
+        assert is_cz is False
+        assert angle > 0.1
+
+    def test_classifier_dirichlet_row_not_consistency_zero(self):
+        """A non-conservative closure is never the consistency zero even if
+        the singular vector happens to align."""
+        boundary_rows = [
+            (np.array([1.0]), np.array([0])),
+            (np.array([-1.0, 1.0]), np.array([0, 1])),
+        ]
+        is_cz, _ = _classify_near_origin(
+            self._UPWIND_W, self._UPWIND_O, boundary_rows, 1e-3
+        )
+        assert is_cz is False
+
+    # ---------------------------------------------------------------
+    # Plan test (b): engineered near-origin genuine zero is caught
+    # ---------------------------------------------------------------
+
+    def test_engineered_zero_at_s_005_caught(self):
+        """det M = kappa*s*(s - 0.05): the genuine zero at s = 0.05 is found
+        and classified as a near-origin violation (plan 48 0.4 test b).
+
+        Before item 0.4 the |s| < 0.1 disk mask excised this zero entirely
+        and the closure came back GKS-stable. The grid is engineered to
+        contain s = 0.05 + 0j exactly (logspace radial sweep ends at
+        s_max = 0.05; odd n_imag puts Im = 0 on the grid).
+        """
+        # Sanity: exactly singular at s = 0.05
+        M = kreiss_matrix_general(
+            self._UPWIND_W, self._UPWIND_O, self._ZERO_005_ROWS, 0.05
+        )
+        assert np.linalg.svd(M, compute_uv=False)[-1] < 1e-14
+
+        result = kreiss_stability_check(
+            self._UPWIND_W, self._UPWIND_O, self._ZERO_005_ROWS,
+            s_grid_params={"s_max": 0.05, "n_radial": 10, "n_imag": 21,
+                           "imag_max": 5.0},
+        )
+
+        assert result.is_stable is False
+        assert result.near_origin_verdict == "near_origin_violation"
+        assert result.witness_sigma_min < 1e-8
+        assert abs(result.witness_s - 0.05) < 0.01, (
+            f"Expected witness near s=0.05+0j, got {result.witness_s}"
+        )
+        # The witness sits inside the old 0.1 disk mask — the whole point
+        assert abs(result.witness_s) < 0.1
+
+    # ---------------------------------------------------------------
+    # Plan test (c): conservative closure classifies as consistency zero
+    # ---------------------------------------------------------------
+
+    def test_telescoping_closure_consistency_zero(self):
+        """Telescoping closure: near-origin candidate is the structural
+        consistency zero, not a violation (plan 48 0.4 test c).
+
+        det M = s^2/(1+s), so the refined witness crawls to the |s| = 1e-3
+        barrier with sigma_min ~ 5e-7 (above sigma_tol) — classified
+        structurally, with vanishing order nu ~ 2 (the plan's reference
+        value for this m = 2 closure) and a finite deflated margin.
+        """
+        result = kreiss_stability_check(
+            self._UPWIND_W, self._UPWIND_O, self._TELESCOPING_ROWS,
+            s_grid_params={"s_max": 5.0, "n_radial": 10, "n_imag": 21,
+                           "imag_max": 5.0},
+        )
+
+        assert result.is_stable is True
+        assert result.near_origin_verdict == "consistency_zero"
+        assert abs(result.witness_s) < 0.01  # at the refinement barrier
+        assert result.vanishing_order == pytest.approx(2.0, abs=0.3)
+        assert np.isfinite(result.deflated_margin)
+        assert result.deflated_margin > 0
+        # The perturbation classifier was deliberately NOT consulted
+        assert result.imaginary_axis_perturbation_verdict == "not_checked"
+
+    def test_vanishing_order_fit_telescoping(self):
+        """Direct fit: sigma_min ~ |s|^2 exactly for det M = s^2/(1+s)."""
+        nu, deflated = _fit_vanishing_order(
+            self._UPWIND_W, self._UPWIND_O, self._TELESCOPING_ROWS,
+            complex(1e-3, 0.0), min_singular_value(
+                self._UPWIND_W, self._UPWIND_O, self._TELESCOPING_ROWS,
+                complex(1e-3, 0.0),
+            ),
+        )
+        assert nu == pytest.approx(2.0, abs=0.1)
+        assert np.isfinite(deflated)
+        assert deflated > 0
+
+    # ---------------------------------------------------------------
+    # Plan test (d): post-0.3 baselines unchanged (see also the extended
+    # TestKreissIntegration tension-sigma=3.0 and Gaussian tests above)
+    # ---------------------------------------------------------------
+
+    def test_e2_verdict_unchanged(self):
+        """E2 (tension sigma=0, p=1, m=3): still GKS-stable post-0.4.
+
+        Post-0.3 baseline (plan findings log): GKS-stable with witness
+        sigma_min 1.28e-3. With the shrunk mask the witness refines to the
+        |s| ~ 1e-3 barrier and classifies as the consistency zero; the
+        verdict is unchanged.
+        """
+        from stencil_gen.phs import build_diff_matrix_rbf
+
+        D = build_diff_matrix_rbf(n=20, p=1, q=2, epsilon=0.0,
+                                   kernel="tension", nu=1, nextra=0)
+        interior_weights, interior_offsets, boundary_rows, row_indices = (
+            _extract_stencil_data_from_D(D, p=1)
+        )
+        assert len(boundary_rows) == 3  # m=3 vs p=1 (post-0.3 all rows)
+
+        result = kreiss_stability_check(
+            interior_weights, interior_offsets, boundary_rows,
+            s_grid_params={"s_max": 10.0, "n_radial": 30, "n_imag": 80,
+                           "imag_max": 15.0},
+            row_indices=row_indices,
+        )
+
+        assert result.is_stable is True
+        assert result.near_origin_verdict == "consistency_zero"
+
+    def test_classical_e4_alpha_verdict_unchanged(self):
+        """Classical E4 at the known-good alpha: still GKS-stable post-0.4.
+
+        Post-0.3 baseline (plan findings log): m=3 differing rows,
+        GKS-stable, L3 confirms (max Re eig < 0 at N in {20, 40, 80}).
+        The near-origin witness now classifies as the consistency zero.
+        """
+        from stencil_gen.brady2d_stability import layer2_kreiss_gks
+
+        result = layer2_kreiss_gks(
+            "E4", "classical",
+            {"alpha": [-0.7733323791884821, 0.1623961700641681]},
+        )
+
+        assert result.is_stable is True
+        assert result.near_origin_verdict == "consistency_zero"
+
+    # ---------------------------------------------------------------
+    # Mask default shrink
+    # ---------------------------------------------------------------
+
+    def test_min_s_magnitude_default_shrunk(self):
+        """kreiss_stability_check's min_s_magnitude default is 1e-3."""
+        import inspect
+
+        sig = inspect.signature(kreiss_stability_check)
+        assert sig.parameters["min_s_magnitude"].default == pytest.approx(1e-3)
