@@ -12,6 +12,7 @@ from stencil_gen.gks_kreiss import (
     _sweep_grid,
     kappa_roots,
     kreiss_matrix,
+    kreiss_matrix_general,
     kreiss_stability_check,
     make_s_grid,
     min_singular_value,
@@ -310,8 +311,13 @@ class TestKreissMatrix:
         expected_sv = float(np.linalg.svd(M, compute_uv=False)[-1])
         assert abs(sv - expected_sv) < 1e-12
 
-    def test_min_singular_value_shape_mismatch_returns_inf(self):
-        """min_singular_value returns inf when root count != boundary row count."""
+    def test_min_singular_value_m_gt_p_dispatches_general(self):
+        """m > p boundary rows now dispatch to the augmented matrix (plan 48 0.2).
+
+        Before item 0.2 this returned inf (the square kreiss_matrix raised
+        ValueError and the extra rows were silently dropped). Now the
+        augmented m x m matrix is built and a finite sigma_min is returned.
+        """
         interior_weights = np.array([-1.0, 1.0])
         interior_offsets = np.array([-1, 0])
         boundary_rows = [
@@ -319,6 +325,24 @@ class TestKreissMatrix:
             (np.array([1.0]), np.array([0])),
         ]
         sv = min_singular_value(interior_weights, interior_offsets, boundary_rows, s=1.0)
+        assert np.isfinite(sv)
+        M = kreiss_matrix_general(
+            interior_weights, interior_offsets, boundary_rows, 1.0
+        )
+        expected_sv = float(np.linalg.svd(M, compute_uv=False)[-1])
+        assert sv == pytest.approx(expected_sv, abs=1e-14)
+
+    def test_min_singular_value_root_count_anomaly_returns_inf(self):
+        """min_singular_value returns inf when the admissible-root count at
+        this s differs from the structural count p = L_left.
+
+        E2 centered interior at s=0: the characteristic roots are kappa = ±1,
+        both exactly on the unit circle, so 0 admissible roots vs p = 1.
+        """
+        interior_weights = np.array([-0.5, 0.5])
+        interior_offsets = np.array([-1, 1])
+        boundary_rows = [(np.array([1.0]), np.array([0]))]
+        sv = min_singular_value(interior_weights, interior_offsets, boundary_rows, s=0.0)
         assert sv == np.inf
 
     def test_min_singular_value_defective_returns_inf(self):
@@ -337,6 +361,201 @@ class TestKreissMatrix:
             interior_weights, interior_offsets, boundary_rows, s=0.4
         )
         assert sv == np.inf
+
+
+class TestKreissMatrixGeneral:
+    """Tests for the augmented Kreiss matrix (plan 48 item 0.2).
+
+    Sign convention: u_t = -sum_k a_k u_{n+k}. Worked scalar example from
+    the plan: upwind interior du_n/dt = -(u_n - u_{n-1}), i.e.
+    offsets = [-1, 0], weights = [-1, 1], h = 1. Characteristic equation
+    s + (-1)/kappa + 1 = 0 gives kappa(s) = 1/(1+s), so p = L_left = 1.
+    With m = 2 closure rows there is one nodal unknown phi_0 and one
+    amplitude alpha; M(s) is 2x2:
+
+        M[0,0] = s + w_00           M[0,1] = sum_{j>=1} w_0j kappa^j
+        M[1,0] = w_10               M[1,1] = s*kappa + sum_{j>=1} w_1j kappa^j
+    """
+
+    _UPWIND_W = np.array([-1.0, 1.0])
+    _UPWIND_O = np.array([-1, 0])
+
+    def test_upwind_m2_hand_computed(self):
+        """Every entry of the 2x2 augmented matrix matches the hand formula.
+
+        At s=1, kappa = 1/2. Rows with support {0, 1, 2}:
+          row 0: w = [2, -1, 0.5]   row 1: w = [-0.5, 1.5, -1]
+        M[0,0] = 1 + 2 = 3
+        M[0,1] = -1*(1/2) + 0.5*(1/4) = -0.375
+        M[1,0] = -0.5
+        M[1,1] = 1*(1/2) + 1.5*(1/2) - 1*(1/4) = 1.0
+        """
+        boundary_rows = [
+            (np.array([2.0, -1.0, 0.5]), np.array([0, 1, 2])),
+            (np.array([-0.5, 1.5, -1.0]), np.array([0, 1, 2])),
+        ]
+        M = kreiss_matrix_general(
+            self._UPWIND_W, self._UPWIND_O, boundary_rows, s=1.0
+        )
+
+        assert M.shape == (2, 2)
+        assert M[0, 0] == pytest.approx(3.0, abs=1e-14)
+        assert M[0, 1] == pytest.approx(-0.375, abs=1e-14)
+        assert M[1, 0] == pytest.approx(-0.5, abs=1e-14)
+        assert M[1, 1] == pytest.approx(1.0, abs=1e-14)
+
+    def test_engineered_unstable_det_zero_at_s_1(self):
+        """Engineered m=2 closure with det M(s) = 0 at s = 1 is flagged.
+
+        Mirrors the existing engineered-unstable 1x1 pattern (boundary
+        weights [0, -2]) augmented with the interior row at node 1:
+          row 0: w = [0, -2] at {0, 1}    row 1: w = [-1, 1] at {0, 1}
+        M(s) = [[s, -2*kappa], [-1, (s+1)*kappa]] with (s+1)*kappa = 1, so
+        det M = s - 2*kappa = (s-1)(s+2)/(1+s): a zero at s = 1 (Re > 0),
+        a genuine GKS eigensolution.
+        """
+        boundary_rows = [
+            (np.array([0.0, -2.0]), np.array([0, 1])),
+            (np.array([-1.0, 1.0]), np.array([0, 1])),
+        ]
+
+        # Hand-check the matrix at s=1, kappa=1/2 first
+        M = kreiss_matrix_general(
+            self._UPWIND_W, self._UPWIND_O, boundary_rows, s=1.0
+        )
+        expected = np.array([[1.0, -1.0], [-1.0, 1.0]], dtype=complex)
+        np.testing.assert_allclose(M, expected, atol=1e-14)
+        # Exactly singular at s=1 (sigma_min, not det, to avoid the LAPACK
+        # divide-by-zero warning on singular input)
+        assert np.linalg.svd(M, compute_uv=False)[-1] < 1e-14
+
+        # The full check dispatches to the augmented matrix (m=2 != p=1)
+        # and finds the violation.
+        result = kreiss_stability_check(
+            self._UPWIND_W, self._UPWIND_O, boundary_rows,
+            s_grid_params={"s_max": 5.0, "n_radial": 30, "n_imag": 81,
+                           "imag_max": 5.0},
+        )
+
+        assert result.is_stable is False
+        assert result.witness_sigma_min < 1e-6
+        assert abs(result.witness_s - 1.0) < 0.1, (
+            f"Expected witness near s=1+0j, got {result.witness_s}"
+        )
+
+    def test_stable_closure_row1_interior(self):
+        """Stable m=2 closure: Dirichlet-like row 0 + interior row at node 1.
+
+          row 0: w = [1] at {0}          row 1: w = [-1, 1] at {0, 1}
+        M(s) = [[s+1, 0], [-1, (s+1)*kappa]] = [[s+1, 0], [-1, 1]] since
+        (s+1)*kappa = 1; det M = s + 1 has no zero for Re(s) >= 0.
+        """
+        boundary_rows = [
+            (np.array([1.0]), np.array([0])),
+            (np.array([-1.0, 1.0]), np.array([0, 1])),
+        ]
+
+        result = kreiss_stability_check(
+            self._UPWIND_W, self._UPWIND_O, boundary_rows,
+            s_grid_params={"s_max": 5.0, "n_radial": 10, "n_imag": 20,
+                           "imag_max": 10.0},
+        )
+
+        assert result.is_stable is True
+        assert result.defective_kappa_detected is False
+
+    def test_reduces_to_kreiss_matrix_when_m_equals_p(self):
+        """Regression identity: m = p and default row_indices reproduces
+        kreiss_matrix exactly."""
+        cases = [
+            # p = 1: upwind with one boundary row
+            (
+                self._UPWIND_W,
+                self._UPWIND_O,
+                [(np.array([2.0, -1.0]), np.array([0, 1]))],
+            ),
+            # p = 2: the TestKreissMatrix hand-computed stencil, two rows
+            (
+                np.array([0.1, 0.5, -0.4]),
+                np.array([-2, -1, 0]),
+                [
+                    (np.array([3.0, -2.0]), np.array([0, 1])),
+                    (np.array([1.0, 0.5, -0.5]), np.array([0, 1, 2])),
+                ],
+            ),
+        ]
+        # s values chosen so the p=2 artifact stencil has exactly 2
+        # admissible roots at each (it is an engineered test stencil, not a
+        # genuine hyperbolic interior, so that does not hold at every s).
+        for iw, io, brows in cases:
+            for s in [1.0, 1.5 + 0.5j, 2.0 - 1.0j]:
+                M_sq = kreiss_matrix(iw, io, brows, s)
+                M_gen = kreiss_matrix_general(iw, io, brows, s)
+                np.testing.assert_allclose(
+                    M_gen, M_sq, rtol=1e-14, atol=1e-14,
+                    err_msg=f"reduction identity failed at s={s}",
+                )
+
+    def test_row_indices_temporal_delta_on_grid_node(self):
+        """The temporal delta follows the row's grid node n_i, not row index i.
+
+        Upwind, m=2, row_indices=[0, 2]: row 1 sits at grid node 2, so its
+        temporal term contributes s*kappa^2 to the root column, and its
+        nodal-column entry gets no s (n_1 = 2 != 0):
+          row 0: w = [1] at {0}          row 1: w = [-1, 1] at {0, 1}
+        At s=1, kappa=1/2:
+          M[0,0] = 1 + 1 = 2      M[0,1] = 0
+          M[1,0] = -1             M[1,1] = 1*(1/4) + 1*(1/2) = 0.75
+        With default row_indices, M[1,1] = (s+1)*kappa = 1 instead.
+        """
+        boundary_rows = [
+            (np.array([1.0]), np.array([0])),
+            (np.array([-1.0, 1.0]), np.array([0, 1])),
+        ]
+        M = kreiss_matrix_general(
+            self._UPWIND_W, self._UPWIND_O, boundary_rows, s=1.0,
+            row_indices=[0, 2],
+        )
+        expected = np.array([[2.0, 0.0], [-1.0, 0.75]], dtype=complex)
+        np.testing.assert_allclose(M, expected, atol=1e-14)
+
+        M_default = kreiss_matrix_general(
+            self._UPWIND_W, self._UPWIND_O, boundary_rows, s=1.0
+        )
+        assert M_default[1, 1] == pytest.approx(1.0, abs=1e-14)
+
+    def test_m_less_than_p_raises(self):
+        """m < p is rejected: the augmented construction needs m >= p rows."""
+        interior_weights = np.array([0.1, 0.5, -0.4])
+        interior_offsets = np.array([-2, -1, 0])  # p = L_left = 2
+        boundary_rows = [(np.array([1.0]), np.array([0]))]
+        with pytest.raises(ValueError, match="m >= p"):
+            kreiss_matrix_general(
+                interior_weights, interior_offsets, boundary_rows, s=1.0
+            )
+
+    def test_negative_grid_node_raises(self):
+        """Closure rows referencing j < 0 are invalid on the left half-line."""
+        boundary_rows = [
+            (np.array([1.0, -1.0]), np.array([-1, 0])),
+            (np.array([-1.0, 1.0]), np.array([0, 1])),
+        ]
+        with pytest.raises(ValueError, match="negative grid node"):
+            kreiss_matrix_general(
+                self._UPWIND_W, self._UPWIND_O, boundary_rows, s=1.0
+            )
+
+    def test_row_indices_length_mismatch_raises(self):
+        """row_indices must have one grid node per boundary row."""
+        boundary_rows = [
+            (np.array([1.0]), np.array([0])),
+            (np.array([-1.0, 1.0]), np.array([0, 1])),
+        ]
+        with pytest.raises(ValueError, match="row_indices"):
+            kreiss_matrix_general(
+                self._UPWIND_W, self._UPWIND_O, boundary_rows, s=1.0,
+                row_indices=[0],
+            )
 
 
 class TestSGridSweep:
@@ -695,14 +914,30 @@ class TestMinSingularValueEx:
         assert sigma == np.inf  # flagged, NOT mapped to 0 (no false witness)
 
     def test_count_mismatch_status(self):
-        """Root-count/boundary-row mismatch returns (inf, 'count_mismatch')."""
-        # Upwind has 1 admissible root at s=1, but we provide 2 boundary rows
-        interior_weights = np.array([-1.0, 1.0])
-        interior_offsets = np.array([-1, 0])
-        boundary_rows = [
-            (np.array([1.0]), np.array([0])),
-            (np.array([1.0]), np.array([0])),
-        ]
+        """Admissible-root count != p = L_left returns (inf, 'count_mismatch').
+
+        E2 centered interior at s=0: characteristic roots kappa = ±1 sit
+        exactly on the unit circle, so 0 admissible roots vs p = 1.
+        (Before plan 48 item 0.2 the m != p case also landed here; it now
+        dispatches to the augmented matrix instead — see
+        TestKreissMatrixGeneral.)
+        """
+        interior_weights = np.array([-0.5, 0.5])
+        interior_offsets = np.array([-1, 1])
+        boundary_rows = [(np.array([1.0]), np.array([0]))]
+
+        sigma, status = min_singular_value_ex(
+            interior_weights, interior_offsets, boundary_rows, s=0.0
+        )
+        assert status == "count_mismatch"
+        assert sigma == np.inf
+
+    def test_m_less_than_p_is_count_mismatch(self):
+        """m < p boundary rows is unresolvable: (inf, 'count_mismatch')."""
+        # p = L_left = 2, but only one boundary row
+        interior_weights = np.array([0.1, 0.5, -0.4])
+        interior_offsets = np.array([-2, -1, 0])
+        boundary_rows = [(np.array([1.0]), np.array([0]))]
 
         sigma, status = min_singular_value_ex(
             interior_weights, interior_offsets, boundary_rows, s=1.0
