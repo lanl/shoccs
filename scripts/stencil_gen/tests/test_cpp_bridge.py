@@ -2,11 +2,14 @@
 
 Plan 42.2a scope: make_brady2d_lua marker substitution and scheme-table
 emission. Plan 42.2b scope: run_cpp_brady2d subprocess driver, verified with
-a fake shoccs binary so the tests stay fast and hermetic.
+a fake shoccs binary so the tests stay fast and hermetic. Plan 48 item 4.4:
+embedded-sphere cut template, growth-rate metric, cut-capable L8 dispatch,
+and the CFL knob.
 """
 
 from __future__ import annotations
 
+import math
 import re
 import stat
 from pathlib import Path
@@ -14,12 +17,22 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from stencil_gen.brady2d_stability import (
+    _L8_CUT_SCHEME_TYPE,
+    _L8_SCHEME_TYPE,
+    L8_RATE_TOL,
+    layer8_cpp_simulation,
+)
 from stencil_gen.cpp_bridge import (
+    BRADY_LIVESCU_CUT_TEMPLATE,
     BRADY_LIVESCU_TEMPLATE,
+    CUT_SPHERE_CENTER,
+    CUT_SPHERE_RADIUS,
     LUA_TEMPLATE_DIR,
     REPO_ROOT,
     SHOCCS_BINARY,
     BridgeResult,
+    compute_growth_rate,
     make_brady2d_lua,
     run_cpp_brady2d,
 )
@@ -361,6 +374,9 @@ class TestBridgeResultDefaults:
         assert r.stderr == ""
         assert r.linf_trace.shape == (0,)
         assert r.t_trace.shape == (0,)
+        assert r.growth_rate is None
+        assert r.infeasible is False
+        assert r.reason == ""
 
     def test_final_linf_defaults_to_nan(self):
         r = BridgeResult()
@@ -381,3 +397,544 @@ class TestBridgeResultDefaults:
         assert r.stable is True
         assert r.final_linf == pytest.approx(0.123)
         assert r.linf_trace.shape == (3,)
+
+
+# ---------------------------------------------------------------------------
+# Plan 48 item 4.4 — embedded-sphere cut template, growth rate, cut dispatch
+# ---------------------------------------------------------------------------
+
+
+_DOMAIN_L = math.sqrt(2.0)
+
+
+def _realized_psi_set(cx: float, cy: float, r: float, N: int) -> list[float]:
+    """Replicate the shoccs cut-cell psi computation for a sphere.
+
+    Mirrors src/mesh/object_geometry.cpp:70-95: for each grid line along each
+    axis, ray-cast from the domain min; an entering hit (ray_outside=1) at
+    position p gives psi = frac(p/h) (distance from the last fluid node to
+    the wall over h), an exiting hit (ray_outside=0) gives psi = 1 - frac(p/h)
+    (wall to first fluid node), with p/h snapped to the nearest integer when
+    within 1e-12 and psi clamped to [1e-12, 1 - 1e-12].
+
+    Cross-validated against the real binary: at N=31 with the template
+    sphere, logs/geometry.csv reports 44 cut points with min/max psi matching
+    this replication to ~1e-12 (0.0015736866200733 / 0.9992661602721697).
+    """
+    h = _DOMAIN_L / (N - 1)
+    snap = 1e-12
+    psis: list[float] = []
+    for line_center, ray_center in ((cy, cx), (cx, cy)):
+        for j in range(N):
+            b = j * h
+            d2 = r * r - (b - line_center) ** 2
+            if d2 <= 0.0:
+                continue
+            half_chord = math.sqrt(d2)
+            for p, entering in (
+                (ray_center - half_chord, True),
+                (ray_center + half_chord, False),
+            ):
+                if not 0.0 <= p <= _DOMAIN_L:
+                    continue
+                t_over_h = p / h
+                i_cell = int(round(t_over_h))
+                if abs(t_over_h - i_cell) > snap:
+                    i_cell = int(t_over_h)
+                psi = t_over_h - i_cell if entering else (i_cell + 1) - t_over_h
+                psis.append(min(max(psi, snap), 1.0 - snap))
+    return psis
+
+
+class TestCutTemplate:
+    """4.4.1 — the embedded-sphere template and its psi coverage."""
+
+    def test_cut_template_exists_with_all_markers(self):
+        assert BRADY_LIVESCU_CUT_TEMPLATE.exists()
+        text = BRADY_LIVESCU_CUT_TEMPLATE.read_text()
+        for marker in (
+            "--{{N}}--",
+            "--{{T_FINAL}}--",
+            "--{{SCHEME_TABLE}}--",
+            "--{{RADIUS}}--",
+            "--{{CFL}}--",
+        ):
+            assert marker in text, f"cut template missing marker {marker!r}"
+
+    def test_cut_template_sphere_block(self):
+        text = BRADY_LIVESCU_CUT_TEMPLATE.read_text()
+        assert re.search(r'type\s*=\s*"sphere"', text)
+        assert re.search(r'boundary_condition\s*=\s*"dirichlet"', text)
+        cx, cy = CUT_SPHERE_CENTER
+        # the template's hardcoded center must match the module constant the
+        # psi-span assertion below is computed from
+        assert re.search(
+            rf"center\s*=\s*\{{{re.escape(repr(cx))},\s*{re.escape(repr(cy))},\s*0\}}",
+            text,
+        ), "sphere center in cut template does not match CUT_SPHERE_CENTER"
+
+    def test_cut_template_keeps_exact_solution_and_system(self):
+        """system.center/radius take precedence over shapes for the exact
+        solution (scalar_wave.cpp:143-147), so the cut run solves the same
+        Brady-Livescu field as the uniform baseline."""
+        text = BRADY_LIVESCU_CUT_TEMPLATE.read_text()
+        assert re.search(r'type\s*=\s*"scalar wave"', text)
+        assert re.search(r"center\s*=\s*\{-0\.25,\s*-0\.25,\s*0\}", text)
+        assert re.search(r"max_error\s*=\s*10\.0", text)
+
+    def test_uncut_template_untouched(self):
+        """4.4.1: the original template stays the uncut regression baseline —
+        no new markers, shapes empty, CFL hardcoded."""
+        text = BRADY_LIVESCU_TEMPLATE.read_text()
+        assert "--{{RADIUS}}--" not in text
+        assert "--{{CFL}}--" not in text
+        assert re.search(r"shapes\s*=\s*\{\}", text)
+        assert re.search(r"hyperbolic\s*=\s*0\.8", text)
+
+    @pytest.mark.parametrize("N", [31, 61])
+    def test_realized_psi_spans_near_0_to_near_1(self, N):
+        """4.4.1 acceptance: the realized psi set must have points < 0.05 and
+        > 0.95 (here asserted at each N individually, stronger than the
+        plan's across-N requirement)."""
+        cx, cy = CUT_SPHERE_CENTER
+        psis = _realized_psi_set(cx, cy, CUT_SPHERE_RADIUS, N)
+        assert len(psis) >= 20, "sphere should generate a healthy cut set"
+        assert all(0.0 < p < 1.0 for p in psis)
+        assert min(psis) < 0.05, f"no near-0 psi at N={N}: min={min(psis):.4g}"
+        assert max(psis) > 0.95, f"no near-1 psi at N={N}: max={max(psis):.4g}"
+
+    def test_sphere_well_inside_domain(self):
+        cx, cy = CUT_SPHERE_CENTER
+        r = CUT_SPHERE_RADIUS
+        margin = 0.3  # keep closure supports off the domain walls
+        for c in (cx, cy):
+            assert c - r > margin
+            assert c + r < _DOMAIN_L - margin
+
+
+class TestMakeBrady2DLuaCut:
+    """4.4.1/4.4.4 — rendering the cut template; marker guard rails."""
+
+    E2_PARAMS = {"alpha": [0.0, 0.0, 0.0, 0.0]}
+
+    def _render_cut(self, **overrides) -> str:
+        kwargs = dict(
+            scheme_type="E2",
+            params=self.E2_PARAMS,
+            N=31,
+            t_final=10.0,
+            template=BRADY_LIVESCU_CUT_TEMPLATE,
+            radius=CUT_SPHERE_RADIUS,
+            cfl=0.8,
+        )
+        kwargs.update(overrides)
+        return make_brady2d_lua(**kwargs)
+
+    def test_cut_render_fills_all_markers(self):
+        rendered = self._render_cut()
+        assert "--{{" not in rendered
+        assert re.search(r'type\s*=\s*"E2"', rendered)
+        assert re.search(
+            rf"radius\s*=\s*{re.escape(repr(float(CUT_SPHERE_RADIUS)))}", rendered
+        )
+        assert re.search(r"hyperbolic\s*=\s*0\.8", rendered)
+        assert rendered.count("{") == rendered.count("}")
+
+    def test_cut_render_custom_cfl(self):
+        rendered = self._render_cut(cfl=1.0)
+        assert re.search(r"hyperbolic\s*=\s*1\.0", rendered)
+
+    def test_cfl_against_uncut_template_raises(self):
+        """4.4.4: the uncut template hardcodes cfl with no marker — a silent
+        str.replace no-op would run the wrong CFL, so this must be loud."""
+        with pytest.raises(ValueError, match="CFL"):
+            make_brady2d_lua(
+                scheme_type="E4u",
+                params={"alpha": [-0.77, 0.16]},
+                N=31,
+                t_final=10.0,
+                template=BRADY_LIVESCU_TEMPLATE,
+                cfl=0.8,
+            )
+
+    def test_radius_against_uncut_template_raises(self):
+        with pytest.raises(ValueError, match="RADIUS"):
+            make_brady2d_lua(
+                scheme_type="E4u",
+                params={"alpha": [-0.77, 0.16]},
+                N=31,
+                t_final=10.0,
+                template=BRADY_LIVESCU_TEMPLATE,
+                radius=0.25,
+            )
+
+    def test_cut_template_without_radius_raises(self):
+        with pytest.raises(ValueError, match="unfilled markers"):
+            self._render_cut(radius=None)
+
+    def test_cut_template_without_cfl_raises(self):
+        with pytest.raises(ValueError, match="unfilled markers"):
+            self._render_cut(cfl=None)
+
+
+class TestComputeGrowthRate:
+    """4.4.2 — trailing-half least-squares slope of log(L-inf)."""
+
+    def test_pure_exponential_recovers_rate(self):
+        t = np.linspace(0.0, 10.0, 201)
+        y = 1e-4 * np.exp(0.75 * t)
+        assert compute_growth_rate(t, y) == pytest.approx(0.75, rel=1e-9)
+
+    def test_decay_gives_negative_rate(self):
+        t = np.linspace(0.0, 10.0, 101)
+        y = np.exp(-1.5 * t)
+        assert compute_growth_rate(t, y) == pytest.approx(-1.5, rel=1e-9)
+
+    def test_only_trailing_half_is_fitted(self):
+        """A decaying transient in the leading half must not contaminate the
+        fitted rate: log(y) is piecewise linear with slope -3 then +0.3."""
+        t = np.linspace(0.0, 10.0, 101)
+        log_y = np.where(t < 5.0, -3.0 * t, -15.0 + 0.3 * (t - 5.0))
+        rate = compute_growth_rate(t, np.exp(log_y))
+        # trailing half = indices 50..100 = t in [5, 10], exactly the +0.3 leg
+        assert rate == pytest.approx(0.3, rel=1e-9)
+
+    def test_none_on_nonfinite_linf(self):
+        t = np.linspace(0.0, 1.0, 10)
+        y = np.ones(10)
+        y[7] = np.inf
+        assert compute_growth_rate(t, y) is None
+        y[7] = np.nan
+        assert compute_growth_rate(t, y) is None
+
+    def test_none_on_nonfinite_time(self):
+        t = np.linspace(0.0, 1.0, 10)
+        y = np.ones(10)
+        t2 = t.copy()
+        t2[3] = np.nan
+        assert compute_growth_rate(t2, y) is None
+
+    def test_none_when_linf_below_floor_throughout(self):
+        t = np.linspace(0.0, 1.0, 10)
+        y = np.full(10, 1e-15)
+        assert compute_growth_rate(t, y) is None
+
+    def test_none_on_too_short_series(self):
+        assert compute_growth_rate(np.array([]), np.array([])) is None
+        assert compute_growth_rate(np.array([0.0]), np.array([1.0])) is None
+        # size 2: trailing half is a single point — no slope
+        assert compute_growth_rate(np.array([0.0, 1.0]), np.array([1.0, 2.0])) is None
+
+    def test_none_on_zero_time_span(self):
+        t = np.zeros(10)
+        y = np.ones(10)
+        assert compute_growth_rate(t, y) is None
+
+    def test_isolated_exact_zero_is_clamped_not_fatal(self):
+        t = np.linspace(0.0, 1.0, 11)
+        y = np.ones(11)
+        y[8] = 0.0  # isolated zero in the trailing half
+        rate = compute_growth_rate(t, y)
+        assert rate is not None
+        assert math.isfinite(rate)
+
+    def test_run_cpp_brady2d_populates_growth_rate(self, tmp_path: Path):
+        """The bridge computes growth_rate from the parsed trace."""
+        rows = [_HEADER]
+        ts = "2026-07-14 08:00:00.000000"
+        t = np.linspace(0.0, 2.0, 21)
+        y = 1e-3 * np.exp(1.5 * t)
+        for step, (ti, yi) in enumerate(zip(t, y)):
+            rows.append(f"{ts},{ti},{step},{yi},-1.0,1.0,{yi},0,0,0,0,0,0,0,0.1")
+        fake = _make_fake_shoccs(tmp_path, csv_body="\n".join(rows))
+        result = run_cpp_brady2d(
+            scheme_type="E4u",
+            params={"alpha": [-0.77, 0.16]},
+            N=21,
+            t_final=2.0,
+            binary=fake,
+        )
+        assert result.exit_code == 0
+        assert result.growth_rate == pytest.approx(1.5, rel=1e-6)
+        assert result.growth_rate == pytest.approx(
+            compute_growth_rate(result.t_trace, result.linf_trace)
+        )
+
+
+_TERMINATE_BANNER = (
+    "terminate called after throwing an instance of 'std::invalid_argument'"
+)
+_E4_1_WHAT = (
+    "  what():  E4_1: alpha[1] must be >= 197/288 ≈ 0.684 to avoid interior "
+    "denominator singularity"
+)
+
+
+class TestInfeasibleDetection:
+    """4.4.3 — std::invalid_argument aborts surface as infeasible, hermetically."""
+
+    def _make_aborting_shoccs(self, tmp_path: Path) -> Path:
+        stderr_src = tmp_path / "abort_stderr.txt"
+        stderr_src.write_text(_TERMINATE_BANNER + "\n" + _E4_1_WHAT + "\n")
+        script = tmp_path / "aborting_shoccs.sh"
+        script.write_text(f"#!/bin/sh\ncat {stderr_src} >&2\nexit 134\n")
+        script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
+        return script
+
+    def test_invalid_argument_abort_is_infeasible(self, tmp_path: Path):
+        fake = self._make_aborting_shoccs(tmp_path)
+        result = run_cpp_brady2d(
+            scheme_type="E4",
+            params={"alpha": [0.1, 0.16]},
+            N=31,
+            t_final=1.0,
+            template=BRADY_LIVESCU_CUT_TEMPLATE,
+            radius=CUT_SPHERE_RADIUS,
+            cfl=0.8,
+            binary=fake,
+        )
+        assert result.infeasible is True
+        assert "197/288" in result.reason
+        assert result.reason.startswith("what():")
+        assert result.stable is False
+        assert np.isnan(result.final_linf)
+        assert result.exit_code == 134
+
+    def test_generic_failure_is_not_infeasible(self, tmp_path: Path):
+        script = tmp_path / "failing_shoccs.sh"
+        script.write_text("#!/bin/sh\necho boom >&2\nexit 2\n")
+        script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
+        result = run_cpp_brady2d(
+            scheme_type="E4u",
+            params={"alpha": [-0.77, 0.16]},
+            N=21,
+            t_final=1.0,
+            binary=script,
+        )
+        assert result.infeasible is False
+        assert result.reason == ""
+        assert result.stable is False
+
+
+class TestL8CutDispatch:
+    """4.4.3/4.4.4 — separate cut dispatch table, template selection, CFL knob.
+
+    All hermetic: run_cpp_brady2d is monkeypatched in the brady2d_stability
+    namespace (the existing TestLayer8 pattern).
+    """
+
+    def _patch_bridge(self, monkeypatch, result: BridgeResult) -> list[dict]:
+        calls: list[dict] = []
+
+        def fake(scheme_type, params, **kwargs):
+            calls.append({"scheme_type": scheme_type, "params": params, **kwargs})
+            return result
+
+        monkeypatch.setattr(
+            "stencil_gen.brady2d_stability.run_cpp_brady2d", fake,
+        )
+        return calls
+
+    def test_cut_table_contents_exact(self):
+        assert _L8_CUT_SCHEME_TYPE == {
+            ("E2", "classical"): "E2",
+            ("E4", "classical"): "E4",
+        }
+
+    def test_uniform_table_not_mutated(self):
+        """Regression: 4.4.3 must NOT touch _L8_SCHEME_TYPE — its
+        ("E4", "classical") → "E4u" entry is the uniform-validation path."""
+        assert _L8_SCHEME_TYPE == {
+            ("E4", "classical"): "E4u",
+            ("E4", "tension"): "tension_E4u",
+            ("E4", "gaussian"): "gaussian_E4u",
+            ("E4", "multiquadric"): "multiquadric_E4u",
+        }
+
+    def test_cut_dispatch_e2(self, monkeypatch):
+        stub = BridgeResult(final_linf=1e-3, stable=True, growth_rate=0.001)
+        calls = self._patch_bridge(monkeypatch, stub)
+        out = layer8_cpp_simulation(
+            "E2", "classical", {"alpha": [0.0]}, template="cut",
+        )
+        assert len(calls) == 1
+        call = calls[0]
+        assert call["scheme_type"] == "E2"
+        assert call["template"] == BRADY_LIVESCU_CUT_TEMPLATE
+        assert call["radius"] == CUT_SPHERE_RADIUS
+        assert call["cfl"] == 0.8  # default CFL for the cut template
+        assert out["stable"] is True
+        assert out["growth_rate"] == pytest.approx(0.001)
+
+    def test_cut_dispatch_e4_uses_cut_capable_type(self, monkeypatch):
+        """("E4", "classical") maps to "E4" (make_E4_1) on the cut template,
+        NOT "E4u" — the uniform-only type silently accepts shapes and
+        produces a garbage cut discretization (4.3 caveat 2)."""
+        stub = BridgeResult(final_linf=1e-3, stable=True, growth_rate=0.001)
+        calls = self._patch_bridge(monkeypatch, stub)
+        layer8_cpp_simulation(
+            "E4", "classical", {"alpha": [0.1, 0.7]}, template="cut",
+        )
+        assert calls[0]["scheme_type"] == "E4"
+
+    def test_cut_rejects_uniform_only_kernels(self, monkeypatch):
+        self._patch_bridge(monkeypatch, BridgeResult())
+        with pytest.raises(NotImplementedError, match="cut"):
+            layer8_cpp_simulation(
+                "E4", "tension", {"sigma": 3.0}, template="cut",
+            )
+
+    def test_unknown_template_raises(self, monkeypatch):
+        self._patch_bridge(monkeypatch, BridgeResult())
+        with pytest.raises(ValueError, match="unknown L8 template"):
+            layer8_cpp_simulation(
+                "E2", "classical", {"alpha": [0.0]}, template="staircase",
+            )
+
+    def test_uniform_template_keeps_blowup_verdict(self, monkeypatch):
+        """Uniform rung regression: verdict remains final_linf-based
+        (bridge stable flag), growth_rate merely reported."""
+        stub = BridgeResult(final_linf=1.75e-3, stable=True, growth_rate=0.4)
+        calls = self._patch_bridge(monkeypatch, stub)
+        out = layer8_cpp_simulation(
+            "E4", "classical", {"alpha": [-0.77, 0.16]},
+        )
+        assert calls[0]["scheme_type"] == "E4u"
+        assert calls[0]["template"] == BRADY_LIVESCU_TEMPLATE
+        assert "radius" not in calls[0]
+        assert "cfl" not in calls[0]
+        assert out["stable"] is True  # despite growth_rate > rate_tol
+        assert out["growth_rate"] == pytest.approx(0.4)
+
+    def test_cut_verdict_is_rate_based_not_blowup_based(self, monkeypatch):
+        """4.4.2: growth_rate < rate_tol replaces final_linf < 10 on the cut
+        rung — slow exponential growth with a small final error must FAIL,
+        and a bounded-but-large final error with flat rate must PASS."""
+        slow_growth = BridgeResult(final_linf=1e-3, stable=True, growth_rate=0.2)
+        calls = self._patch_bridge(monkeypatch, slow_growth)
+        out = layer8_cpp_simulation(
+            "E2", "classical", {"alpha": [0.0]}, template="cut",
+        )
+        assert out["stable"] is False
+
+    def test_cut_verdict_flat_rate_passes(self, monkeypatch):
+        flat = BridgeResult(final_linf=42.0, stable=False, growth_rate=0.0)
+        self._patch_bridge(monkeypatch, flat)
+        out = layer8_cpp_simulation(
+            "E2", "classical", {"alpha": [0.0]}, template="cut",
+        )
+        assert out["stable"] is True
+
+    def test_cut_verdict_none_rate_fails(self, monkeypatch):
+        none_rate = BridgeResult(final_linf=float("nan"), stable=False)
+        self._patch_bridge(monkeypatch, none_rate)
+        out = layer8_cpp_simulation(
+            "E2", "classical", {"alpha": [0.0]}, template="cut",
+        )
+        assert out["stable"] is False
+
+    def test_cut_rate_tol_parameter(self, monkeypatch):
+        assert L8_RATE_TOL == 0.05
+        stub = BridgeResult(final_linf=1e-3, stable=True, growth_rate=0.03)
+        self._patch_bridge(monkeypatch, stub)
+        loose = layer8_cpp_simulation(
+            "E2", "classical", {"alpha": [0.0]}, template="cut",
+        )
+        tight = layer8_cpp_simulation(
+            "E2", "classical", {"alpha": [0.0]}, template="cut", rate_tol=0.01,
+        )
+        assert loose["stable"] is True
+        assert tight["stable"] is False
+
+    def test_infeasible_propagates_and_fails(self, monkeypatch):
+        stub = BridgeResult(
+            final_linf=float("nan"),
+            stable=False,
+            infeasible=True,
+            reason="what():  E4_1: alpha[1] must be >= 197/288 ...",
+        )
+        self._patch_bridge(monkeypatch, stub)
+        out = layer8_cpp_simulation(
+            "E4", "classical", {"alpha": [0.1, 0.16]}, template="cut",
+        )
+        assert out["stable"] is False
+        assert out["infeasible"] is True
+        assert "197/288" in out["reason"]
+
+    def test_explicit_cfl_forwarded(self, monkeypatch):
+        stub = BridgeResult(final_linf=1e-3, stable=True, growth_rate=0.0)
+        calls = self._patch_bridge(monkeypatch, stub)
+        layer8_cpp_simulation(
+            "E2", "classical", {"alpha": [0.0]}, template="cut", cfl=0.4,
+        )
+        assert calls[0]["cfl"] == 0.4
+
+    def test_cfl_values_sequential_runs(self, monkeypatch):
+        stub = BridgeResult(final_linf=1e-3, stable=True, growth_rate=0.0,
+                            wall_time_s=0.5)
+        calls = self._patch_bridge(monkeypatch, stub)
+        out = layer8_cpp_simulation(
+            "E2", "classical", {"alpha": [0.0]},
+            template="cut", cfl_values=[0.4, 0.8, 1.0],
+        )
+        assert [c["cfl"] for c in calls] == [0.4, 0.8, 1.0]
+        assert sorted(out["cfl_results"]) == [0.4, 0.8, 1.0]
+        assert out["stable"] is True
+        assert out["infeasible"] is False
+        assert out["wall_time_s"] == pytest.approx(1.5)
+        for entry in out["cfl_results"].values():
+            assert entry["stable"] is True
+            assert entry["bridge_result"] is stub
+
+    def test_cfl_and_cfl_values_mutually_exclusive(self, monkeypatch):
+        self._patch_bridge(monkeypatch, BridgeResult())
+        with pytest.raises(ValueError, match="not both"):
+            layer8_cpp_simulation(
+                "E2", "classical", {"alpha": [0.0]},
+                template="cut", cfl=0.8, cfl_values=[0.8],
+            )
+
+
+class TestCutBridgeSmoke:
+    """End-to-end against the real shoccs binary (plan 48 item 4.4).
+
+    Marked @pytest.mark.slow — deselected unless --run-slow is passed.
+    Skipped entirely if the binary hasn't been built.
+    """
+
+    @pytest.mark.slow
+    def test_e4_1_below_floor_is_infeasible(self):
+        """alpha[1]=0.16 < 197/288 trips E4_1's std::invalid_argument guard
+        (E4_1.cpp:37-41) and must surface as infeasible, not a crash."""
+        if not SHOCCS_BINARY.exists():
+            pytest.skip("shoccs binary not built")
+        result = run_cpp_brady2d(
+            scheme_type="E4",
+            params={"alpha": [0.1, 0.16]},
+            N=31,
+            t_final=1.0,
+            template=BRADY_LIVESCU_CUT_TEMPLATE,
+            radius=CUT_SPHERE_RADIUS,
+            cfl=0.8,
+        )
+        assert result.infeasible is True, f"stderr: {result.stderr}"
+        assert "197/288" in result.reason
+        assert result.stable is False
+
+    @pytest.mark.slow
+    def test_e2_1_cut_run_reports_growth_rate(self):
+        """E2_1 alpha=0 on the cut template runs end-to-end and yields a
+        finite growth rate. No verdict asserted: this template's raw rate is
+        dominated by the default-floating xmax/ymax walls (4.3 caveat 1),
+        uniform and cut alike."""
+        if not SHOCCS_BINARY.exists():
+            pytest.skip("shoccs binary not built")
+        out = layer8_cpp_simulation(
+            "E2", "classical", {"alpha": [0.0, 0.0, 0.0, 0.0]},
+            N=31, t_final=1.0, template="cut",
+        )
+        br = out["bridge_result"]
+        assert br.exit_code == 0, f"stderr: {br.stderr}"
+        assert out["infeasible"] is False
+        assert out["growth_rate"] is not None
+        assert math.isfinite(out["growth_rate"])
