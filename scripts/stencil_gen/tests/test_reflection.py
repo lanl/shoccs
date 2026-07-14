@@ -4,6 +4,11 @@ Item 2.1 (mode partition): every test name contains ``mode_split`` so the
 focused run ``pytest tests/test_reflection.py -k mode_split`` selects
 exactly this item's tests.
 
+Item 2.2 (reflection matrix and margin): test names contain
+``reflection`` and deliberately avoid the -k tokens reserved for other
+items (``mode_split``, ``mirror``, ``round_trip``, ``gaussian``,
+``cutcell``).
+
 Sign convention throughout: u_t = -sum_k a_k u_{n+k} (the
 ``gks_kreiss.kappa_roots`` docstring convention).
 """
@@ -11,8 +16,22 @@ Sign convention throughout: u_t = -sum_k a_k u_{n+k} (the
 import numpy as np
 import pytest
 
-from stencil_gen.gks_kreiss import DefectiveKappaError, _classify_imag_axis
-from stencil_gen.reflection import ModeSplit, mode_split
+from stencil_gen.gks_kreiss import (
+    DefectiveKappaError,
+    _classify_imag_axis,
+    kreiss_matrix,
+    kreiss_matrix_general,
+    kreiss_stability_check,
+)
+from stencil_gen.reflection import (
+    ModeSplit,
+    ReflectionResult,
+    default_reflection_s_grid,
+    max_reflection,
+    mode_split,
+    reflection_matrix,
+    reflection_system,
+)
 
 # Centered E2 interior for u_t = -u_x: a_{-1} = -1/2, a_{+1} = 1/2.
 # Characteristic polynomial (multiply s + sum a_k kappa^k = 0 by kappa):
@@ -254,3 +273,281 @@ class TestModeSplitOrdering:
         for bucket in (split.rightgoing, split.leftgoing):
             keys = [(k.real, k.imag) for k in bucket]
             assert keys == sorted(keys)
+
+
+# ---------------------------------------------------------------------------
+# Item 2.2: reflection matrix and margin
+# ---------------------------------------------------------------------------
+
+# Forward-difference closure row at node 0 for u_t = -u_x:
+# u_t|_0 = -(u_1 - u_0), i.e. -sum_j w_j u_j with w = [-1, 1] at {0, 1}.
+E2_FWD_ROW = [(np.array([-1.0, 1.0]), np.array([0, 1]))]
+
+# Engineered det-zero closure row (same reverse-engineering pattern as
+# item 0.2's worked example, transplanted to the E2 interior because the
+# upwind toy has NO leftgoing modes and hence an empty R): with m = p = 1,
+#   det M(s) = s + w_0 + w_1*kappa(s),  kappa(s) = -s + sqrt(s^2 + 1),
+# so w = [-sqrt(2), 1] at {0, 1} gives det M(s) = sqrt(s^2 + 1) - sqrt(2)
+# exactly — a zero at s = 1 (Re > 0), a genuine GKS eigensolution.
+E2_ENGINEERED_ROW = [(np.array([-np.sqrt(2.0), 1.0]), np.array([0, 1]))]
+
+# First-order upwind interior u_t = -(u_n - u_{n-1}).
+UPWIND_WEIGHTS = np.array([-1.0, 1.0])
+UPWIND_OFFSETS = np.array([-1, 0])
+
+# m = 3 augmented E2 closure (m > p = 1: two nodal unknowns phi_0, phi_1)
+# for the assembled-equation-level normalization-invariance test.
+E2_M3_ROWS = [
+    (np.array([-1.5, 2.0, -0.5]), np.array([0, 1, 2])),
+    (np.array([-0.5, 0.5]), np.array([0, 2])),
+    (np.array([-0.6, 0.6]), np.array([1, 3])),
+]
+
+
+def _e2_kappa_mu(s: complex) -> tuple[complex, complex]:
+    """Analytic E2 roots: kappa (|.| < 1, rightgoing), mu (|.| > 1)."""
+    root_a = -s + np.sqrt(s**2 + 1)
+    root_b = -s - np.sqrt(s**2 + 1)
+    return (root_a, root_b) if abs(root_a) < abs(root_b) else (root_b, root_a)
+
+
+class TestReflectionAnalyticAnchors:
+    """Hand-derivable reflection matrices (plan 48 item 2.2)."""
+
+    def test_reflection_upwind_r_is_empty(self):
+        """First-order upwind: degree-1 characteristic polynomial, one
+        admissible root, ZERO leftgoing modes — R is p x 0 and there is
+        nothing to reflect (the plan's assert-R-is-empty anchor)."""
+        rows = [(np.array([1.0]), np.array([0]))]
+
+        R = reflection_matrix(UPWIND_WEIGHTS, UPWIND_OFFSETS, rows, 1.0 + 0.0j)
+
+        assert R.shape == (1, 0)
+
+    def test_reflection_e2_hand_derived(self):
+        """E2 central interior + one one-sided closure row: R is 1x1.
+
+        Hand derivation (m = p = 1, no nodal unknowns; node n_0 = 0):
+        substitute phi_n = mu^n + R kappa^n into the closure equation
+        s phi_0 + sum_j w_j phi_j = 0 with w = [-1, 1] at {0, 1}:
+
+            s (1 + R) + (-1)(1 + R) + 1 (mu + R kappa) = 0
+            => R (s - 1 + kappa) = -(s - 1 + mu)
+            => R(s) = -(s - 1 + mu) / (s - 1 + kappa),
+
+        with kappa = -s + sqrt(s^2 + 1) (the |kappa| < 1 branch) and
+        mu = -s - sqrt(s^2 + 1).
+        """
+        for s in (0.5 + 0.3j, 1e-6 + 0.7j, 2.0 - 1.1j):
+            kappa, mu = _e2_kappa_mu(s)
+            R_hand = -(s - 1 + mu) / (s - 1 + kappa)
+
+            R = reflection_matrix(E2_WEIGHTS, E2_OFFSETS, E2_FWD_ROW, s)
+
+            assert R.shape == (1, 1)
+            assert R[0, 0] == pytest.approx(R_hand, rel=1e-12)
+
+    def test_reflection_e2_dirichlet_damping_row_is_minus_one(self):
+        """Damping row du_0/dt = -u_0 (w = [1] at {0}) reflects R = -1.
+
+        Hand check: s phi_0 + phi_0 = 0 => (s + 1)(1 + R) = 0 => R = -1
+        for every s != -1 — frequency-independent perfect reflection.
+        """
+        for s in (0.5 + 0.3j, 1e-6 + 5.0j, 2.0 - 1.1j):
+            rows = [(np.array([1.0]), np.array([0]))]
+
+            R = reflection_matrix(E2_WEIGHTS, E2_OFFSETS, rows, s)
+
+            assert R[0, 0] == pytest.approx(-1.0, abs=1e-12)
+
+
+class TestReflectionSystemConsistency:
+    """The assembled M(s) is item 0.2's Kreiss matrix (up to the
+    deterministic alpha-column ordering, a unitary permutation that
+    preserves singular values)."""
+
+    def test_reflection_system_sigma_min_matches_kreiss_general(self):
+        """Augmented m=3 > p=1: sigma_min(M_reflection) equals
+        sigma_min(kreiss_matrix_general) — column permutations are
+        unitary, so the singular values are identical."""
+        s = 0.3 + 0.7j
+
+        M, B, split = reflection_system(E2_WEIGHTS, E2_OFFSETS, E2_M3_ROWS, s)
+        Mg = kreiss_matrix_general(E2_WEIGHTS, E2_OFFSETS, E2_M3_ROWS, s)
+
+        assert M.shape == (3, 3)
+        assert B.shape == (3, 1)
+        sv = np.linalg.svd(M, compute_uv=False)
+        svg = np.linalg.svd(Mg, compute_uv=False)
+        np.testing.assert_allclose(sv, svg, rtol=1e-12)
+
+    def test_reflection_system_m_equals_p_matches_kreiss_matrix(self):
+        """Square m = p = 1 case: M is entrywise the classic kreiss_matrix."""
+        s = 0.5 + 0.3j
+
+        M, _, _ = reflection_system(E2_WEIGHTS, E2_OFFSETS, E2_FWD_ROW, s)
+        Mk = kreiss_matrix(E2_WEIGHTS, E2_OFFSETS, E2_FWD_ROW, s)
+
+        assert M[0, 0] == pytest.approx(Mk[0, 0], rel=1e-14)
+
+
+class TestReflectionNormalizationInvariance:
+    """The reason R beats sigma_min (plan 48 item 2.2): R is invariant
+    under scaling an assembled *equation* while sigma_min(M) is not.
+
+    Implemented at the assembled-system level per the plan's review
+    caution: scaling only the stored BoundaryRow *weights* would NOT
+    preserve R (the temporal coefficient stays 1 — the spatial parts of M
+    and b scale but the s-parts do not), so the test scales row i of
+    [M(s) | b_k(s)] jointly instead.
+    """
+
+    def test_reflection_invariant_under_joint_row_scaling(self):
+        s = 0.3 + 0.7j
+        n_nodal = 2  # m - p = 3 - 1
+
+        M, B, _ = reflection_system(E2_WEIGHTS, E2_OFFSETS, E2_M3_ROWS, s)
+        R0 = np.linalg.solve(M, -B)[n_nodal:, :]
+
+        # Multiply row 1 of [M | b] jointly by 10: the equation set is
+        # unchanged, so the solution x — and hence R — is exactly
+        # unchanged.
+        M_scaled = M.copy()
+        B_scaled = B.copy()
+        M_scaled[1, :] *= 10.0
+        B_scaled[1, :] *= 10.0
+        R1 = np.linalg.solve(M_scaled, -B_scaled)[n_nodal:, :]
+
+        np.testing.assert_allclose(R1, R0, rtol=1e-12)
+        # And the public entry point agrees with the by-hand solve.
+        R_fun = reflection_matrix(E2_WEIGHTS, E2_OFFSETS, E2_M3_ROWS, s)
+        np.testing.assert_allclose(R_fun, R0, rtol=1e-12)
+
+        # Contrast: sigma_min(M) is NOT invariant under the same joint
+        # row scaling (measured: 0.0547 -> 0.0796, a 45% change).
+        sigma0 = np.linalg.svd(M, compute_uv=False)[-1]
+        sigma1 = np.linalg.svd(M_scaled, compute_uv=False)[-1]
+        assert abs(sigma1 - sigma0) > 0.1 * sigma0
+
+
+class TestReflectionSingularityEquivalence:
+    """||R(s)|| -> infinity exactly at the det M(s0) = 0 points the GKS
+    check flags (plan 48 item 2.2)."""
+
+    def test_reflection_blowup_at_engineered_det_zero(self):
+        """E2_ENGINEERED_ROW: det M(s) = sqrt(s^2+1) - sqrt(2) = 0 at
+        s0 = 1. Near s0, det M ~ (s - 1)/sqrt(2) and the numerator
+        -(s - 1 + mu) -> 2*sqrt(2), so |R(1 + eps)| ~ 4/eps -> infinity.
+        """
+        norms = []
+        for eps in (1e-2, 1e-3, 1e-4):
+            R = reflection_matrix(
+                E2_WEIGHTS, E2_OFFSETS, E2_ENGINEERED_ROW, 1.0 + eps
+            )
+            norms.append(abs(R[0, 0]))
+            # |R| ~ 4/eps (constant derived above; 5% slack).
+            assert norms[-1] == pytest.approx(4.0 / eps, rel=0.05)
+        assert norms[0] < norms[1] < norms[2]
+
+    def test_reflection_engineered_det_zero_flagged_by_gks(self):
+        """The same closure is flagged unstable by kreiss_stability_check
+        with the witness at s0 = 1 — R's pole and the GKS violation are
+        the same point."""
+        result = kreiss_stability_check(
+            E2_WEIGHTS, E2_OFFSETS, E2_ENGINEERED_ROW
+        )
+
+        assert result.is_stable is False
+        assert result.witness_sigma_min < 1e-8
+        assert abs(result.witness_s - 1.0) < 1e-3
+
+
+class TestReflectionSonicPoint:
+    """Sonic points (interior roots coalescing ON the unit circle; E2 at
+    s = +/- i) must route through the defective/borderline path — never
+    report as clean values (plan 48 items 0.1 / 2.2)."""
+
+    def test_reflection_exact_sonic_raises_defective(self):
+        """At s = i the E2 characteristic polynomial is (kappa + i)^2:
+        the mode basis is defective and reflection_matrix must raise."""
+        with pytest.raises(DefectiveKappaError):
+            reflection_matrix(E2_WEIGHTS, E2_OFFSETS, E2_FWD_ROW, 1j)
+
+    def test_reflection_sonic_grid_point_flagged_not_clean(self):
+        """max_reflection over a grid containing the exact sonic point
+        records it in defective_points and reports finite=False — the
+        defective point is observable, never a clean value — while still
+        evaluating the clean points."""
+        grid = np.array([1j, 1e-6 + 0.5j, 1e-6 + 2.0j])
+
+        result = max_reflection(
+            E2_WEIGHTS, E2_OFFSETS, E2_FWD_ROW, s_grid=grid
+        )
+
+        assert result.defective_points == (1j,)
+        assert result.finite is False
+        # The clean points were still evaluated: nan only at the sonic
+        # point, and the max comes from a clean point.
+        assert np.isnan(result.norms[0])
+        assert np.all(np.isfinite(result.norms[1:]))
+        assert np.isfinite(result.max_norm)
+        assert result.argmax_s in (grid[1], grid[2])
+
+    def test_reflection_near_sonic_amplitude_bounded(self):
+        """Measured near-sonic behavior at the eps offset (documented for
+        the 2.2 reviewer): the amplitude-normalized scalar R does NOT
+        spike like eps^{-1/2} — it stays O(1) with |R| = 1 + 2 sqrt(eps)
+        + O(eps).
+
+        Mechanism: b_k = c(mu_k) is M's own root-column function, so as
+        mu -> kappa the solve degenerates continuously to x -> -e_kappa,
+        i.e. R -> -1 (the incident and reflected modes coalesce). The
+        plan's eps^{-1/2} blowup requires two *rightgoing* roots to
+        coalesce (a genuinely defective M), which routes through
+        DefectiveKappaError instead (previous tests). The sqrt(eps)
+        signature of the sonic branch point appears in the *deviation*
+        |R| - 1 ~ 2 sqrt(eps), which this test pins down.
+        """
+        for eps in (1e-4, 1e-6, 1e-8):
+            R = reflection_matrix(
+                E2_WEIGHTS, E2_OFFSETS, E2_FWD_ROW, eps + 1j
+            )
+            r = abs(R[0, 0])
+            assert r < 1.1  # bounded: no eps^{-1/2} spike
+            # |R| - 1 = 2 sqrt(eps) + O(eps)
+            assert r - 1.0 == pytest.approx(2.0 * np.sqrt(eps), rel=0.05)
+
+
+class TestReflectionMargin:
+    """max_reflection = max over the imaginary-axis s-grid of ||R(s)||_2."""
+
+    def test_reflection_margin_damping_row_is_one(self):
+        """The damping row reflects R = -1 at every frequency, so the
+        margin over the default strip grid is exactly 1."""
+        rows = [(np.array([1.0]), np.array([0]))]
+
+        result = max_reflection(E2_WEIGHTS, E2_OFFSETS, rows)
+
+        assert isinstance(result, ReflectionResult)
+        assert result.max_norm == pytest.approx(1.0, rel=1e-10)
+        assert result.finite is True
+        assert result.defective_points == ()
+        assert result.argmax_s is not None
+
+    def test_reflection_margin_upwind_is_zero(self):
+        """Upwind has no leftgoing modes: R is p x 0 everywhere, margin 0."""
+        rows = [(np.array([1.0]), np.array([0]))]
+
+        result = max_reflection(UPWIND_WEIGHTS, UPWIND_OFFSETS, rows)
+
+        assert result.max_norm == 0.0
+        assert result.finite is True
+
+    def test_reflection_default_grid_matches_strip_convention(self):
+        """The default grid is the make_s_grid strip (Re = 1e-6) with the
+        near-origin structural-pole exclusion |omega| >= 1e-3 (the benign
+        det-zeros of items 0.4/0.5d are poles of R at s = 0)."""
+        grid = default_reflection_s_grid()
+
+        assert np.all(grid.real == pytest.approx(1e-6, abs=0.0))
+        assert np.all(np.abs(grid.imag) >= 1e-3)
