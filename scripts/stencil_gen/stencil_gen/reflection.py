@@ -106,6 +106,55 @@ own root-column function, so as mu -> kappa the solve degenerates to
 x -> -e_kappa (R -> -1) by continuity. The eps^{-1/2} blowup mechanism
 requires two *rightgoing* roots to coalesce (a genuinely defective M),
 which is exactly what the DefectiveKappaError guard routes away.
+
+Right-end closures: mirror convention (plan 48 item 2.3)
+--------------------------------------------------------
+The coordinate mirror n -> N - n' is **pure index reversal, no
+negation**: interior weights map a_k -> a_{-k} (offsets negated, weights
+unchanged), which maps kappa -> 1/kappa; closure rows likewise get
+offsets negated and node indices remapped to distance-from-the-right-end.
+Do NOT reverse-and-negate: revneg gives kappa'(s) = 1/kappa(-s) — for
+the first-order upwind toy revneg yields kappa' = 1 - s while the true
+mirror is 1/kappa = 1 + s. (The negation belongs to *codegen's
+construction* of physical right-wall coefficients from left-wall ones —
+a statement about the physical rows, not about the coordinate mirror.)
+``mirror_closure`` covers both entry points:
+
+- ``from_physical_right=True``: the inputs ARE the physical right-end
+  rows (column offsets measured from the right-end node, non-positive
+  into the domain — e.g. read off the bottom rows of an assembled D
+  matrix). Pure reversal is applied and the result feeds
+  ``reflection_matrix`` unchanged. Diagnostics/tests use this entry.
+- ``from_physical_right=False``: the inputs are the STORED LEFT-END rows
+  (``CutCellEvaluator.rows``, ``phs.uniform_boundary_weights_rbf``) and
+  the physical right end is represented via the nu = 1 codegen revneg
+  symmetry ``D[n-1-i, n-1-j] = -B[i, j]`` (``phs.build_diff_matrix_rbf``,
+  ``brady2d_stability._build_classical_diff_matrix``, and
+  ``derivative.cpp``'s right blocks). The composite map
+  (reversal of revneg) is: interior reversed, closure weights negated,
+  offsets and node indices unchanged. This is the entry the production
+  pipeline uses — plan 48 items 2.4 (``reflection_over_psi`` with
+  ``side="right"``) and 3.1 (``build_interval_operator``'s right block).
+  The negation is nu-odd-specific: for even derivative orders the
+  codegen symmetry has no sign flip and this entry point must not be
+  used (plan 48 scope is nu = 1; the parabolic program is a non-goal).
+
+Axis identity of the mirrored reflection matrix (measured; documented
+for the 2.3 reviewer): for a real ANTISYMMETRIC interior the mirrored
+interior equals the original with s -> -s, so A_R(s) is A_L(-s) up to
+the modulus-based mode-family matching. Where the kappa moduli split
+strictly across the imaginary axis (the super-sonic segment; E2:
+|omega| > 1) that matching commutes with conjugation and
+A_R(i omega) = conj(A_L(i omega)) after canonical ordering of the mode
+basis — the norm equality ||A_R(i omega)|| = ||A_L(i omega)|| of plan 48
+item 2.3(b) holds there exactly (to O(eps_imag) on the strip). On the
+SUB-sonic segment (unimodular axis roots; E2: |omega| < 1) the
+Re(s) -> 0+ admissibility limits at the two ends classify the
+propagating modes from OPPOSITE sides of the sonic branch: the
+incident/reflected roles swap (time reversal), and the measured relation
+is the reciprocal one — A_R(i omega) * conj(A_L(i omega)) -> 1 for
+p = 1, i.e. ||A_R|| ||A_L|| -> 1 as eps -> 0 — NOT norm equality. Both
+behaviors are pinned by the mirror tests in tests/test_reflection.py.
 """
 
 from __future__ import annotations
@@ -128,6 +177,8 @@ __all__ = [
     "reflection_system",
     "reflection_matrix",
     "max_reflection",
+    "MirroredClosure",
+    "mirror_closure",
 ]
 
 
@@ -622,4 +673,176 @@ def max_reflection(
         defective_points=tuple(defective),
         norms=norms,
         s_grid=s_flat,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Right-end closures: mirror convention (plan 48 item 2.3)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MirroredClosure:
+    """A right-end closure mapped to the left-half-line analysis frame.
+
+    Produced by :func:`mirror_closure`. The fields plug directly into the
+    left-half-line machinery — ``reflection_matrix`` /
+    ``reflection_system`` / ``max_reflection`` (and
+    ``gks_kreiss.kreiss_stability_check``) — to yield the right-end
+    reflection matrix A_R(s) / right-end GKS verdict:
+
+        A_R = reflection_matrix(mc.interior_weights, mc.interior_offsets,
+                                mc.boundary_rows, s,
+                                row_indices=mc.row_indices)
+
+    In the mirrored frame the mode families keep their left-half-line
+    meaning, which corresponds to the physically correct right-end roles:
+    mirrored-rightgoing (|kappa| < 1, the R-rows) are the modes radiated
+    by the right boundary (physically leftgoing), and mirrored-leftgoing
+    (the R-columns) are the modes incident on it (physically rightgoing).
+    """
+
+    interior_weights: np.ndarray
+    """Mirrored interior weights (pure reversal: values unchanged,
+    reordered to match ``interior_offsets``)."""
+
+    interior_offsets: np.ndarray
+    """Mirrored interior offsets (negated, sorted ascending)."""
+
+    boundary_rows: list
+    """Mirrored closure rows as ``BoundaryRow`` (weights, col_offsets)
+    pairs with col_offsets >= 0 renumbered to distance from the right
+    end."""
+
+    row_indices: list
+    """Grid node (distance from the right end) of each mirrored row."""
+
+
+def mirror_closure(
+    boundary_rows: list,
+    interior: tuple[np.ndarray, np.ndarray],
+    *,
+    from_physical_right: bool,
+    row_indices: list[int] | None = None,
+) -> MirroredClosure:
+    """Map a right-end closure into the left-half-line analysis frame.
+
+    Plan 48 item 2.3. The coordinate mirror n -> N - n' is **pure index
+    reversal, no negation** (see module docstring; revneg is the
+    historical sign-error trap — it belongs to codegen's construction of
+    the physical right-wall rows, not to the coordinate mirror). The
+    interior is mirrored identically for both entry points: offsets
+    negated, weights unchanged (kappa -> 1/kappa).
+
+    Parameters
+    ----------
+    boundary_rows : list[BoundaryRow]
+        Closure rows as (weights, column_offsets) pairs; interpretation
+        depends on ``from_physical_right``.
+    interior : (weights, offsets)
+        The interior stencil in the ORIGINAL (physical, left-to-right)
+        coordinate.
+    from_physical_right : bool
+        Selects the entry point:
+
+        - ``True`` — ``boundary_rows`` are the physical right-end rows in
+          the physical coordinate, column offsets measured from the
+          right-end node (non-positive, pointing into the domain) and
+          ``row_indices`` likewise non-positive (default ``[0, -1, -2,
+          ...]``: row i sits i nodes in from the right end). This is how
+          rows read off the bottom of an assembled operator look. Pure
+          reversal is applied: offsets and node indices negated, weights
+          unchanged.
+        - ``False`` — ``boundary_rows`` are the STORED LEFT-END rows
+          (column offsets >= 0, ``row_indices`` default ``[0, 1, ...]``),
+          and the physical right end is their nu = 1 codegen revneg image
+          ``D[n-1-i, n-1-j] = -B[i, j]`` (``phs.build_diff_matrix_rbf``,
+          ``brady2d_stability._build_classical_diff_matrix``,
+          ``derivative.cpp``). The composite map (pure reversal of the
+          revneg rows) is: closure weights negated, offsets and node
+          indices unchanged. Production callers use this entry point
+          (plan 48 items 2.4 ``reflection_over_psi(side="right")`` and
+          3.1 ``build_interval_operator``); it is nu-odd-specific — for
+          even nu the codegen symmetry carries no sign flip.
+    row_indices : list[int], optional
+        Grid node of each closure row in the entry point's convention
+        (see above).
+
+    Returns
+    -------
+    MirroredClosure
+        Mirrored interior + closure rows + row indices, ready for the
+        left-half-line machinery.
+
+    Raises
+    ------
+    ValueError
+        If ``row_indices`` has the wrong length, or offsets / node
+        indices have the wrong sign for the selected entry point.
+    """
+    int_weights, int_offsets = interior
+    int_weights = np.asarray(int_weights)
+    int_offsets = np.asarray(int_offsets, dtype=int)
+    # Pure index reversal of the interior (both entry points): offsets
+    # negated, weights unchanged, sorted ascending by mirrored offset.
+    order = np.argsort(-int_offsets)
+    mirrored_iw = int_weights[order].copy()
+    mirrored_io = -int_offsets[order]
+
+    m = len(boundary_rows)
+    if row_indices is None:
+        row_indices = [-i for i in range(m)] if from_physical_right else list(
+            range(m)
+        )
+    if len(row_indices) != m:
+        raise ValueError(
+            f"row_indices has length {len(row_indices)} != number of "
+            f"boundary rows ({m})"
+        )
+
+    rows_out: list = []
+    idx_out: list = []
+    for i, (weights, col_offsets) in enumerate(boundary_rows):
+        weights = np.asarray(weights)
+        col_offsets = np.asarray(col_offsets, dtype=int)
+        n_i = int(row_indices[i])
+        if from_physical_right:
+            if np.any(col_offsets > 0):
+                raise ValueError(
+                    f"Physical right-end row {i} has positive column "
+                    f"offsets {col_offsets[col_offsets > 0]}; offsets are "
+                    "measured from the right-end node and must be <= 0 "
+                    "(support inside the domain)"
+                )
+            if n_i > 0:
+                raise ValueError(
+                    f"Physical right-end row {i} has positive node index "
+                    f"{n_i}; node indices are measured from the right-end "
+                    "node and must be <= 0"
+                )
+            row_order = np.argsort(-col_offsets)
+            rows_out.append(
+                (weights[row_order].copy(), -col_offsets[row_order])
+            )
+            idx_out.append(-n_i)
+        else:
+            if np.any(col_offsets < 0):
+                raise ValueError(
+                    f"Stored left-end row {i} has negative column offsets "
+                    f"{col_offsets[col_offsets < 0]}; left closure rows "
+                    "must have offsets >= 0"
+                )
+            if n_i < 0:
+                raise ValueError(
+                    f"Stored left-end row {i} has negative node index "
+                    f"{n_i}"
+                )
+            rows_out.append((-weights, col_offsets.copy()))
+            idx_out.append(n_i)
+
+    return MirroredClosure(
+        interior_weights=mirrored_iw,
+        interior_offsets=mirrored_io,
+        boundary_rows=rows_out,
+        row_indices=idx_out,
     )
