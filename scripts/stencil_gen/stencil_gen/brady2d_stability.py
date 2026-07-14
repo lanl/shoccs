@@ -90,9 +90,12 @@ class StabilityReport:
     reflecting-hyperbolic model problem).
 
     ``layer_cutcell`` is the opt-in cut-cell normal-mode tier (plan 48
-    item 2.4): it is NEVER populated by the L1-L8 cascade
+    items 2.4 + 3.4): it is NEVER populated by the L1-L8 cascade
     (:func:`brady2d_stability_score` does not touch it) — only by the
-    separate entry point :func:`cutcell_stability_report`. Objective /
+    separate entry point :func:`cutcell_stability_report`, which fills
+    the per-end margins (``worst_kreiss_sigma``, ``max_reflection``) and
+    the two-boundary margins (``reflection_product``,
+    ``round_trip_radius``, ``interval_worst_abscissa``). Objective /
     alias wiring is plan 49.
     """
 
@@ -1391,21 +1394,37 @@ def brady2d_stability_score(
     return report
 
 
-def cutcell_stability_report(scheme, alpha: dict, *, psi_grid=None) -> StabilityReport:
-    """Opt-in cut-cell normal-mode report (plan 48 item 2.4).
+def cutcell_stability_report(
+    scheme,
+    alpha: dict,
+    *,
+    psi_grid=None,
+    psi_pairs=None,
+    N_values=None,
+    n_delta_j: int = 6,
+) -> StabilityReport:
+    """Opt-in cut-cell normal-mode report (plan 48 items 2.4 + 3.4).
 
-    Runs the psi-swept rigorous checks on a cut-cell Dirichlet closure —
-    the item-1.3 Kreiss margin (``kreiss_margin_over_psi``) and the
-    item-2.4 reflection margin (``reflection_over_psi``) — and returns a
-    :class:`StabilityReport` whose ONLY populated payload is the
-    ``layer_cutcell`` dict. This entry point is deliberately outside the
-    L1-L8 cascade: :func:`brady2d_stability_score` never populates
-    ``layer_cutcell``, ``overall_verdict`` stays ``"unknown"`` (verdict /
-    objective / alias wiring is plan 49), and ``extract_field`` reaches
-    the metrics via dotted paths like ``"layer_cutcell.max_reflection"``.
+    Runs the rigorous cut-cell checks on a Dirichlet closure and returns
+    a :class:`StabilityReport` whose ONLY populated payload is the
+    ``layer_cutcell`` dict:
 
-    Both sweeps are resolvent / root-locus based — no time integration
-    (plan 48 hard constraint) — and analyze the **Dirichlet
+    - the item-1.3 Kreiss margin (``kreiss_margin_over_psi``) and the
+      item-2.4 reflection margin (``reflection_over_psi``), both swept
+      over *psi_grid*;
+    - the item-3.3 two-boundary round-trip tier (``cutcell_round_trip``)
+      and the item-3.2 resolvent interval scan
+      (``interval_stability_scan``), both swept over the (psi_L, psi_R)
+      *psi_pairs* (item 3.4 wiring).
+
+    This entry point is deliberately outside the L1-L8 cascade:
+    :func:`brady2d_stability_score` never populates ``layer_cutcell``,
+    ``overall_verdict`` stays ``"unknown"`` (verdict / objective / alias
+    wiring is plan 49), and ``extract_field`` reaches the metrics via
+    dotted paths like ``"layer_cutcell.max_reflection"``.
+
+    All tiers are resolvent / root-locus based — no time integration, no
+    matrix powers (plan 48 hard constraint) — and analyze the **Dirichlet
     (wall-eliminated) block**, the canonical analysis object.
 
     Parameters
@@ -1417,8 +1436,19 @@ def cutcell_stability_report(scheme, alpha: dict, *, psi_grid=None) -> Stability
         Mapping from alpha symbol (or name) to value; must cover all of
         the scheme's free parameters.
     psi_grid : sequence of float, optional
-        psi values to sweep; defaults to
+        psi values for the per-end sweeps; defaults to
         ``cutcell_normal_modes.default_psi_grid()`` in both sweeps.
+    psi_pairs : sequence of (float, float), optional
+        (psi_L, psi_R) pairs for the two-boundary tiers; defaults to
+        ``interval_operator.default_interval_psi_pairs(psi_grid)`` — the
+        item-3.2 thinning (corners + diagonal + fixed-seed Latin sample)
+        of *psi_grid* crossed with itself.
+    N_values : sequence of int, optional
+        Interval lengths for the item-3.2 scan (default: its
+        ``(m_min, m_min+2, m_min+5, m_min+10, 20, 40)`` ladder).
+    n_delta_j : int
+        Width of the round-trip Dj window {Dj_min, ..., Dj_min + n-1}
+        (item 3.3 default 6; rho(E_Dj) is NOT monotone in Dj).
 
     Returns
     -------
@@ -1431,20 +1461,97 @@ def cutcell_stability_report(scheme, alpha: dict, *, psi_grid=None) -> Stability
         - ``max_reflection`` — max over feasible psi of the imaginary-axis
           reflection norm (item 2.4);
         - ``argmax_psi`` — the psi attaining it (None if no clean value);
-        - ``reflection_product`` — None; filled by the two-boundary
-          round-trip tier (plan 48 item 3.3);
-        - ``infeasible_psi`` — sorted union of the psi points either sweep
-          flagged infeasible (vanishing structural denominator — a
-          parameterization failure, never a stability verdict).
+        - ``reflection_product`` — max over feasible pairs of the
+          decoupled screen ``max_s ||A_L(s; psi_L)|| ||A_R(s; psi_R)||``
+          (item 3.3; upper-bounds the round-trip radius on the axis, so
+          product < 1 certifies the round trip for all Dj at once while
+          product > 1 alone cannot flag); nan if no clean value;
+        - ``round_trip_radius`` — max over feasible pairs, the s-grid,
+          and the Dj window of ``rho(E_Dj(s))`` (item 3.3; > 1 flags a
+          Dj-specific two-boundary resonance, < 1 certifies the round
+          trip PROVIDED each end is separately half-line stable — the
+          per-end tiers' job); inf if a per-end det-zero sits on the
+          grid; nan if no clean value;
+        - ``interval_worst_abscissa`` — max over feasible pairs and the
+          N ladder of the dense spectral abscissa ``max Re eig(-D)`` of
+          the assembled two-ended interval operator (items 3.1/3.2; the
+          tier that catches genuine finite-interval eigenvalues, e.g.
+          the E2_1 outflow law ``(1 - psi_R)/(1 + psi_R)`` at cut right
+          ends); nan if no feasible pair;
+        - ``infeasible_psi`` — sorted union of the psi points (grid
+          points and pair ends) flagged infeasible by the item-1.2 guard
+          (vanishing structural denominator — a parameterization
+          failure, never a stability verdict).
     """
-    # Local import: keeps the (sympy-heavy) cut-cell derivation stack out
+    # Local imports: keep the (sympy-heavy) cut-cell derivation stack out
     # of this module's import path for cascade-only users.
-    from stencil_gen.cutcell_normal_modes import kreiss_margin_over_psi
-    from stencil_gen.reflection import reflection_over_psi
+    from stencil_gen.cutcell_eval import make_cutcell_evaluator
+    from stencil_gen.cutcell_normal_modes import (
+        FEASIBILITY_TOL,
+        _vanishing_denominators,
+        kreiss_margin_over_psi,
+    )
+    from stencil_gen.interval_operator import (
+        default_interval_psi_pairs,
+        interval_stability_scan,
+    )
+    from stencil_gen.reflection import cutcell_round_trip, reflection_over_psi
 
     t0 = time.perf_counter()
+
+    # Per-end tiers (items 1.3 / 2.4), swept over psi_grid.
     kreiss_sweep = kreiss_margin_over_psi(scheme, alpha, psi_grid)
     refl_sweep = reflection_over_psi(scheme, alpha, psi_grid)
+
+    # Two-boundary tiers (items 3.2 / 3.3), swept over (psi_L, psi_R)
+    # pairs.  The item-1.2 feasibility guard runs once per unique end psi
+    # here so infeasible ends are (a) attributed to a specific psi in
+    # ``infeasible_psi`` and (b) excluded from BOTH pair tiers up front.
+    if psi_pairs is None:
+        psi_pairs = default_interval_psi_pairs(psi_grid)
+    pair_list = list(
+        dict.fromkeys((float(pl), float(pr)) for pl, pr in psi_pairs)
+    )
+    evaluator = make_cutcell_evaluator(scheme)
+    end_feasible = {
+        psi: not _vanishing_denominators(evaluator, psi, alpha,
+                                         FEASIBILITY_TOL)
+        for psi in sorted({p for pair in pair_list for p in pair})
+    }
+    infeasible_ends = {psi for psi, ok in end_feasible.items() if not ok}
+    feasible_pairs = [
+        pair for pair in pair_list
+        if end_feasible[pair[0]] and end_feasible[pair[1]]
+    ]
+
+    # Item 3.3: round-trip radius and decoupled reflection-product screen,
+    # worst-cased over the feasible pairs (per-pair nan = no cleanly
+    # evaluable grid point is skipped; a per-pair inf — per-end det-zero
+    # ON the grid — propagates into the margin).
+    radii: list[float] = []
+    products: list[float] = []
+    for psi_L, psi_R in feasible_pairs:
+        rt = cutcell_round_trip(
+            scheme, alpha, psi_L, psi_R, n_delta_j=n_delta_j
+        )
+        if not np.isnan(rt.round_trip_radius):
+            radii.append(float(rt.round_trip_radius))
+        if not np.isnan(rt.reflection_product):
+            products.append(float(rt.reflection_product))
+    round_trip_radius = max(radii) if radii else float("nan")
+    reflection_product = max(products) if products else float("nan")
+
+    # Item 3.2: dense spectral abscissa of the assembled interval
+    # operators, worst-cased over feasible pairs and the N ladder.
+    if feasible_pairs:
+        scan = interval_stability_scan(
+            scheme, alpha, psi_pairs=feasible_pairs, N_values=N_values
+        )
+        interval_worst_abscissa = (
+            float(scan.worst_abscissa) if scan.per_case else float("nan")
+        )
+    else:
+        interval_worst_abscissa = float("nan")
 
     report = StabilityReport.empty()
     report.layer_cutcell = {
@@ -1452,9 +1559,13 @@ def cutcell_stability_report(scheme, alpha: dict, *, psi_grid=None) -> Stability
         "worst_psi": kreiss_sweep.worst_psi,
         "max_reflection": refl_sweep.max_reflection,
         "argmax_psi": refl_sweep.argmax_psi,
-        "reflection_product": None,  # filled by 3.3 (round-trip tier)
+        "reflection_product": reflection_product,
+        "round_trip_radius": round_trip_radius,
+        "interval_worst_abscissa": interval_worst_abscissa,
         "infeasible_psi": sorted(
-            set(kreiss_sweep.infeasible_psi) | set(refl_sweep.infeasible_psi)
+            set(kreiss_sweep.infeasible_psi)
+            | set(refl_sweep.infeasible_psi)
+            | infeasible_ends
         ),
     }
     report.compute_time = time.perf_counter() - t0

@@ -1034,13 +1034,14 @@ class TestCutcellReflectionSweep:
 
 
 class TestCutcellStabilityReport:
-    """Plan 48 item 2.4: the opt-in layer_cutcell report wiring."""
+    """Plan 48 items 2.4 + 3.4: the opt-in layer_cutcell report wiring."""
 
     def test_cutcell_stability_report_populates_layer_cutcell(
         self, e2_1_alpha_zero
     ):
         """cutcell_stability_report fills exactly the plan-specified keys
-        from the item-1.3 Kreiss sweep and the item-2.4 reflection sweep."""
+        from the item-1.3 Kreiss sweep, the item-2.4 reflection sweep, and
+        (item 3.4) the item-3.3 round-trip and item-3.2 interval tiers."""
         psi_grid = [0.5, 0.9]
         report = cutcell_stability_report(E2_1, e2_1_alpha_zero,
                                           psi_grid=psi_grid)
@@ -1053,6 +1054,8 @@ class TestCutcellStabilityReport:
             "max_reflection",
             "argmax_psi",
             "reflection_product",
+            "round_trip_radius",
+            "interval_worst_abscissa",
             "infeasible_psi",
         }
         # Kreiss margin (item 1.3): finite positive witness sigma at one
@@ -1063,8 +1066,24 @@ class TestCutcellStabilityReport:
         assert np.isfinite(lc["max_reflection"])
         assert lc["max_reflection"] > 0.0
         assert lc["argmax_psi"] in psi_grid
-        # Filled by the two-boundary round-trip tier (plan 48 item 3.3).
-        assert lc["reflection_product"] is None
+        # Two-boundary tiers (item 3.4 wiring), worst-cased over the
+        # default pair thinning of psi_grid x itself: here the 4 corner
+        # pairs {0.5, 0.9}^2.  The axis round-trip radius stays below 1
+        # for every pair (the marginally-stable near-origin consistency
+        # physics; measured 1 - 6.1e-6) and the decoupled product screen
+        # upper-bounds it.
+        assert np.isfinite(lc["reflection_product"])
+        assert lc["reflection_product"] > 0.0
+        assert 0.99 < lc["round_trip_radius"] < 1.0
+        assert lc["reflection_product"] >= lc["round_trip_radius"]
+        # Interval tier: the scan catches the genuine cut-right (outflow)
+        # eigenvalue at exactly (1 - psi_R)/(1 + psi_R) — worst pair here
+        # has psi_R = 0.5, so the abscissa is 1/3 (item-3.2 outflow law;
+        # N-independent) — the tier the axis radius correctly does NOT
+        # flag (per-end det-zero off the axis, Lemma 1 hypothesis).
+        assert lc["interval_worst_abscissa"] == pytest.approx(
+            1.0 / 3.0, rel=1e-6
+        )
         assert lc["infeasible_psi"] == []
         assert report.compute_time > 0.0
 
@@ -1099,6 +1118,55 @@ class TestCutcellStabilityReport:
         assert lc["infeasible_psi"] == [0.5]
         assert lc["worst_psi"] == 0.9
         assert lc["argmax_psi"] == 0.9
+        # The two-boundary tiers exclude every pair with an infeasible
+        # end up front (item 3.4): only (0.9, 0.9) survives, so the
+        # interval abscissa is the psi_R = 0.9 outflow eigenvalue
+        # (1 - 0.9)/(1 + 0.9) = 1/19 and the round-trip margins are
+        # computed, not nan.
+        assert lc["interval_worst_abscissa"] == pytest.approx(
+            1.0 / 19.0, rel=1e-6
+        )
+        assert 0.99 < lc["round_trip_radius"] < 1.0
+        assert np.isfinite(lc["reflection_product"])
+
+    def test_cutcell_stability_report_all_infeasible(
+        self, e2_1_evaluator, e2_1_alpha_zero, monkeypatch
+    ):
+        """All psi infeasible: every margin carries its no-clean-value
+        sentinel (item-1.3 inf/None convention for the Kreiss margin, nan
+        elsewhere) and nothing is ever conflated with a verdict."""
+        monkeypatch.setattr(
+            e2_1_evaluator, "denominators",
+            frozenset({Symbol("psi") - Rational(1, 2)}),
+        )
+        report = cutcell_stability_report(E2_1, e2_1_alpha_zero,
+                                          psi_grid=[0.5])
+        lc = report.layer_cutcell
+        assert lc["infeasible_psi"] == [0.5]
+        assert lc["worst_kreiss_sigma"] == np.inf
+        assert lc["worst_psi"] is None
+        assert np.isnan(lc["max_reflection"])
+        assert lc["argmax_psi"] is None
+        assert np.isnan(lc["reflection_product"])
+        assert np.isnan(lc["round_trip_radius"])
+        assert np.isnan(lc["interval_worst_abscissa"])
+
+    def test_cutcell_stability_report_explicit_pairs(self, e2_1_alpha_zero):
+        """Explicit psi_pairs / N_values are honored (item 3.4): the
+        stable cut-left + uniform-right configuration reports clean
+        margins — radius < 1 and a tiny interval abscissa (the item-1.2
+        half-line result carried to the finite interval)."""
+        report = cutcell_stability_report(
+            E2_1, e2_1_alpha_zero,
+            psi_grid=[0.5],
+            psi_pairs=[(0.5, 1.0)],
+            N_values=(8,),
+        )
+        lc = report.layer_cutcell
+        assert lc["infeasible_psi"] == []
+        assert 0.99 < lc["round_trip_radius"] < 1.0
+        assert lc["reflection_product"] >= lc["round_trip_radius"]
+        assert lc["interval_worst_abscissa"] < 1e-6
 
 
 # ---------------------------------------------------------------------------
