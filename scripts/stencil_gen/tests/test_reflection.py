@@ -17,6 +17,10 @@ Item 2.4 (psi-swept reflection margin + report wiring): every test name
 contains ``cutcell`` (the plan's naming rule for this item) and avoids
 the other reserved tokens.
 
+Item 2.5 (Gaussian eps=0.1 mechanism calibration): every test name
+contains ``gaussian`` so ``pytest tests/test_reflection.py -k gaussian``
+selects exactly this item's tests.
+
 Sign convention throughout: u_t = -sum_k a_k u_{n+k} (the
 ``gks_kreiss.kappa_roots`` docstring convention).
 """
@@ -1076,3 +1080,148 @@ class TestCutcellStabilityReport:
         assert lc["infeasible_psi"] == [0.5]
         assert lc["worst_psi"] == 0.9
         assert lc["argmax_psi"] == 0.9
+
+
+# ---------------------------------------------------------------------------
+# Item 2.5: calibration — the Gaussian eps = 0.1 case gets a mechanism
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def gaussian_eps01_closure():
+    """The repo's documented GKS-passes-but-eigenvalue-unstable case:
+    uniform Gaussian eps = 0.1 (``build_diff_matrix_rbf``, n=20, p=2,
+    q=3, nu=1, nextra=0; see test_gks_kreiss.py
+    TestKreissIntegration.test_gaussian_known_unstable_passes_gks and the
+    plan 48 item 0.3 Findings-log recalibration of this exact closure).
+
+    Returns the assembled D, the 5-point interior read off the middle
+    row, and the m = 4 stored left-end closure rows (support columns
+    0..5) — the same all-differing-rows block item 0.3 feeds to the
+    augmented Kreiss matrix. The right end of D is the nu = 1 codegen
+    revneg image of these rows (D[n-1-i, n-1-j] = -B[i, j]), so A_R is
+    obtained via ``mirror_closure(..., from_physical_right=False)``
+    (item 2.3's production entry point).
+    """
+    from stencil_gen.phs import build_diff_matrix_rbf
+
+    n, m, t = 20, 4, 6
+    D = build_diff_matrix_rbf(n=n, p=2, q=3, epsilon=0.1,
+                              kernel="gaussian", nu=1, nextra=0)
+    io = np.arange(-2, 3)
+    iw = D[n // 2, n // 2 + io].copy()
+    # Construction guards, mirroring _extract_stencil_data_from_D's
+    # outcome for this closure (item 0.3): rows 0..3 differ from the
+    # shifted interior row, row 4 is the first interior row, and the
+    # closure support ends at column t - 1 = 5.
+    assert np.max(np.abs(D[m, m + io] - iw)) < 1e-10
+    assert np.max(np.abs(D[m - 1, (m - 1) + io] - iw)) > 1e-6
+    assert np.max(np.abs(D[:m, t:])) < 1e-15
+    left_rows = [(D[i, :t].copy(), np.arange(t)) for i in range(m)]
+    return D, iw, io, left_rows
+
+
+@pytest.fixture(scope="module")
+def gaussian_eps01_reflection(gaussian_eps01_closure):
+    """Per-end reflection margins A_L / A_R for the Gaussian eps = 0.1
+    closure on the shared default strip grid (plan 48 item 2.5)."""
+    _, iw, io, left_rows = gaussian_eps01_closure
+    row_idx = list(range(len(left_rows)))
+
+    res_L = max_reflection(iw, io, left_rows, row_indices=row_idx)
+
+    mirrored = mirror_closure(
+        left_rows, (iw, io), from_physical_right=False, row_indices=row_idx
+    )
+    res_R = max_reflection(
+        mirrored.interior_weights, mirrored.interior_offsets,
+        mirrored.boundary_rows, row_indices=mirrored.row_indices,
+    )
+    return res_L, res_R
+
+
+class TestGaussianEps01Mechanism:
+    """Plan 48 item 2.5: the two-boundary mechanism for Gaussian eps=0.1.
+
+    The closure passes the single-boundary GKS test at BOTH ends (left:
+    test_gks_kreiss.py test_gaussian_known_unstable_passes_gks; right:
+    the mirrored problem of the antisymmetric interior is the original at
+    s -> -s and checks GKS-stable, witness sigma ~ 2.5e-2 at the E4 sonic
+    frequency s ~ 1.3722j) yet is eigenvalue-unstable on the finite
+    domain (max Re eig(-D_bc) ~ +9.83e-2, the documented L3 catch). Item
+    2.5 attributes the finite-domain instability to the two-boundary
+    round-trip: each end has a finite reflection margin, but the
+    decoupled product ||A_L(s)|| * ||A_R(s)|| exceeds 1 on the imaginary
+    axis, so per-bounce amplification cannot be ruled out — the full
+    Delta-j-phased criterion rho(E_Dj) = 1 arrives in item 3.3.
+
+    Measured (recorded in the plan 48 Findings log): max ||A_L|| ~ 3.7e7
+    at s = 1e-6 - 0.1667j (the grid point nearest the excluded origin —
+    the tail of the benign structural consistency pole at s = 0 plus the
+    near det-zero at s ~ 0.1j documented in the item 0.3 findings);
+    max ||A_R|| ~ 8.9e6 at the grid edge |omega| = 20 (evanescent-mode
+    normalization growth ~ |mu|^j — cancelled in item 3.3 by the transit
+    factors K^Dj / Mdiag^-Dj); pointwise product > 1 at ALL 240 default
+    grid points, max ~ 1.2e12 inside the propagating band
+    |omega| <= 1.3722, mid-band product ~ 1.1e10 at omega = 1.
+    """
+
+    def test_gaussian_each_end_max_norm_finite(
+        self, gaussian_eps01_reflection
+    ):
+        """Each end individually is GKS-stable in the reflection sense:
+        finite ||R|| on the whole strip grid — no det M(s) = 0 blowup and
+        no defective grid points at either end (plan 48 item 2.5)."""
+        res_L, res_R = gaussian_eps01_reflection
+
+        for res, end in ((res_L, "left"), (res_R, "right")):
+            assert isinstance(res, ReflectionResult)
+            assert res.finite is True, f"{end} end not cleanly finite"
+            assert res.defective_points == ()
+            assert np.isfinite(res.max_norm)
+            assert res.max_norm > 0.0
+            assert res.argmax_s is not None
+
+    def test_gaussian_two_boundary_product_exceeds_one(
+        self, gaussian_eps01_closure, gaussian_eps01_reflection
+    ):
+        """The two-boundary mechanism: the pointwise reflection product
+        ||A_L(s)|| * ||A_R(s)|| exceeds 1 on part of the imaginary axis —
+        including strictly inside the propagating band |omega| <=
+        omega_sonic, away from both the near-origin structural pole tail
+        and the evanescent grid edge — while the dense eigenvalues
+        confirm the finite-domain instability this explains. Had the
+        product NOT exceeded 1, the round-trip explanation would be
+        falsified (plan 48 item 2.5's control direction)."""
+        D, iw, io, _ = gaussian_eps01_closure
+        res_L, res_R = gaussian_eps01_reflection
+
+        # Pointwise product on the SHARED default grid (a product of
+        # maxima at different s would not bound any round-trip).
+        np.testing.assert_array_equal(res_L.s_grid, res_R.s_grid)
+        prod = res_L.norms * res_R.norms
+        assert np.nanmax(prod) > 1.0
+
+        # Propagating band: |omega| <= omega_sonic where the interior
+        # supports unimodular modes (E4: omega_sonic ~ 1.3722), computed
+        # from the interior symbol s(theta) = -sum_k a_k e^{i k theta}.
+        theta = np.linspace(0.0, 2.0 * np.pi, 2001)
+        symbol = -(
+            np.asarray(iw, dtype=complex)
+            @ np.exp(1j * np.outer(io, theta))
+        )
+        omega_sonic = float(np.max(np.abs(symbol.imag)))
+        assert omega_sonic == pytest.approx(1.3722, abs=1e-3)
+
+        band = np.abs(res_L.s_grid.imag) <= omega_sonic
+        assert np.any(band)
+        assert np.nanmax(prod[band]) > 1.0
+        # Mid-band, far from the origin pole tail and the grid edge.
+        i_mid = int(np.argmin(np.abs(res_L.s_grid.imag - 1.0)))
+        assert prod[i_mid] > 1.0
+
+        # Context anchor: the finite-domain eigenvalue instability that
+        # this mechanism explains (the documented L3 catch).
+        from stencil_gen.phs import stability_eigenvalue_from_matrix
+
+        assert stability_eigenvalue_from_matrix(D) > 0.0
