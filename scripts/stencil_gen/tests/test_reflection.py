@@ -9,6 +9,10 @@ Item 2.2 (reflection matrix and margin): test names contain
 items (``mode_split``, ``mirror``, ``round_trip``, ``gaussian``,
 ``cutcell``).
 
+Item 2.3 (right-end closures, mirror convention): every test name
+contains ``mirror`` so ``pytest tests/test_reflection.py -k mirror``
+selects exactly this item's tests.
+
 Sign convention throughout: u_t = -sum_k a_k u_{n+k} (the
 ``gks_kreiss.kappa_roots`` docstring convention).
 """
@@ -19,15 +23,18 @@ import pytest
 from stencil_gen.gks_kreiss import (
     DefectiveKappaError,
     _classify_imag_axis,
+    kappa_roots,
     kreiss_matrix,
     kreiss_matrix_general,
     kreiss_stability_check,
 )
 from stencil_gen.reflection import (
+    MirroredClosure,
     ModeSplit,
     ReflectionResult,
     default_reflection_s_grid,
     max_reflection,
+    mirror_closure,
     mode_split,
     reflection_matrix,
     reflection_system,
@@ -551,3 +558,271 @@ class TestReflectionMargin:
 
         assert np.all(grid.real == pytest.approx(1e-6, abs=0.0))
         assert np.all(np.abs(grid.imag) >= 1e-3)
+
+
+# ---------------------------------------------------------------------------
+# Item 2.3: right-end closures (mirror convention)
+# ---------------------------------------------------------------------------
+
+# 3-point form of the E2 central interior, matching the assembled-matrix
+# layout of phs.build_diff_matrix_rbf (the zero center weight changes
+# neither the characteristic polynomial nor p = L_left = 1).
+E2_INTERIOR_3PT = (np.array([-0.5, 0.0, 0.5]), np.array([-1, 0, 1]))
+
+
+@pytest.fixture(scope="module")
+def e2_classical_closure():
+    """E2 classical closure (tension sigma = 0 — the repo's classical-E2
+    family; ``derive_boundary(p=1)`` has zero free alphas, so sigma = 0
+    is the alpha = 0 configuration) plus the assembled D matrix whose
+    right end is the nu = 1 codegen revneg image of the left rows
+    (``D[n-1-i, n-1-j] = -B[i, j]``)."""
+    from stencil_gen.phs import build_diff_matrix_rbf
+
+    n, r, t = 20, 3, 4  # compute_dimensions(p=1, q=2, s=0, nextra=0, nu=1)
+    D = build_diff_matrix_rbf(n=n, p=1, q=2, epsilon=0.0, kernel="tension",
+                              nu=1, nextra=0)
+    # Construction guard: the first non-closure row is the centered E2
+    # interior stencil.
+    np.testing.assert_allclose(D[r, r - 1:r + 2], [-0.5, 0.0, 0.5],
+                               atol=1e-12)
+    left_rows = [(D[i, :t].copy(), np.arange(t)) for i in range(r)]
+    return D, left_rows, n, r, t
+
+
+class TestMirrorConvention:
+    """Plan 48 item 2.3: pure index reversal, NOT reverse-and-negate."""
+
+    def test_mirror_upwind_interior_root_is_one_plus_s(self):
+        """Plan worked check (a): the mirrored upwind interior's root is
+        analytically 1/kappa = 1 + s.
+
+        Upwind u_t = -(u_n - u_{n-1}) has kappa(s) = 1/(1 + s). The pure
+        index reversal maps offsets [-1, 0] -> [0, 1] with weights
+        unchanged, so the mirrored characteristic equation is
+        s + 1 - kappa' = 0 => kappa' = 1 + s = 1/kappa. The historical
+        sign-error trap, reverse-AND-negate, would instead give
+        kappa' = 1/kappa(-s) = 1 - s — asserted against below.
+        """
+        mirrored = mirror_closure(
+            [], (UPWIND_WEIGHTS, UPWIND_OFFSETS), from_physical_right=False
+        )
+        assert isinstance(mirrored, MirroredClosure)
+        np.testing.assert_array_equal(mirrored.interior_offsets, [0, 1])
+        np.testing.assert_allclose(mirrored.interior_weights, [1.0, -1.0])
+
+        for s in (0.5 + 0.0j, 0.3 + 0.2j, 2.0 - 1.5j):
+            roots, _, _ = kappa_roots(
+                mirrored.interior_weights, mirrored.interior_offsets, s
+            )
+            assert len(roots) == 1
+            kappa_left = 1.0 / (1.0 + s)
+            assert roots[0] == pytest.approx(1.0 / kappa_left, rel=1e-12)
+            # Revneg trap: 1/kappa(-s) = 1 - s is NOT the mirror root.
+            assert abs(roots[0] - (1.0 - s)) > 0.5
+
+    def test_mirror_interior_pure_reversal_both_entry_points(self):
+        """The interior map is identical for both entry points: offsets
+        negated, weights unchanged. For the antisymmetric E2 interior the
+        mirror equals its own negation (a_{-k} = -a_k)."""
+        for fpr in (True, False):
+            mirrored = mirror_closure(
+                [], E2_INTERIOR_3PT, from_physical_right=fpr
+            )
+            np.testing.assert_array_equal(
+                mirrored.interior_offsets, [-1, 0, 1]
+            )
+            np.testing.assert_allclose(
+                mirrored.interior_weights, [0.5, 0.0, -0.5]
+            )
+            np.testing.assert_allclose(
+                mirrored.interior_weights, -E2_INTERIOR_3PT[0]
+            )
+
+    def test_mirror_stored_left_composite_map(self):
+        """from_physical_right=False (stored left-end rows relying on the
+        codegen revneg symmetry): closure weights negated, offsets and
+        node indices unchanged."""
+        mirrored = mirror_closure(
+            E2_M3_ROWS, E2_INTERIOR_3PT, from_physical_right=False
+        )
+
+        assert mirrored.row_indices == [0, 1, 2]
+        assert len(mirrored.boundary_rows) == 3
+        for (mw, mo), (w, o) in zip(mirrored.boundary_rows, E2_M3_ROWS):
+            np.testing.assert_allclose(mw, -w)
+            np.testing.assert_array_equal(mo, o)
+
+    def test_mirror_physical_right_pure_reversal(self):
+        """from_physical_right=True: offsets and node indices negated,
+        weights unchanged (reordered to ascending mirrored offsets)."""
+        # One physical right-end row at the right-end node itself
+        # (node 0), support 2 nodes into the domain.
+        phys_rows = [(np.array([1.0, -4.0, 3.0]), np.array([-2, -1, 0]))]
+
+        mirrored = mirror_closure(
+            phys_rows, E2_INTERIOR_3PT, from_physical_right=True
+        )
+
+        assert mirrored.row_indices == [0]
+        mw, mo = mirrored.boundary_rows[0]
+        np.testing.assert_array_equal(mo, [0, 1, 2])
+        np.testing.assert_allclose(mw, [3.0, -4.0, 1.0])
+
+    def test_mirror_entry_points_agree_on_assembled_operator(
+        self, e2_classical_closure
+    ):
+        """The two entry points are consistent on the repo's actual
+        assembly: rows read off the BOTTOM of ``build_diff_matrix_rbf``'s
+        D (physical right end, built by revneg from the left rows) fed
+        through from_physical_right=True equal the stored LEFT rows fed
+        through from_physical_right=False."""
+        D, left_rows, n, r, t = e2_classical_closure
+
+        phys_right = []
+        for i in range(r):
+            row = n - 1 - i
+            weights = D[row, n - t:].copy()
+            offsets = np.arange(n - t, n) - (n - 1)  # -(t-1) .. 0
+            phys_right.append((weights, offsets))
+
+        via_physical = mirror_closure(
+            phys_right, E2_INTERIOR_3PT, from_physical_right=True,
+            row_indices=[0, -1, -2],
+        )
+        via_stored = mirror_closure(
+            left_rows, E2_INTERIOR_3PT, from_physical_right=False
+        )
+
+        np.testing.assert_array_equal(
+            via_physical.interior_offsets, via_stored.interior_offsets
+        )
+        np.testing.assert_array_equal(
+            via_physical.interior_weights, via_stored.interior_weights
+        )
+        assert via_physical.row_indices == via_stored.row_indices == [0, 1, 2]
+        for (wa, oa), (wb, ob) in zip(
+            via_physical.boundary_rows, via_stored.boundary_rows
+        ):
+            np.testing.assert_array_equal(oa, ob)
+            np.testing.assert_array_equal(wa, wb)  # exact: same floats
+
+    def test_mirror_e2_classical_norm_equality_on_axis(
+        self, e2_classical_closure
+    ):
+        """Plan worked check (b): antisymmetric interior + symmetric
+        closure (E2 classical, alpha = 0) gives ||A_R(i omega)|| =
+        ||A_L(i omega)|| on the axis.
+
+        For a real antisymmetric interior the mirrored problem is the
+        original at s -> -s, so A_R(i omega) = conj(A_L(i omega))
+        wherever the mode-family matching is continuous across the axis —
+        the super-sonic segment |omega| > 1, where the kappa moduli split
+        strictly (on the sub-sonic segment the roles swap instead; see
+        the companion reciprocal test). Norms are compared per the plan;
+        for p = 1 the mode basis is 1x1, canonical ordering is trivial,
+        and the entrywise conjugation identity is asserted too.
+        """
+        _, left_rows, _, r, _ = e2_classical_closure
+        iw, io = E2_INTERIOR_3PT
+        row_idx = list(range(r))
+        mirrored = mirror_closure(
+            left_rows, E2_INTERIOR_3PT, from_physical_right=False
+        )
+
+        # Exact axis (super-sonic: strict modulus split, identity exact).
+        for omega in (1.3, 1.7, 2.6, -1.3, -2.6):
+            s = 1j * omega
+            A_L = reflection_matrix(iw, io, left_rows, s,
+                                    row_indices=row_idx)
+            A_R = reflection_matrix(
+                mirrored.interior_weights, mirrored.interior_offsets,
+                mirrored.boundary_rows, s,
+                row_indices=mirrored.row_indices,
+            )
+            assert A_L.shape == A_R.shape == (1, 1)
+            norm_L = np.linalg.norm(A_L, 2)
+            norm_R = np.linalg.norm(A_R, 2)
+            assert norm_R == pytest.approx(norm_L, rel=1e-10), (
+                f"norm equality fails at omega={omega}"
+            )
+            assert A_R[0, 0] == pytest.approx(np.conj(A_L[0, 0]), rel=1e-10)
+
+        # Strip points (make_s_grid convention): equality to O(eps_imag).
+        for omega in (1.3, 1.7, 2.6, 4.0, -1.8):
+            s = 1e-6 + 1j * omega
+            A_L = reflection_matrix(iw, io, left_rows, s,
+                                    row_indices=row_idx)
+            A_R = reflection_matrix(
+                mirrored.interior_weights, mirrored.interior_offsets,
+                mirrored.boundary_rows, s,
+                row_indices=mirrored.row_indices,
+            )
+            assert np.linalg.norm(A_R, 2) == pytest.approx(
+                np.linalg.norm(A_L, 2), rel=1e-4
+            )
+
+    def test_mirror_e2_classical_sub_sonic_reciprocal(
+        self, e2_classical_closure
+    ):
+        """Measured companion to the norm-equality check (documented for
+        the 2.3 reviewer): on the SUB-sonic axis segment (E2:
+        |omega| < 1, both roots unimodular at eps = 0) the Re(s) -> 0+
+        admissibility limits at the two ends classify the propagating
+        modes from opposite sides of the sonic branch — the
+        incident/reflected roles swap (time reversal) and the relation is
+        the reciprocal A_R * conj(A_L) -> 1 (p = 1), NOT norm equality.
+        Measured: |A_L| ~ 177 vs |A_R| ~ 0.0056 at omega = 0.3 with
+        product -> 1 like O(eps)."""
+        _, left_rows, _, r, _ = e2_classical_closure
+        iw, io = E2_INTERIOR_3PT
+        row_idx = list(range(r))
+        mirrored = mirror_closure(
+            left_rows, E2_INTERIOR_3PT, from_physical_right=False
+        )
+
+        for omega in (0.3, 0.7, -0.4):
+            s = 1e-6 + 1j * omega
+            A_L = reflection_matrix(iw, io, left_rows, s,
+                                    row_indices=row_idx)
+            A_R = reflection_matrix(
+                mirrored.interior_weights, mirrored.interior_offsets,
+                mirrored.boundary_rows, s,
+                row_indices=mirrored.row_indices,
+            )
+            norm_L = np.linalg.norm(A_L, 2)
+            norm_R = np.linalg.norm(A_R, 2)
+            # Reciprocal relation, entrywise and in norm ...
+            assert A_R[0, 0] * np.conj(A_L[0, 0]) == pytest.approx(
+                1.0, abs=1e-4
+            )
+            assert norm_L * norm_R == pytest.approx(1.0, abs=1e-4)
+            # ... and emphatically NOT norm equality.
+            assert norm_L / norm_R > 10.0
+
+    def test_mirror_validation_rejects_wrong_conventions(self):
+        """Sign/shape validation of the two entry points."""
+        left_like = [(np.array([-1.0, 1.0]), np.array([0, 1]))]
+        right_like = [(np.array([-1.0, 1.0]), np.array([-1, 0]))]
+
+        # Physical-right entry: offsets measured from the right-end node
+        # must be <= 0, node indices <= 0.
+        with pytest.raises(ValueError, match="positive column offsets"):
+            mirror_closure(left_like, E2_INTERIOR_3PT,
+                           from_physical_right=True)
+        with pytest.raises(ValueError, match="positive node index"):
+            mirror_closure(right_like, E2_INTERIOR_3PT,
+                           from_physical_right=True, row_indices=[1])
+
+        # Stored-left entry: offsets and node indices must be >= 0.
+        with pytest.raises(ValueError, match="negative column offsets"):
+            mirror_closure(right_like, E2_INTERIOR_3PT,
+                           from_physical_right=False)
+        with pytest.raises(ValueError, match="negative node index"):
+            mirror_closure(left_like, E2_INTERIOR_3PT,
+                           from_physical_right=False, row_indices=[-1])
+
+        # Row-index count must match the row count.
+        with pytest.raises(ValueError, match="row_indices"):
+            mirror_closure(left_like, E2_INTERIOR_3PT,
+                           from_physical_right=False, row_indices=[0, 1])
