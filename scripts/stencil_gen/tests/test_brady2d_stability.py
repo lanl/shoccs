@@ -165,7 +165,7 @@ class TestStabilityReport:
             eigenvector_condition=10.0,
             pseudospectral_abscissae={1e-2: -0.5},
             kreiss_constant=3.0,
-            transient_growth_bound=3.0 * np.e,
+            transient_growth_estimate=3.0 * np.e,
             n=100,
             compute_time=1.0,
         )
@@ -667,8 +667,9 @@ class TestLayer7WithNonNormality:
             f"Classical E4 spectral_abscissa={report.spectral_abscissa:.6e} "
             f"exceeds L7_TOL={L7_TOL}"
         )
-        assert report.transient_growth_bound <= L7_TRANSIENT_GROWTH_TOL, (
-            f"Classical E4 transient_growth_bound={report.transient_growth_bound:.2f} "
+        assert report.transient_growth_estimate <= L7_TRANSIENT_GROWTH_TOL, (
+            f"Classical E4 transient_growth_estimate="
+            f"{report.transient_growth_estimate:.2f} "
             f"exceeds L7_TRANSIENT_GROWTH_TOL={L7_TRANSIENT_GROWTH_TOL}"
         )
         # Sanity: all fields populated and finite
@@ -694,11 +695,11 @@ class TestLayer7WithNonNormality:
         )
         # The known-unstable scheme must fail on at least one criterion
         fails_spectral = report.spectral_abscissa > L7_TOL
-        fails_transient = report.transient_growth_bound > L7_TRANSIENT_GROWTH_TOL
+        fails_transient = report.transient_growth_estimate > L7_TRANSIENT_GROWTH_TOL
         assert fails_spectral or fails_transient, (
             f"Gaussian eps={eps} should fail: "
             f"spectral_abscissa={report.spectral_abscissa:.6e}, "
-            f"transient_growth_bound={report.transient_growth_bound:.2f}"
+            f"transient_growth_estimate={report.transient_growth_estimate:.2f}"
         )
 
     @pytest.mark.slow
@@ -713,7 +714,7 @@ class TestLayer7WithNonNormality:
         assert report.henrici_departure >= 0.0
         assert np.isfinite(report.kreiss_constant)
         assert report.kreiss_constant >= 0.0
-        assert np.isfinite(report.transient_growth_bound)
+        assert np.isfinite(report.transient_growth_estimate)
         assert report.compute_time > 0.0
         assert isinstance(report.pseudospectral_abscissae, dict)
         assert len(report.pseudospectral_abscissae) > 0

@@ -587,9 +587,9 @@ class TestComputeNonNormality:
         # Kreiss constant should be < 1 for stable normal matrix
         assert report.kreiss_constant < 1.0
 
-        # Transient growth bound = e * K
+        # Transient growth estimate = e * K (grid-sampled)
         import math
-        assert report.transient_growth_bound == pytest.approx(
+        assert report.transient_growth_estimate == pytest.approx(
             math.e * report.kreiss_constant, rel=1e-12
         )
 
@@ -618,8 +618,8 @@ class TestComputeNonNormality:
         # Kreiss constant >> 1
         assert report.kreiss_constant > 10.0
 
-        # Transient growth bound >> 1
-        assert report.transient_growth_bound > 10.0
+        # Transient growth estimate >> 1
+        assert report.transient_growth_estimate > 10.0
 
         # Cross-check: numerical_abscissa >= spectral_abscissa
         assert report.numerical_abscissa >= report.spectral_abscissa - 1e-9
@@ -643,6 +643,43 @@ class TestComputeNonNormality:
         assert len(report.pseudospectral_abscissae) == 2
         assert 1e-2 in report.pseudospectral_abscissae
         assert 1e-1 in report.pseudospectral_abscissae
+
+    def test_transient_growth_bound_deprecated_alias(self):
+        """Legacy name is a deprecated alias for transient_growth_estimate.
+
+        Plan 48 item 4.2 honesty fix: e*K is NOT an upper bound on
+        max_{t>=0} ||exp(tL)|| — the Kreiss matrix theorem gives
+        K <= sup <= e*n*K, and the grid-sampled K underestimates the true
+        Kreiss constant.  The field was renamed to
+        ``transient_growth_estimate``; the old name is kept as a deprecated
+        alias property so dotted paths and persisted JSON keep working.
+        """
+        L = sp.diags([-2.0, -1.0, -0.5], format="csr")
+        report = compute_non_normality(L)
+        with pytest.warns(DeprecationWarning, match="transient_growth_estimate"):
+            legacy = report.transient_growth_bound
+        assert legacy == report.transient_growth_estimate
+
+    def test_transient_growth_alias_dotted_path(self):
+        """The deprecated alias keeps ``non_normality.*`` dotted paths working.
+
+        ``optimizer.extract_field`` traverses non-dict nodes via getattr, so
+        ``non_normality.transient_growth_bound`` must still resolve to the
+        renamed value (plan 48 item 4.2 back-compat requirement).
+        """
+        import warnings
+
+        from stencil_gen.brady2d_stability import StabilityReport
+        from stencil_gen.optimizer import extract_field
+
+        L = sp.diags([-2.0, -1.0, -0.5], format="csr")
+        nn = compute_non_normality(L)
+        report = StabilityReport(non_normality=nn, overall_verdict="pass")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            legacy_val = extract_field(report, "non_normality.transient_growth_bound")
+        new_val = extract_field(report, "non_normality.transient_growth_estimate")
+        assert legacy_val == new_val == nn.transient_growth_estimate
 
     def test_cross_check_numerical_ge_spectral(self):
         """Numerical abscissa >= spectral abscissa for random matrix."""
@@ -693,8 +730,8 @@ class TestComputeNonNormality:
         # Kreiss constant should be finite
         assert np.isfinite(report.kreiss_constant)
 
-        # Transient growth bound should be finite
-        assert np.isfinite(report.transient_growth_bound)
+        # Transient growth estimate should be finite
+        assert np.isfinite(report.transient_growth_estimate)
 
         # All pseudospectral abscissae should be finite or -inf
         for eps, alpha in report.pseudospectral_abscissae.items():

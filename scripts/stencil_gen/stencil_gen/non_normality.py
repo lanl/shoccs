@@ -11,12 +11,18 @@ Metrics provided:
 - eigenvector condition number: cond(V) where L = V diag(lambda) V^{-1}
 - pseudospectral abscissa: max Re(s) such that sigma_min(sI - L) <= epsilon
 - Kreiss constant: max Re(s)/sigma_min(sI - L) for Re(s) > 0
-- transient growth bound: e * Kreiss constant (Kreiss matrix theorem)
+- transient growth estimate: e * grid-sampled Kreiss constant.  This is a
+  lower-bound-flavored estimate of max_{t>=0} ||exp(tL)||, NOT an upper
+  bound: the Kreiss matrix theorem brackets the supremum as
+  K <= max_{t>=0} ||exp(tL)|| <= e*n*K, and the grid-sampled K is itself an
+  underestimate of the true Kreiss constant.  A rigorous upper bound would
+  be e*n*K.
 """
 
 from __future__ import annotations
 
 import logging
+import warnings
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -49,10 +55,15 @@ class NonNormalityReport:
     """epsilon -> alpha_epsilon for each requested epsilon."""
 
     kreiss_constant: float
-    """max Re(s) / sigma_min(sI - L) over Re(s) > 0."""
+    """max Re(s) / sigma_min(sI - L) over Re(s) > 0, sampled on a finite
+    s-grid — an underestimate of the true Kreiss constant."""
 
-    transient_growth_bound: float
-    """e * kreiss_constant — upper bound on max_{t>=0} ||exp(Lt)||."""
+    transient_growth_estimate: float
+    """Lower-bound-flavored estimate of max_{t>=0} ||exp(tL)||: e × the
+    grid-sampled Kreiss constant.  NOT an upper bound — the Kreiss matrix
+    theorem gives K <= max_{t>=0} ||exp(tL)|| <= e*n*K, and the grid-sampled
+    K itself underestimates the true K; a rigorous upper bound would be
+    e*n*K.  (Renamed from ``transient_growth_bound`` by plan 48 item 4.2.)"""
 
     n: int
     """Matrix dimension."""
@@ -62,6 +73,25 @@ class NonNormalityReport:
 
     notes: list[str] = field(default_factory=list)
     """Diagnostic notes (convergence warnings, fallbacks, etc.)."""
+
+    @property
+    def transient_growth_bound(self) -> float:
+        """Deprecated alias for :attr:`transient_growth_estimate`.
+
+        Kept so dotted paths (``non_normality.transient_growth_bound``) and
+        consumers of persisted JSON written before the plan-48 4.2 rename
+        keep working.  The old name overstated the metric: e*K is not an
+        upper bound on max_{t>=0} ||exp(tL)|| (see
+        :attr:`transient_growth_estimate`).
+        """
+        warnings.warn(
+            "NonNormalityReport.transient_growth_bound is deprecated; use "
+            "transient_growth_estimate (the value is a lower-bound-flavored "
+            "estimate, not an upper bound)",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.transient_growth_estimate
 
 
 # ---------------------------------------------------------------------------
@@ -532,7 +562,9 @@ def compute_non_normality(
     else:
         kc = 0.0
 
-    tgb = math.e * kc
+    # e × grid-sampled Kreiss constant: a lower-bound-flavored estimate of
+    # max_{t>=0} ||exp(tL)|| (rigorous upper bound would be e*n*K).
+    tge = math.e * kc
 
     elapsed = time.perf_counter() - t0
 
@@ -543,7 +575,7 @@ def compute_non_normality(
         eigenvector_condition=ec,
         pseudospectral_abscissae=psa,
         kreiss_constant=kc,
-        transient_growth_bound=tgb,
+        transient_growth_estimate=tge,
         n=n,
         compute_time=elapsed,
         notes=notes,

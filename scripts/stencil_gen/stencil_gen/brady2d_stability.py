@@ -220,7 +220,7 @@ class StabilityReport:
             lines.append(
                 f"L7+ Non-normality  :       "
                 f"kreiss_K={nn.kreiss_constant:.2f}  "
-                f"tgb={nn.transient_growth_bound:.2f}  "
+                f"tgb={nn.transient_growth_estimate:.2f}  "
                 f"henrici={nn.henrici_departure:.4e}"
             )
 
@@ -848,6 +848,11 @@ def layer6_non_normality(
         henrici_departure : float
         kreiss_constant : float
         transient_growth_bound : float
+            e × grid-sampled Kreiss constant — a lower-bound-flavored
+            estimate of max transient growth, not an upper bound (plan 48
+            item 4.2).  The dict key keeps the legacy name so dotted-path
+            objectives and persisted JSON keep working; the report field is
+            ``NonNormalityReport.transient_growth_estimate``.
         compute_time : float
         non_normality_report : NonNormalityReport
     """
@@ -869,7 +874,7 @@ def layer6_non_normality(
         "L6 %s/%s n=%d: spectral_abscissa=%.6e, kreiss_K=%.2f, "
         "tgb=%.2f, compute_time=%.1fs",
         scheme, kernel, n, report.spectral_abscissa,
-        report.kreiss_constant, report.transient_growth_bound,
+        report.kreiss_constant, report.transient_growth_estimate,
         report.compute_time,
     )
 
@@ -878,7 +883,10 @@ def layer6_non_normality(
         "numerical_abscissa": report.numerical_abscissa,
         "henrici_departure": report.henrici_departure,
         "kreiss_constant": report.kreiss_constant,
-        "transient_growth_bound": report.transient_growth_bound,
+        # Legacy dict key kept for dotted-path objectives and persisted JSON
+        # (known_values.json); the value is the renamed
+        # transient_growth_estimate (plan 48 item 4.2).
+        "transient_growth_bound": report.transient_growth_estimate,
         "compute_time": report.compute_time,
         "non_normality_report": report,
     }
@@ -1032,13 +1040,22 @@ def layer7_sparse_2d_eigenvalue(
     }
 
 
-# Layer-6 threshold: transient growth bound on the 1D operator.
+# Layer-6 threshold: transient growth estimate on the 1D operator.
 # This is the standalone non-normality check on the 1D diff matrix, cheaper
 # than the full 2D L7 check.  The threshold is the same as L7 since the
 # 1D operator should be at least as well-behaved as the 2D one.
+#
+# Honesty note (plan 48 item 4.2): the gated metric e*K is a
+# lower-bound-flavored ESTIMATE of max transient growth, not an upper bound
+# — the Kreiss matrix theorem gives K <= sup_t ||exp(tL)|| <= e*n*K, and the
+# grid-sampled K underestimates the true K.  The 50.0 threshold is
+# CALIBRATED against known-good/known-bad closures, not derived from the
+# theorem, so it stays unchanged under the rename.
 L6_TRANSIENT_GROWTH_TOL = 50.0
 
-# Transient growth bound threshold for L7+non-normality combined check.
+# Transient growth estimate threshold for the L7+non-normality combined
+# check.  Same honesty note as L6_TRANSIENT_GROWTH_TOL above: calibrated
+# gate on a lower-bound-flavored estimate, not a derived bound.
 L7_TRANSIENT_GROWTH_TOL = 50.0
 
 
@@ -1053,14 +1070,14 @@ def layer7_with_non_normality(
     Builds the reduced 2D Brady-Livescu operator at a single grid size and
     computes the full non-normality report (spectral abscissa, numerical
     abscissa, Henrici departure, pseudospectral abscissa, Kreiss constant,
-    transient growth bound).
+    transient growth estimate).
 
     This links L6 infrastructure to the actual BL operator — L6 defines the
     metric functions, this wires them to the BL coefficient field.
 
     Failure criteria:
     - spectral_abscissa > L7_TOL (5e-3), OR
-    - transient_growth_bound > L7_TRANSIENT_GROWTH_TOL (50.0).
+    - transient_growth_estimate > L7_TRANSIENT_GROWTH_TOL (50.0).
 
     Parameters
     ----------
@@ -1084,9 +1101,9 @@ def layer7_with_non_normality(
     report = compute_non_normality(L_red)
     logger.debug(
         "L7+non-normality %s/%s N=%d: spectral_abscissa=%.6e, "
-        "transient_growth_bound=%.2f, kreiss_constant=%.2f, compute_time=%.1fs",
+        "transient_growth_estimate=%.2f, kreiss_constant=%.2f, compute_time=%.1fs",
         scheme, kernel, N, report.spectral_abscissa,
-        report.transient_growth_bound, report.kreiss_constant,
+        report.transient_growth_estimate, report.kreiss_constant,
         report.compute_time,
     )
     return report
@@ -1333,7 +1350,7 @@ def brady2d_stability_score(
         elif tgb > L6_TRANSIENT_GROWTH_TOL:
             _record_failure(
                 6,
-                f"1D transient_growth_bound={tgb:.2f} "
+                f"1D transient_growth_estimate={tgb:.2f} "
                 f"> L6_TRANSIENT_GROWTH_TOL={L6_TRANSIENT_GROWTH_TOL}",
             )
         if _should_stop():
@@ -1356,11 +1373,11 @@ def brady2d_stability_score(
 
         # Non-normality diagnostics on the 2D BL operator (combined L6+L7)
         report.non_normality = layer7_with_non_normality(scheme, kernel, params)
-        if report.non_normality.transient_growth_bound > L7_TRANSIENT_GROWTH_TOL:
+        if report.non_normality.transient_growth_estimate > L7_TRANSIENT_GROWTH_TOL:
             _record_failure(
                 7,
-                f"transient_growth_bound="
-                f"{report.non_normality.transient_growth_bound:.2f} "
+                f"transient_growth_estimate="
+                f"{report.non_normality.transient_growth_estimate:.2f} "
                 f"> L7_TRANSIENT_GROWTH_TOL={L7_TRANSIENT_GROWTH_TOL}",
             )
         if _should_stop():

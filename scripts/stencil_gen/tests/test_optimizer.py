@@ -397,7 +397,7 @@ class TestReportToDictSchemaParity:
             eigenvector_condition=10.0,
             pseudospectral_abscissae={1e-3: 0.1, 1e-2: 0.2},
             kreiss_constant=2.0,
-            transient_growth_bound=5.0,
+            transient_growth_estimate=5.0,
             n=100,
             compute_time=0.5,
         )
