@@ -17,6 +17,11 @@ Covers the plan's prescribed tests:
 (d) smallest assemblable N = m_L + m_R (all-closure, still assembles)
     and a clear IntervalTooShort below it.
 
+Plan 48 item 3.2 (resolvent-based interval scan; run with ``-k scan``):
+default (psi_L, psi_R) pair thinning, default N ladder, dense-abscissa
+cross-checks, explicit-s-grid Kreiss estimates, and the infeasible-pair
+partition.  No time integration anywhere — resolvent quantities only.
+
 E4_1 tests are @pytest.mark.slow (symbolic derivation > 170 s, plan 48
 scheme-scope constraint); derivations are cached with module/class-scoped
 fixtures on top of the item-1.1 lru_cache.
@@ -27,9 +32,13 @@ import pytest
 from sympy import Symbol
 
 from stencil_gen.cutcell_eval import make_cutcell_evaluator
+from stencil_gen.cutcell_normal_modes import default_psi_grid
 from stencil_gen.interval_operator import (
     IntervalTooShort,
     build_interval_operator,
+    default_interval_psi_pairs,
+    interval_stability_scan,
+    refined_interval_s_grid,
 )
 from stencil_gen.temo import (
     E2_1,
@@ -329,6 +338,188 @@ class TestValidation:
     def test_missing_alpha_raises(self):
         with pytest.raises(KeyError, match="alpha"):
             build_interval_operator(E2_1, {"alpha_0": 0.0}, 0.5, 0.5, 12)
+
+
+class TestIntervalStabilityScan:
+    """Plan 48 item 3.2: cheap-tier resolvent-based interval scan.
+
+    All test names contain ``scan`` so ``-k scan`` selects them (plan run
+    command).  Fast tests stay within the <= 10 eigendecomposition budget
+    of the plan's test conventions (matrices are <= 40 x 40).
+    """
+
+    def test_scan_default_psi_pairs_structure(self):
+        """Default pairs: ~50, drawn from the item-1.3 grid, containing
+        the four corners and the full diagonal, deterministic (fixed
+        seed), and duplicate-free."""
+        pairs = default_interval_psi_pairs()
+        assert len(pairs) == 50
+        assert len(set(pairs)) == 50
+
+        grid = [float(g) for g in default_psi_grid()]
+        grid_set = set(grid)
+        assert all(pl in grid_set and pr in grid_set for pl, pr in pairs)
+
+        lo, hi = min(grid), max(grid)
+        pair_set = set(pairs)
+        for corner in [(lo, lo), (lo, hi), (hi, lo), (hi, hi)]:
+            assert corner in pair_set, f"missing corner {corner}"
+        for g in grid:
+            assert (g, g) in pair_set, f"missing diagonal pair ({g}, {g})"
+
+        # Fixed seed => deterministic; a different seed samples the Latin
+        # fill differently (corners + diagonal are seed-independent).
+        assert pairs == default_interval_psi_pairs()
+        assert pairs != default_interval_psi_pairs(seed=1)
+
+        # Cap at len(grid)**2 when n_pairs exceeds the full product.
+        tiny = default_interval_psi_pairs(psi_grid=[0.25, 0.75], n_pairs=50)
+        assert sorted(tiny) == [(0.25, 0.25), (0.25, 0.75),
+                                (0.75, 0.25), (0.75, 0.75)]
+
+    def test_scan_default_N_ladder_e2_1(self, e2_alpha_zero):
+        """Default N_values for E2_1: m_min = m_L + m_R = 6 gives
+        (6, 8, 11, 16, 20, 40); every (pair, N) case is evaluated."""
+        res = interval_stability_scan(
+            E2_1, e2_alpha_zero, psi_pairs=[(0.5, 0.5)]
+        )
+        assert res.N_values == (6, 8, 11, 16, 20, 40)
+        assert set(res.per_case) == {(0.5, 0.5, N) for N in res.N_values}
+        assert res.infeasible_pairs == []
+        assert res.worst_kreiss_case is not None
+        assert np.isfinite(res.worst_kreiss_constant)
+        assert res.worst_kreiss_constant > 1.0
+
+    def test_scan_dense_abscissa_cross_check_and_outflow_law(
+            self, e2_alpha_zero):
+        """Per-case max Re lambda matches an independent dense
+        eigendecomposition of L = -D exactly, and reproduces the
+        right-end (outflow) cut-Dirichlet mode law.
+
+        Finding (established while calibrating this item): for
+        ``u_t = -D u`` the E2_1 alpha = 0 cut Dirichlet closure at the
+        RIGHT (outflow) end carries a right-localized eigenvalue at
+        exactly ``(1 - psi_R)/(1 + psi_R)`` — N-independent, present for
+        every psi_R < 1 — while the cut closure at the LEFT (inflow) end
+        is stable as a half-line problem (item-1.2 findings: cut-left +
+        uniform-right has max Re <= 8e-6).  The two-ended interval scan
+        is exactly the tier that exposes this; the plan-3.3 round-trip
+        criterion cross-validates against these eigenvalues.
+        """
+        pairs = [(0.5, 0.5), (0.3, 0.8), (0.3, 1.0)]
+        res = interval_stability_scan(
+            E2_1, e2_alpha_zero, psi_pairs=pairs, N_values=(8,)
+        )
+        assert set(res.per_case) == {(pl, pr, 8) for pl, pr in pairs}
+
+        # Independent dense cross-check (same convention: L = -D).
+        for (pl, pr, N), case in res.per_case.items():
+            eigs = np.linalg.eigvals(
+                -build_interval_operator(E2_1, e2_alpha_zero, pl, pr, N)
+            )
+            assert case.max_re_lambda == pytest.approx(
+                float(np.max(eigs.real)), rel=0, abs=1e-12
+            )
+            assert case.argmax_lambda.real == case.max_re_lambda
+            assert case.eigenvalues.shape == (N,)
+            assert np.isfinite(case.kreiss_constant)
+
+        # Outflow law (1 - psi_R)/(1 + psi_R) at both cut-right cases...
+        assert res.per_case[(0.5, 0.5, 8)].max_re_lambda == pytest.approx(
+            1.0 / 3.0, rel=1e-10
+        )
+        assert res.per_case[(0.3, 0.8, 8)].max_re_lambda == pytest.approx(
+            1.0 / 9.0, rel=1e-10
+        )
+        # ... while cut-left + uniform-right is stable (half-line result).
+        assert res.per_case[(0.3, 1.0, 8)].max_re_lambda < 1e-6
+
+        # Worst-case bookkeeping: the (0.5, 0.5) case dominates.
+        assert res.worst_abscissa == pytest.approx(1.0 / 3.0, rel=1e-10)
+        assert res.worst_abscissa_case == (0.5, 0.5, 8)
+
+        # The shared default s-grid covers the scanned spectral extent.
+        im_extent = max(
+            float(np.max(np.abs(c.eigenvalues.imag)))
+            for c in res.per_case.values()
+        )
+        assert float(np.max(res.s_grid.imag)) >= im_extent
+
+    def test_scan_kreiss_estimate_uses_explicit_grid(self, e2_alpha_zero):
+        """The Kreiss estimate runs on the explicitly passed refined grid
+        (never the coarse 8 x 12 compute_non_normality default): a grid
+        with no Re(s) > 0 point yields exactly 0.0, and the stored grid
+        is the one passed in."""
+        lhp_grid = np.array([-1.0 + 0.5j, -0.1 - 1.0j, 0.0 + 1.0j])
+        res = interval_stability_scan(
+            E2_1, e2_alpha_zero, psi_pairs=[(0.3, 1.0)], N_values=(6,),
+            s_grid=lhp_grid,
+        )
+        assert res.per_case[(0.3, 1.0, 6)].kreiss_constant == 0.0
+        assert res.worst_kreiss_constant == 0.0
+        np.testing.assert_array_equal(res.s_grid, lhp_grid)
+
+        # On the refined near-axis default grid the same stable case has
+        # a large finite Kreiss constant: the double-Dirichlet advection
+        # line is severely non-normal (huge transient growth potential
+        # despite max Re lambda <= 1e-6) — exactly what the cheap tier
+        # is meant to surface alongside the abscissa.
+        res_default = interval_stability_scan(
+            E2_1, e2_alpha_zero, psi_pairs=[(0.3, 1.0)], N_values=(6,)
+        )
+        K = res_default.per_case[(0.3, 1.0, 6)].kreiss_constant
+        assert np.isfinite(K) and K > 1e2
+        assert res_default.s_grid.shape == refined_interval_s_grid(1.0).shape
+
+    def test_scan_infeasible_pairs_partitioned(self, e2_alpha_zero):
+        """Pairs whose end psi trips the item-1.2 feasibility guard go to
+        infeasible_pairs — a parameterization failure, never a verdict.
+        E2_1's single structural denominator (psi + 1) never vanishes on
+        (0, 1], so an inflated tolerance stands in for a vanishing one."""
+        res = interval_stability_scan(
+            E2_1, e2_alpha_zero, psi_pairs=[(0.5, 0.5)], N_values=(6,),
+            feasibility_tol=10.0,
+        )
+        assert res.infeasible_pairs == [(0.5, 0.5)]
+        assert res.per_case == {}
+        assert res.worst_abscissa == float("-inf")
+        assert res.worst_abscissa_case is None
+        assert res.worst_kreiss_case is None
+        assert res.s_grid is None
+
+    def test_scan_below_minimum_N_raises(self, e2_alpha_zero):
+        """IntervalTooShort propagates from the item-3.1 assembler."""
+        with pytest.raises(IntervalTooShort, match=r"m_L \+ m_R = 6"):
+            interval_stability_scan(
+                E2_1, e2_alpha_zero, psi_pairs=[(0.5, 0.5)], N_values=(5,)
+            )
+
+    def test_scan_empty_inputs_raise(self, e2_alpha_zero):
+        with pytest.raises(ValueError, match="psi_pairs"):
+            interval_stability_scan(E2_1, e2_alpha_zero, psi_pairs=[])
+        with pytest.raises(ValueError, match="N_values"):
+            interval_stability_scan(
+                E2_1, e2_alpha_zero, psi_pairs=[(0.5, 0.5)], N_values=()
+            )
+
+
+@pytest.mark.slow
+class TestE4_1IntervalScan:
+    """E4_1 scan smoke test — symbolic derivation > 170 s, slow-marked
+    (plan 48 scheme-scope constraint)."""
+
+    def test_scan_e4_1_default_N_ladder_and_finiteness(self):
+        ev = make_cutcell_evaluator(E4_1)
+        alpha = {s: 0.0 for s in ev.alpha_symbols}
+        res = interval_stability_scan(
+            E4_1, alpha, psi_pairs=[(0.5, 0.5)]
+        )
+        # m_min = m_L + m_R = 2 * (R - 1) = 8 for E4_1.
+        assert res.N_values == (8, 10, 13, 18, 20, 40)
+        assert set(res.per_case) == {(0.5, 0.5, N) for N in res.N_values}
+        for case in res.per_case.values():
+            assert np.isfinite(case.max_re_lambda)
+            assert np.isfinite(case.kreiss_constant)
 
 
 @pytest.mark.slow
