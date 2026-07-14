@@ -180,6 +180,60 @@ Report wiring (same item): ``brady2d_stability.cutcell_stability_report``
 populates the opt-in ``StabilityReport.layer_cutcell`` dict from this
 sweep plus item 1.3's Kreiss sweep. It is NOT part of the L1-L8 cascade;
 objective/alias wiring is plan 49.
+
+Two-boundary round-trip criterion (plan 48 item 3.3)
+----------------------------------------------------
+Trefethen 1985 (Math. Comp. 45) Lemma 1: on a finite interval the two
+boundary closures interact only through the interior modes, and the pair
+supports a GKS eigensolution at s exactly when one round trip of the
+mode amplitudes returns them unchanged. With the mode split at s
+(K = diag rightgoing kappa, |kappa| <= 1; Mdiag = diag leftgoing mu,
+|mu| >= 1) and the per-end reflection matrices A_L(s), A_R(s), the
+round-trip cycle applies (right-to-left) A_L first, then the rightgoing
+transit, then A_R, then the leftgoing return:
+
+    E_Dj(s) = Mdiag^{-Dj} . A_R(s) . K^{Dj} . A_L(s)
+
+(any cyclic rotation is similar and has the same spectrum). Derivation
+pinning the ordering AND the reference nodes (an off-by-one rephases E):
+let beta be the leftgoing amplitudes referenced at the LEFT reference
+node (grid node 0 — the node the left closure's mode ansatz kappa^n,
+mu^n counts from) and let the RIGHT reference node be grid node Dj (the
+mirrored frame's n' = 0 node, n' = Dj - n), so Dj = N - 1 for an N-node
+interval. In the modal window the interval solution is
+phi_n = sum_k beta_k mu_k^n + sum_l alpha_l kappa_l^n; the left closure
+equations give alpha = A_L beta (item 2.2); re-referencing at node Dj
+turns the amplitudes into (K^{Dj} alpha, Mdiag^{Dj} beta), and the right
+closure (in the item-2.3 mirrored frame, where mirrored-rightgoing =
+physically leftgoing) gives Mdiag^{Dj} beta = A_R K^{Dj} alpha. Chaining:
+beta = Mdiag^{-Dj} A_R K^{Dj} A_L beta = E_Dj beta, so a pair
+eigensolution exists iff 1 is an eigenvalue of E_Dj(s). The transit
+factors are contractions on the axis (|kappa| <= 1 <= |mu| for
+Re(s) >= 0), so E is numerically safe to form and
+rho(E_Dj) <= ||A_L|| ||A_R|| there — the decoupled screen
+``reflection_product`` upper-bounds the round-trip radius.
+
+Hypothesis (Lemma 1): each end must be separately half-line stable at s
+(M_L(s), M_R(s) invertible) for the criterion to be meaningful — a
+per-end det-zero is a SINGLE-boundary GKS eigensolution and is the
+per-end tiers' job (items 1.2 / 2.2 on the mirrored closure), not the
+round trip's. The 3.2 scan's outflow law is exactly such a case: the
+E2_1 cut Dirichlet closure at the RIGHT (outflow) end alone carries a
+right-localized eigenvalue at s = (1 - psi_R)/(1 + psi_R), so cut-right
+pairs are unstable regardless of rho(E_Dj) on the axis.
+
+Do not assume monotonicity of rho(E_Dj) in Dj — it is false: on the
+axis K and Mdiag are pure phases for the propagating modes, so
+rho(E_Dj) oscillates with Dj (Dj-specific resonances). The reported
+``round_trip_radius`` therefore maxes over BOTH the s-grid and a Dj
+range {Dj_min, ..., Dj_min + 5}.
+
+Minimum separation: the criterion requires each closure's column support
+to lie inside the other end's modal region, i.e. the two supports may
+not overlap: Dj >= t_L + t_R - 1 (and closure rows may not share a grid
+node: Dj >= max_node_L + max_node_R + 1). This is STRICTER than item
+3.1's assembly minimum (which permits column overlap); violations raise
+the same :class:`~stencil_gen.interval_operator.IntervalTooShort`.
 """
 
 from __future__ import annotations
@@ -214,6 +268,13 @@ __all__ = [
     "mirror_closure",
     "CutCellReflectionSweep",
     "reflection_over_psi",
+    "RoundTripFactors",
+    "RoundTripResult",
+    "min_round_trip_delta_j",
+    "round_trip_factors",
+    "round_trip_matrix",
+    "round_trip_check",
+    "cutcell_round_trip",
 ]
 
 
@@ -1085,4 +1146,578 @@ def reflection_over_psi(
         argmax_psi=argmax_psi,
         argmax_s=argmax_s,
         side=side,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Two-boundary round-trip criterion (plan 48 item 3.3,
+# Trefethen 1985 Math. Comp. 45 Lemma 1)
+# ---------------------------------------------------------------------------
+
+_MODE_MATCH_TOL = 1e-6
+"""Tolerance for matching a mirrored-frame root z to the reciprocal of an
+original-frame root w via |z*w - 1| < tol.  The mirrored characteristic
+polynomial is Q_m(z; s) = Q(1/z; s) (reversed coefficient vector), so its
+roots are exact reciprocals of the original roots up to numpy.roots
+rounding (~1e-10 for the well-conditioned degree-2p polynomials here);
+1e-6 leaves headroom while staying far below the 1e-7 coalescence guard
+that routes genuinely ambiguous bases through DefectiveKappaError."""
+
+
+def _support_extent(boundary_rows: list) -> int:
+    """t = 1 + max column offset over the closure rows (support columns
+    0..t-1 in the rows' own frame)."""
+    return 1 + max(
+        int(np.max(np.asarray(cols, dtype=int))) for _, cols in boundary_rows
+    )
+
+
+def min_round_trip_delta_j(
+    left_boundary_rows: list,
+    right_mirrored: MirroredClosure,
+    *,
+    left_row_indices: list[int] | None = None,
+) -> int:
+    """Minimum reference-node separation Dj for the round-trip criterion.
+
+    Plan 48 item 3.3. The criterion is exact only when the two closures
+    interact exclusively through the interior modes, which requires
+
+    - **column supports not to overlap**: the left support occupies grid
+      nodes 0..t_L-1 and the right support nodes Dj-(t_R-1)..Dj (right
+      reference node = grid node Dj), so Dj >= t_L + t_R - 1; and
+    - **closure rows not to share a grid node**:
+      Dj >= max_node_L + max_node_R + 1.
+
+    ``Dj_min = max`` of the two. For an N-node interval Dj = N - 1, so
+    this is STRICTER than item 3.1's assembly minimum
+    ``N >= max(m_L + m_R, t_L, t_R)`` — assembly permits the two column
+    supports to overlap, the modal round trip does not (violations raise
+    the same :class:`~stencil_gen.interval_operator.IntervalTooShort`).
+    """
+    if not left_boundary_rows or not right_mirrored.boundary_rows:
+        raise ValueError(
+            "Both ends need at least one closure row for a round trip"
+        )
+    m_L = len(left_boundary_rows)
+    if left_row_indices is None:
+        left_row_indices = list(range(m_L))
+    if len(left_row_indices) != m_L:
+        raise ValueError(
+            f"left_row_indices has length {len(left_row_indices)} != "
+            f"number of left boundary rows ({m_L})"
+        )
+    t_L = _support_extent(left_boundary_rows)
+    t_R = _support_extent(right_mirrored.boundary_rows)
+    max_node_L = max(int(i) for i in left_row_indices)
+    max_node_R = max(int(i) for i in right_mirrored.row_indices)
+    return max(t_L + t_R - 1, max_node_L + max_node_R + 1)
+
+
+def _check_delta_j(delta_j: int, dj_min: int) -> int:
+    """Validate a requested Dj against the round-trip minimum.
+
+    Raises the item-3.1 :class:`IntervalTooShort` (lazy import — 3.1
+    imports this module) on violation, tying the two minima together.
+    """
+    from stencil_gen.interval_operator import IntervalTooShort
+
+    delta_j = int(delta_j)
+    if delta_j < dj_min:
+        raise IntervalTooShort(
+            f"Round-trip separation Dj = {delta_j} is too short: the "
+            f"closure column supports (and rows) must not overlap, "
+            f"requiring Dj >= {dj_min} (equivalently an interval of "
+            f"N = Dj + 1 >= {dj_min + 1} nodes — stricter than the "
+            f"item-3.1 assembly minimum, which permits column overlap)"
+        )
+    return delta_j
+
+
+@dataclass(frozen=True)
+class RoundTripFactors:
+    """The matched factors of the round-trip cycle at one s.
+
+    All arrays are indexed by the ORIGINAL frame's deterministic mode
+    ordering (``ModeSplit.all_rightgoing`` for kappa / A_L rows / A_R
+    columns; ``ModeSplit.all_leftgoing`` for mu / A_L columns / A_R
+    rows): the mirrored-frame reflection matrix has been re-indexed onto
+    the original mode basis via the exact reciprocal-root correspondence
+    (mirror maps kappa -> 1/kappa), so the factors compose directly as
+    ``Mdiag^{-Dj} A_R K^{Dj} A_L``.
+    """
+
+    A_L: np.ndarray
+    """Left-end reflection matrix (p x n_leftgoing): incident leftgoing
+    (mu) amplitudes -> reflected rightgoing (kappa) amplitudes, both
+    referenced at grid node 0."""
+
+    A_R: np.ndarray
+    """Right-end reflection matrix (n_leftgoing x p) in the ORIGINAL mode
+    ordering: incident rightgoing (kappa) amplitudes -> reflected
+    leftgoing (mu) amplitudes, both referenced at the right reference
+    node (grid node Dj)."""
+
+    kappa: np.ndarray
+    """Rightgoing roots (|kappa| <= 1), original deterministic order;
+    K = diag(kappa)."""
+
+    mu: np.ndarray
+    """Leftgoing roots (|mu| >= 1), original deterministic order;
+    Mdiag = diag(mu)."""
+
+    s: complex
+    """The Laplace frequency at which the factors were computed."""
+
+
+def _match_reciprocal(
+    mirrored_roots: np.ndarray,
+    original_roots: np.ndarray,
+    family: str,
+    s: complex,
+) -> list[int]:
+    """Index the mirrored-frame roots by the original roots they mirror.
+
+    Returns ``idx`` with ``mirrored_roots[idx[k]] ~ 1/original_roots[k]``
+    (relative residual |z*w - 1| < _MODE_MATCH_TOL, assignment bijective).
+    A failed or ambiguous match means the mode bases cannot be paired —
+    route through the defective path (plan 48 items 0.1 / 2.2 / 3.3).
+    """
+    idx: list[int] = []
+    for w in original_roots:
+        residuals = np.abs(mirrored_roots * w - 1.0)
+        a = int(np.argmin(residuals))
+        if residuals[a] > _MODE_MATCH_TOL:
+            raise DefectiveKappaError(
+                f"Cannot match {family} root {w} to a reciprocal "
+                f"mirrored-frame root at s={s}: best residual "
+                f"{residuals[a]:.3e} > {_MODE_MATCH_TOL}"
+            )
+        idx.append(a)
+    if len(set(idx)) != len(idx):
+        raise DefectiveKappaError(
+            f"Ambiguous reciprocal matching of {family} roots at s={s} "
+            f"(two original roots matched the same mirrored root — "
+            f"near-coalescent mode basis)"
+        )
+    return idx
+
+
+def round_trip_factors(
+    interior_weights: np.ndarray,
+    interior_offsets: np.ndarray,
+    left_boundary_rows: list,
+    right_mirrored: MirroredClosure,
+    s: complex,
+    *,
+    left_row_indices: list[int] | None = None,
+) -> RoundTripFactors:
+    """Compute the matched round-trip factors A_L, A_R, kappa, mu at s.
+
+    Plan 48 item 3.3 (see module docstring for the cycle math). The left
+    end is analyzed directly (item 2.2); the right end is analyzed in the
+    item-2.3 mirrored frame — where mirrored-rightgoing modes are the
+    physically leftgoing family — and its reflection matrix is re-indexed
+    onto the ORIGINAL mode ordering through the exact reciprocal-root
+    correspondence of the mirror (kappa -> 1/kappa), so the returned
+    factors compose directly (:func:`round_trip_matrix`).
+
+    Parameters
+    ----------
+    interior_weights, interior_offsets
+        Interior stencil in the ORIGINAL (left-to-right) frame.
+    left_boundary_rows : list[BoundaryRow]
+        Left-end closure rows (offsets >= 0, node 0 = left reference).
+    right_mirrored : MirroredClosure
+        The right-end closure in the mirrored analysis frame (from
+        :func:`mirror_closure`; its own interior fields are used for the
+        mirrored-frame solve).
+    s : complex
+        Laplace frequency (typically on the make_s_grid strip).
+    left_row_indices : list[int], optional
+        Grid node of each left closure row (default 0..m_L-1).
+
+    Raises
+    ------
+    DefectiveKappaError
+        Defective mode basis at s in either frame, or a failed/ambiguous
+        reciprocal matching (near-coalescent roots) — route through the
+        defective path, never report a clean value.
+    numpy.linalg.LinAlgError
+        det M_L(s) = 0 or det M_R(s) = 0: a SINGLE-boundary GKS
+        eigensolution at s (Lemma 1's hypothesis is violated — the pair
+        is already unstable through that end alone; the per-end tiers
+        flag it).
+    ValueError
+        Inconsistent mode counts between the two frames (indicates a
+        malformed closure, not a user error).
+    """
+    M_L, B_L, split_L = reflection_system(
+        interior_weights, interior_offsets, left_boundary_rows, s,
+        row_indices=left_row_indices,
+    )
+    kappa = split_L.all_rightgoing
+    mu = split_L.all_leftgoing
+    p = len(kappa)
+    n_left = len(mu)
+    n_nodal_L = M_L.shape[0] - p
+    if n_left == 0:
+        A_L = np.zeros((p, 0), dtype=complex)
+    else:
+        A_L = np.linalg.solve(M_L, -B_L)[n_nodal_L:, :]
+
+    M_R, B_R, split_R = reflection_system(
+        right_mirrored.interior_weights,
+        right_mirrored.interior_offsets,
+        right_mirrored.boundary_rows,
+        s,
+        row_indices=right_mirrored.row_indices,
+    )
+    mirrored_rg = split_R.all_rightgoing  # ~ 1/mu (physically leftgoing)
+    mirrored_lg = split_R.all_leftgoing   # ~ 1/kappa (physically rightgoing)
+    if len(mirrored_rg) != n_left or len(mirrored_lg) != p:
+        raise ValueError(
+            f"Mode-count mismatch between frames at s={s}: original "
+            f"(rightgoing, leftgoing) = ({p}, {n_left}), mirrored = "
+            f"({len(mirrored_rg)}, {len(mirrored_lg)}); the mirror maps "
+            f"kappa -> 1/kappa so the counts must swap exactly"
+        )
+    if n_left == 0:
+        A_R = np.zeros((0, p), dtype=complex)
+    else:
+        n_nodal_R = M_R.shape[0] - len(mirrored_rg)
+        A_R_m = np.linalg.solve(M_R, -B_R)[n_nodal_R:, :]
+        # Re-index the mirrored-frame matrix onto the ORIGINAL ordering:
+        # rows by mu (mirrored-rightgoing ~ 1/mu), columns by kappa
+        # (mirrored-leftgoing ~ 1/kappa).
+        row_map = _match_reciprocal(mirrored_rg, mu, "leftgoing (mu)", s)
+        col_map = _match_reciprocal(
+            mirrored_lg, kappa, "rightgoing (kappa)", s
+        )
+        A_R = A_R_m[np.ix_(row_map, col_map)]
+
+    return RoundTripFactors(
+        A_L=A_L, A_R=A_R, kappa=kappa, mu=mu, s=complex(s)
+    )
+
+
+def _compose_round_trip(factors: RoundTripFactors, delta_j: int) -> np.ndarray:
+    """E_Dj = Mdiag^{-Dj} A_R K^{Dj} A_L from matched factors.
+
+    Both transit factors are contractions for Re(s) >= 0 (|kappa| <= 1,
+    |mu| >= 1), so the composition is numerically safe (evanescent modes
+    underflow toward 0, never overflow).
+    """
+    if factors.A_L.shape[1] == 0:
+        return np.zeros((0, 0), dtype=complex)
+    transit_right = (factors.kappa ** delta_j)[:, None] * factors.A_L
+    transit_back = (factors.mu ** (-delta_j))[:, None] * factors.A_R
+    return transit_back @ transit_right
+
+
+def round_trip_matrix(
+    interior_weights: np.ndarray,
+    interior_offsets: np.ndarray,
+    left_boundary_rows: list,
+    right_mirrored: MirroredClosure,
+    s: complex,
+    delta_j: int,
+    *,
+    left_row_indices: list[int] | None = None,
+) -> np.ndarray:
+    """The round-trip cycle matrix E_Dj(s) (Trefethen 1985 Lemma 1).
+
+    Plan 48 item 3.3:
+
+        E_Dj(s) = Mdiag^{-Dj} . A_R(s) . K^{Dj} . A_L(s),
+
+    acting on the leftgoing amplitudes referenced at grid node 0; the
+    right reference node is grid node Dj (= N - 1 for an N-node
+    interval). The two-boundary pair supports a GKS eigensolution at s
+    iff 1 is an eigenvalue of E_Dj(s) — PROVIDED each end is separately
+    half-line stable at s (see module docstring; a per-end det-zero
+    raises ``numpy.linalg.LinAlgError`` here and is the per-end tiers'
+    verdict, not the round trip's).
+
+    Raises
+    ------
+    IntervalTooShort
+        If ``delta_j`` is below :func:`min_round_trip_delta_j` (closure
+        supports would overlap — the modal ansatz breaks down).
+    DefectiveKappaError, numpy.linalg.LinAlgError, ValueError
+        Propagated from :func:`round_trip_factors`.
+    """
+    dj_min = min_round_trip_delta_j(
+        left_boundary_rows, right_mirrored, left_row_indices=left_row_indices
+    )
+    delta_j = _check_delta_j(delta_j, dj_min)
+    factors = round_trip_factors(
+        interior_weights, interior_offsets, left_boundary_rows,
+        right_mirrored, s, left_row_indices=left_row_indices,
+    )
+    return _compose_round_trip(factors, delta_j)
+
+
+@dataclass(frozen=True)
+class RoundTripResult:
+    """Result of the two-boundary round-trip sweep (plan 48 item 3.3)."""
+
+    round_trip_radius: float
+    """max over the s-grid AND over the Dj values of rho(E_Dj(s)).
+    Radius > 1 flags per-cycle amplification somewhere on the axis (a
+    Dj-specific two-boundary resonance candidate); < 1 certifies the
+    round trip PROVIDED each end is separately half-line stable (Lemma
+    1's hypothesis — the per-end tiers' job). inf when a per-end
+    det-zero sits on the grid; nan when no grid point was cleanly
+    evaluable; 0.0 when there are no leftgoing modes (nothing to
+    round-trip)."""
+
+    argmax_s: complex | None
+    """The s attaining the radius (None if no clean value)."""
+
+    argmax_delta_j: int | None
+    """The Dj attaining the radius (None if no clean value)."""
+
+    reflection_product: float
+    """Decoupled screen: max over the s-grid of ||A_L(s)|| ||A_R(s)||
+    (pointwise product of spectral norms). Upper-bounds rho(E_Dj) on the
+    axis for every Dj (||K^{Dj}|| = ||Mdiag^{-Dj}|| <= 1 for
+    Re(s) >= 0), so product < 1 certifies the round trip for ALL Dj at
+    once, while product > 1 alone cannot flag (see the item-2.5
+    tension-closure control caveat in the plan's Findings log)."""
+
+    product_argmax_s: complex | None
+    """The s attaining ``reflection_product`` (None if no clean value)."""
+
+    delta_j_min: int
+    """The minimum admissible Dj (:func:`min_round_trip_delta_j`)."""
+
+    delta_j_values: tuple
+    """The Dj values swept (default {Dj_min, ..., Dj_min + 5})."""
+
+    finite: bool
+    """True iff every grid point evaluated to a finite clean value: no
+    per-end det-zero (inf) and no defective mode basis anywhere on the
+    grid (defective points must route through the non-clean path,
+    plan 48 items 0.1 / 2.2)."""
+
+    defective_points: tuple[complex, ...] = ()
+    """Grid points with a defective mode basis or failed reciprocal
+    matching; their rho / product entries are nan."""
+
+    rho: np.ndarray | None = field(default=None, repr=False)
+    """rho(E_Dj(s)) per grid point and Dj, shape (n_s, n_Dj) (nan at
+    defective points, inf at per-end det-zero points)."""
+
+    products: np.ndarray | None = field(default=None, repr=False)
+    """||A_L(s)|| ||A_R(s)|| per grid point (same non-clean markers)."""
+
+    s_grid: np.ndarray | None = field(default=None, repr=False)
+    """The s-grid swept (flattened)."""
+
+
+def round_trip_check(
+    interior_weights: np.ndarray,
+    interior_offsets: np.ndarray,
+    left_boundary_rows: list,
+    right_mirrored: MirroredClosure,
+    *,
+    delta_j_values=None,
+    n_delta_j: int = 6,
+    s_grid: np.ndarray | None = None,
+    left_row_indices: list[int] | None = None,
+) -> RoundTripResult:
+    """Sweep the round-trip radius over the imaginary-axis s-grid and Dj.
+
+    Plan 48 item 3.3. Reports
+
+        round_trip_radius = max over the s-grid AND over Dj of
+                            rho(E_Dj(s)),
+
+    with the default Dj range {Dj_min, ..., Dj_min + n_delta_j - 1}
+    (n_delta_j = 6 per the plan) — rho(E_Dj) is NOT monotone in Dj (on
+    the axis the transit factors are pure phases for propagating modes,
+    so the radius oscillates with Dj: Dj-specific resonances), hence the
+    max over a Dj window rather than a single length. Also reports the
+    decoupled screen ``reflection_product = max_s ||A_L|| ||A_R||``,
+    which upper-bounds the radius on the axis.
+
+    Grid points with a defective mode basis are recorded in
+    ``defective_points`` (rho = nan, ``finite=False``); grid points where
+    an end's M(s) is exactly singular — a SINGLE-boundary GKS
+    eigensolution, Lemma 1's hypothesis violated — get rho = inf (and
+    ``finite=False``): both route through the non-clean path, never
+    report as clean values.
+
+    Parameters
+    ----------
+    interior_weights, interior_offsets
+        Interior stencil in the ORIGINAL (left-to-right) frame.
+    left_boundary_rows : list[BoundaryRow]
+        Left-end closure rows.
+    right_mirrored : MirroredClosure
+        Right-end closure in the mirrored frame (:func:`mirror_closure`).
+    delta_j_values : sequence of int, optional
+        Explicit Dj values; every value must be >= Dj_min
+        (:class:`IntervalTooShort` otherwise). Default: the plan's
+        window {Dj_min, ..., Dj_min + n_delta_j - 1}.
+    n_delta_j : int
+        Width of the default Dj window.
+    s_grid : np.ndarray, optional
+        Imaginary-axis strip grid (default
+        :func:`default_reflection_s_grid`).
+    left_row_indices : list[int], optional
+        Grid node of each left closure row (default 0..m_L-1).
+    """
+    dj_min = min_round_trip_delta_j(
+        left_boundary_rows, right_mirrored, left_row_indices=left_row_indices
+    )
+    if delta_j_values is None:
+        if n_delta_j < 1:
+            raise ValueError(f"n_delta_j must be >= 1, got {n_delta_j}")
+        delta_j_values = range(dj_min, dj_min + n_delta_j)
+    dj_list = [_check_delta_j(d, dj_min) for d in delta_j_values]
+    if not dj_list:
+        raise ValueError("delta_j_values must contain at least one value")
+
+    if s_grid is None:
+        s_grid = default_reflection_s_grid()
+    s_flat = np.asarray(s_grid, dtype=complex).ravel()
+
+    rho = np.full((len(s_flat), len(dj_list)), np.nan)
+    products = np.full(len(s_flat), np.nan)
+    defective: list[complex] = []
+    for i, s in enumerate(s_flat):
+        try:
+            factors = round_trip_factors(
+                interior_weights, interior_offsets, left_boundary_rows,
+                right_mirrored, s, left_row_indices=left_row_indices,
+            )
+        except DefectiveKappaError:
+            defective.append(complex(s))
+            continue
+        except np.linalg.LinAlgError:
+            # det M_L(s) = 0 or det M_R(s) = 0: single-boundary GKS
+            # eigensolution ON the grid — the pair is unstable through
+            # that end alone (Lemma 1 hypothesis violated).
+            rho[i, :] = np.inf
+            products[i] = np.inf
+            continue
+        if factors.A_L.shape[1] == 0:
+            rho[i, :] = 0.0
+            products[i] = 0.0
+            continue
+        products[i] = float(
+            np.linalg.norm(factors.A_L, ord=2)
+            * np.linalg.norm(factors.A_R, ord=2)
+        )
+        for jd, dj in enumerate(dj_list):
+            E = _compose_round_trip(factors, dj)
+            rho[i, jd] = float(np.max(np.abs(np.linalg.eigvals(E))))
+
+    if np.all(np.isnan(rho)):
+        return RoundTripResult(
+            round_trip_radius=float("nan"),
+            argmax_s=None,
+            argmax_delta_j=None,
+            reflection_product=float("nan"),
+            product_argmax_s=None,
+            delta_j_min=dj_min,
+            delta_j_values=tuple(dj_list),
+            finite=False,
+            defective_points=tuple(defective),
+            rho=rho,
+            products=products,
+            s_grid=s_flat,
+        )
+
+    flat_argmax = int(np.nanargmax(rho))
+    i_max, j_max = np.unravel_index(flat_argmax, rho.shape)
+    radius = float(rho[i_max, j_max])
+    i_prod = int(np.nanargmax(products))
+    finite = bool(np.isfinite(radius)) and not defective
+    return RoundTripResult(
+        round_trip_radius=radius,
+        argmax_s=complex(s_flat[i_max]),
+        argmax_delta_j=int(dj_list[j_max]),
+        reflection_product=float(products[i_prod]),
+        product_argmax_s=complex(s_flat[i_prod]),
+        delta_j_min=dj_min,
+        delta_j_values=tuple(dj_list),
+        finite=finite,
+        defective_points=tuple(defective),
+        rho=rho,
+        products=products,
+        s_grid=s_flat,
+    )
+
+
+def cutcell_round_trip(
+    scheme,
+    alpha: dict,
+    psi_L: float,
+    psi_R: float,
+    *,
+    delta_j_values=None,
+    n_delta_j: int = 6,
+    s_grid: np.ndarray | None = None,
+    feasibility_tol: float = FEASIBILITY_TOL,
+):
+    """Round-trip criterion for a two-ended cut-cell Dirichlet pair.
+
+    Plan 48 item 3.3, cut-cell entry point: the left end is the
+    wall-eliminated Dirichlet closure at psi_L (cached evaluator, item
+    1.1); the right end is the stored left-end rows at psi_R mapped
+    through the item-2.3 production mirror convention
+    (``mirror_closure(..., from_physical_right=False)`` — the nu = 1
+    codegen revneg entry point, exactly the right block
+    ``build_interval_operator`` assembles). ``psi_* = 1.0`` means a
+    uniform domain boundary at that end.
+
+    The item-1.2 feasibility guard runs at BOTH end psi before any
+    assembly: a vanishing structural denominator returns the distinct
+    :class:`~stencil_gen.cutcell_normal_modes.CutCellInfeasible` marker
+    (for the first failing end) — a *parameterization* failure, never a
+    stability verdict.
+
+    Returns
+    -------
+    RoundTripResult or CutCellInfeasible
+    """
+    evaluator = make_cutcell_evaluator(scheme)
+    for name, psi in (("psi_L", psi_L), ("psi_R", psi_R)):
+        psi = float(psi)
+        if not 0.0 < psi <= 1.0:
+            raise ValueError(f"{name} must be in (0, 1], got {psi}")
+        vanishing = _vanishing_denominators(
+            evaluator, psi, alpha, feasibility_tol
+        )
+        if vanishing:
+            return CutCellInfeasible(
+                scheme=scheme,
+                psi=psi,
+                alpha=tuple(
+                    (sym.name, v)
+                    for sym, v in zip(
+                        evaluator.alpha_symbols, evaluator._alpha_args(alpha)
+                    )
+                ),
+                vanishing=vanishing,
+                feasibility_tol=feasibility_tol,
+            )
+
+    interior = evaluator.interior()
+    rows_L, idx_L = evaluator.rows(float(psi_L), alpha)
+    rows_R, idx_R = evaluator.rows(float(psi_R), alpha)
+    mirrored = mirror_closure(
+        rows_R, interior,
+        from_physical_right=False,
+        row_indices=[int(i) for i in idx_R],
+    )
+    return round_trip_check(
+        interior[0], interior[1], rows_L, mirrored,
+        delta_j_values=delta_j_values,
+        n_delta_j=n_delta_j,
+        s_grid=s_grid,
+        left_row_indices=[int(i) for i in idx_L],
     )
