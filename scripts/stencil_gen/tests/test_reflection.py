@@ -21,6 +21,13 @@ Item 2.5 (Gaussian eps=0.1 mechanism calibration): every test name
 contains ``gaussian`` so ``pytest tests/test_reflection.py -k gaussian``
 selects exactly this item's tests.
 
+Item 3.3 (two-boundary round-trip criterion, Trefethen 1985 Lemma 1):
+every test name contains ``round_trip`` so ``-k round_trip`` selects
+exactly this item's tests; they deliberately avoid the tokens reserved
+by the other items (``mode_split``, ``mirror``, ``cutcell``,
+``gaussian`` — the wall-eliminated eps=0.1 pair tests spell it
+``wall_eliminated`` for that reason).
+
 Sign convention throughout: u_t = -sum_k a_k u_{n+k} (the
 ``gks_kreiss.kappa_roots`` docstring convention).
 """
@@ -46,19 +53,31 @@ from stencil_gen.gks_kreiss import (
     kreiss_matrix,
     kreiss_matrix_general,
     kreiss_stability_check,
+    min_singular_value_ex,
+)
+from stencil_gen.interval_operator import (
+    IntervalTooShort,
+    build_interval_operator,
 )
 from stencil_gen.reflection import (
     CutCellReflectionSweep,
     MirroredClosure,
     ModeSplit,
     ReflectionResult,
+    RoundTripFactors,
+    RoundTripResult,
+    cutcell_round_trip,
     default_reflection_s_grid,
     max_reflection,
+    min_round_trip_delta_j,
     mirror_closure,
     mode_split,
     reflection_matrix,
     reflection_over_psi,
     reflection_system,
+    round_trip_check,
+    round_trip_factors,
+    round_trip_matrix,
 )
 from stencil_gen.temo import E2_1
 
@@ -1225,3 +1244,583 @@ class TestGaussianEps01Mechanism:
         from stencil_gen.phs import stability_eigenvalue_from_matrix
 
         assert stability_eigenvalue_from_matrix(D) > 0.0
+
+
+# ---------------------------------------------------------------------------
+# Item 3.3: two-boundary round-trip criterion (Trefethen 1985 Lemma 1)
+# ---------------------------------------------------------------------------
+
+# Reduced strip grid for the round-trip sweeps (same construction as the
+# default grid; 60 points keep the psi-pair sweeps fast).
+_RT_S_GRID = default_reflection_s_grid(imag_max=5.0, n_points=61)
+
+
+def _wall_eliminated_pair(n: int):
+    """The wall-eliminated Gaussian eps=0.1 two-boundary pair at size n.
+
+    ``phs.stability_eigenvalue_from_matrix`` — the documented L3 catch for
+    this closure — eigendecomposes D_bc = D[1:, 1:] (inflow row/column
+    removed), NOT the raw D. D_bc is an (n-1)-node interval whose LEFT
+    closure is the wall-eliminated block: rows 1..3 of D on columns 1..5
+    (m_L = 3 > p = 2, support t_L = 5), renumbered to grid nodes 0..2.
+    The RIGHT end is untouched by the elimination: the nu = 1 codegen
+    revneg image of the stored left rows (m_R = 4, t_R = 6), mapped by
+    the item-2.3 production entry point.
+
+    Returns (D_bc, interior_weights, interior_offsets, left_rows,
+    left_row_indices, right_mirrored).
+    """
+    from stencil_gen.phs import build_diff_matrix_rbf
+
+    m, t = 4, 6
+    D = build_diff_matrix_rbf(n=n, p=2, q=3, epsilon=0.1,
+                              kernel="gaussian", nu=1, nextra=0)
+    io = np.arange(-2, 3)
+    iw = D[n // 2, n // 2 + io].copy()
+    left_rows = [(D[i, 1:t].copy(), np.arange(t - 1)) for i in range(1, m)]
+    stored_left = [(D[i, :t].copy(), np.arange(t)) for i in range(m)]
+    mirrored = mirror_closure(stored_left, (iw, io),
+                              from_physical_right=False,
+                              row_indices=list(range(m)))
+    return D[1:, 1:], iw, io, left_rows, [0, 1, 2], mirrored
+
+
+@pytest.fixture(scope="module")
+def wall_eliminated_pair_n20():
+    """n = 20: D_bc is the 19-node interval the L3 catch runs on."""
+    return _wall_eliminated_pair(20)
+
+
+@pytest.fixture(scope="module")
+def wall_eliminated_pair_n12():
+    """n = 12: D_bc is an 11-node interval at the round-trip minimum
+    Dj = 10 = Dj_min — small enough that the evanescent mode pair still
+    contributes through the transit factors, which is what gives the
+    p = 2 ordering tripwire its teeth (at Dj = 18 the evanescent
+    contributions underflow to ~1e-27 and E is effectively scalar)."""
+    return _wall_eliminated_pair(12)
+
+
+class TestRoundTripComposition:
+    """E_Dj = Mdiag^{-Dj} A_R K^{Dj} A_L: composition and factor contracts."""
+
+    def test_round_trip_scalar_composition_matches_factors(
+        self, e2_1_evaluator, e2_1_alpha_zero
+    ):
+        """p = 1 (E2_1, psi_L = 0.5, psi_R = 0.9): E is 1x1 and equals the
+        by-hand composition mu^{-Dj} * A_R * kappa^{Dj} * A_L assembled
+        from the PUBLIC pieces (mode_split + reflection_matrix on each
+        end) — pinning the transit-factor placement and the mode
+        correspondence against independently computed factors."""
+        interior = e2_1_evaluator.interior()
+        rows_L, idx_L = e2_1_evaluator.rows(0.5, e2_1_alpha_zero)
+        rows_R, idx_R = e2_1_evaluator.rows(0.9, e2_1_alpha_zero)
+        mirrored = mirror_closure(rows_R, interior,
+                                  from_physical_right=False,
+                                  row_indices=[int(i) for i in idx_R])
+        row_idx = [int(i) for i in idx_L]
+        dj = 9
+
+        for s in (1e-6 + 0.5j, 1e-6 + 2.0j, 0.3 + 0.7j):
+            split = mode_split(interior[0], interior[1], s)
+            kappa = split.all_rightgoing[0]
+            mu = split.all_leftgoing[0]
+            A_L = reflection_matrix(interior[0], interior[1], rows_L, s,
+                                    row_indices=row_idx)[0, 0]
+            A_R = reflection_matrix(
+                mirrored.interior_weights, mirrored.interior_offsets,
+                mirrored.boundary_rows, s,
+                row_indices=mirrored.row_indices,
+            )[0, 0]
+            E_hand = mu ** (-dj) * A_R * kappa ** dj * A_L
+
+            E = round_trip_matrix(interior[0], interior[1], rows_L,
+                                  mirrored, s, dj, left_row_indices=row_idx)
+
+            assert E.shape == (1, 1)
+            assert E[0, 0] == pytest.approx(E_hand, rel=1e-12)
+
+    def test_round_trip_factors_contract(self, wall_eliminated_pair_n20):
+        """RoundTripFactors carries the matched factors in the ORIGINAL
+        mode ordering: A_L is p x n_leftgoing, A_R is n_leftgoing x p,
+        |kappa| <= 1 <= |mu| on the strip (Re(s) > 0)."""
+        _, iw, io, left_rows, left_idx, mirrored = wall_eliminated_pair_n20
+        s = 1e-6 + 0.9j
+
+        f = round_trip_factors(iw, io, left_rows, mirrored, s,
+                               left_row_indices=left_idx)
+
+        assert isinstance(f, RoundTripFactors)
+        assert f.s == s
+        assert f.A_L.shape == (2, 2)
+        assert f.A_R.shape == (2, 2)
+        assert len(f.kappa) == len(f.mu) == 2
+        assert np.all(np.abs(f.kappa) < 1.0)
+        assert np.all(np.abs(f.mu) > 1.0)
+
+    def test_round_trip_cyclic_rotations_share_spectrum(
+        self, wall_eliminated_pair_n20
+    ):
+        """Any cyclic rotation of the cycle is similar to E_Dj (same
+        spectrum) — while the original draft's NON-cyclic reordering
+        Mdiag^{-Dj} A_L K^{Dj} A_R has a different spectrum (the plan 48
+        item 3.3 review correction)."""
+        _, iw, io, left_rows, left_idx, mirrored = wall_eliminated_pair_n20
+        s = 1e-6 + 0.9j
+        dj = 12
+
+        f = round_trip_factors(iw, io, left_rows, mirrored, s,
+                               left_row_indices=left_idx)
+        K = np.diag(f.kappa ** dj)
+        Mi = np.diag(f.mu ** (-float(dj)))
+        E = round_trip_matrix(iw, io, left_rows, mirrored, s, dj,
+                              left_row_indices=left_idx)
+        np.testing.assert_allclose(E, Mi @ f.A_R @ K @ f.A_L, rtol=1e-12)
+
+        spec = np.sort_complex(np.linalg.eigvals(E))
+        rotations = (
+            f.A_R @ K @ f.A_L @ Mi,
+            K @ f.A_L @ Mi @ f.A_R,
+            f.A_L @ Mi @ f.A_R @ K,
+        )
+        for rot in rotations:
+            np.testing.assert_allclose(
+                np.sort_complex(np.linalg.eigvals(rot)), spec,
+                rtol=0, atol=1e-12,
+            )
+
+        # The draft-wrong ordering is NOT a cyclic rotation: its spectrum
+        # differs grossly at this generic s (measured max diff ~ 2.9e7).
+        E_draft = Mi @ f.A_L @ K @ f.A_R
+        spec_draft = np.sort_complex(np.linalg.eigvals(E_draft))
+        assert np.max(np.abs(spec_draft - spec)) > 1.0
+
+
+class TestRoundTripIntervalIdentity:
+    """det(sI + D_interval) = 0 <=> 1 in spec(E_{N-1}(s)) (Lemma 1),
+    exercised at exact dense interval eigenvalues — this pins Dj = N - 1
+    (reference nodes 0 and N-1; an off-by-one rephases E and fails)."""
+
+    def test_round_trip_identity_at_interval_eigenvalues(
+        self, e2_1_evaluator, e2_1_alpha_zero
+    ):
+        """E2_1 alpha = 0, (psi_L, psi_R) = (0.5, 1.0), N = 12 (the
+        dense-stable cut-left + uniform-right configuration): at each
+        propagating-band interval eigenvalue s* (on the imaginary axis,
+        0.3 < Im < 0.95 — measured +/- 0.6235j and +/- 0.9010j), E_11(s*)
+        has an eigenvalue equal to 1 to ~1e-14 (measured 2.4e-15 and
+        2.2e-14)."""
+        N = 12
+        D = build_interval_operator(E2_1, e2_1_alpha_zero, 0.5, 1.0, N)
+        eigs = np.linalg.eigvals(-D)
+        cands = eigs[(np.abs(eigs.real) < 1e-8)
+                     & (eigs.imag > 0.3) & (eigs.imag < 0.95)]
+        assert len(cands) == 2  # measured: 0.6234898j and 0.9009689j
+
+        interior = e2_1_evaluator.interior()
+        rows_L, idx_L = e2_1_evaluator.rows(0.5, e2_1_alpha_zero)
+        rows_R, idx_R = e2_1_evaluator.rows(1.0, e2_1_alpha_zero)
+        mirrored = mirror_closure(rows_R, interior,
+                                  from_physical_right=False,
+                                  row_indices=[int(i) for i in idx_R])
+
+        for s_star in cands:
+            E = round_trip_matrix(
+                interior[0], interior[1], rows_L, mirrored, s_star, N - 1,
+                left_row_indices=[int(i) for i in idx_L],
+            )
+            ev = np.linalg.eigvals(E)
+            assert np.min(np.abs(ev - 1.0)) < 1e-12, (
+                f"round-trip identity fails at interval eigenvalue {s_star}"
+            )
+
+    def test_round_trip_identity_out_of_scope_at_per_end_det_zero(
+        self, e2_1_evaluator, e2_1_alpha_zero
+    ):
+        """The same interval also has the real eigenvalue
+        s = -(1 - psi_L)/(1 + psi_L) = -1/3 (the stable-half-plane mirror
+        image of the item-3.2 outflow law, carried by the LEFT cut
+        closure): there det M_L(-1/3) = 0 (measured sigma_min ~ 9e-17),
+        Lemma 1's per-end-invertibility hypothesis is violated, and the
+        round-trip criterion is out of scope by construction — the
+        per-end determinant tier owns such points (module docstring)."""
+        N = 12
+        D = build_interval_operator(E2_1, e2_1_alpha_zero, 0.5, 1.0, N)
+        eigs = np.linalg.eigvals(-D)
+        assert np.min(np.abs(eigs - (-1.0 / 3.0))) < 1e-9
+
+        interior = e2_1_evaluator.interior()
+        rows_L, idx_L = e2_1_evaluator.rows(0.5, e2_1_alpha_zero)
+        sigma, status = min_singular_value_ex(
+            interior[0], interior[1], rows_L, -1.0 / 3.0 + 0j,
+            row_indices=[int(i) for i in idx_L], equilibrate=True,
+        )
+        assert status == "ok"
+        assert sigma < 1e-12
+
+
+class TestRoundTripOrderingTripwire:
+    """The plan-mandated p = 2 cross-validation: at p = 1 every factor is
+    a scalar and ANY ordering gives the same rho, so only a p = 2
+    configuration with an unstable dense interval eigenvalue can catch an
+    ordering bug. The wall-eliminated Gaussian eps = 0.1 pair at n = 12
+    (Dj = 10 = Dj_min) is that configuration: p = 2 (flat-limit classical
+    E4 interior), dense max Re eig(-D_bc) ~ +0.101 (the same dense tier
+    item 3.2 scans; the RBF closure is not a SchemeParams cut-cell, so
+    the eigendecomposition of the assembled D_bc stands in for
+    interval_stability_scan), and at Dj = 10 the evanescent modes still
+    couple the 2x2 factors."""
+
+    def test_round_trip_p2_identity_at_unstable_interval_eigenvalue(
+        self, wall_eliminated_pair_n12
+    ):
+        """rho(E_Dj(s*)) ~ 1 at the matching Dj = N - 1 = 10, with an
+        eigenvalue of E equal to 1 (measured min|eig - 1| ~ 5e-13). Both
+        ends are separately nonsingular at s* (sigma_min ~ 1.4e-3 /
+        4.9e-2 measured), so Lemma 1 applies cleanly."""
+        D_bc, iw, io, left_rows, left_idx, mirrored = wall_eliminated_pair_n12
+        eigs = np.linalg.eigvals(-D_bc)
+        s_star = eigs[np.argmax(eigs.real)]
+        assert s_star.real > 0.05  # genuinely unstable (measured +0.101)
+
+        # Lemma 1 hypothesis check: neither end is singular at s*.
+        sigma_L, status_L = min_singular_value_ex(
+            iw, io, left_rows, s_star, row_indices=left_idx,
+            equilibrate=True,
+        )
+        sigma_R, status_R = min_singular_value_ex(
+            mirrored.interior_weights, mirrored.interior_offsets,
+            mirrored.boundary_rows, s_star,
+            row_indices=mirrored.row_indices, equilibrate=True,
+        )
+        assert status_L == status_R == "ok"
+        assert sigma_L > 1e-6 and sigma_R > 1e-6
+
+        E = round_trip_matrix(iw, io, left_rows, mirrored, s_star, 10,
+                              left_row_indices=left_idx)
+        ev = np.linalg.eigvals(E)
+        assert np.min(np.abs(ev - 1.0)) < 1e-9
+        assert np.max(np.abs(ev)) == pytest.approx(1.0, rel=1e-9)
+
+    def test_round_trip_p2_wrong_ordering_fails(
+        self, wall_eliminated_pair_n12
+    ):
+        """The original draft's ordering Mdiag^{-Dj} A_L K^{Dj} A_R has NO
+        eigenvalue at 1 at the same s* (measured min|eig - 1| ~ 8.3e-5 vs
+        ~5e-13 for the correct ordering — eight orders of magnitude): a
+        wrong ordering fails this test, the correct one passes."""
+        D_bc, iw, io, left_rows, left_idx, mirrored = wall_eliminated_pair_n12
+        eigs = np.linalg.eigvals(-D_bc)
+        s_star = eigs[np.argmax(eigs.real)]
+
+        f = round_trip_factors(iw, io, left_rows, mirrored, s_star,
+                               left_row_indices=left_idx)
+        K = np.diag(f.kappa ** 10)
+        Mi = np.diag(f.mu ** (-10.0))
+
+        E_correct = Mi @ f.A_R @ K @ f.A_L
+        E_draft = Mi @ f.A_L @ K @ f.A_R
+        miss_correct = np.min(np.abs(np.linalg.eigvals(E_correct) - 1.0))
+        miss_draft = np.min(np.abs(np.linalg.eigvals(E_draft) - 1.0))
+
+        assert miss_correct < 1e-9
+        assert miss_draft > 1e-5
+        assert miss_draft > 1e3 * miss_correct
+
+    def test_round_trip_p2_off_by_one_delta_j_fails(
+        self, wall_eliminated_pair_n12
+    ):
+        """An off-by-one in Dj rephases E and the identity fails (plan 48
+        item 3.3 convention pinning): measured min|eig - 1| ~ 0.55 at
+        Dj = 11 and ~ 0.86 at Dj = 12 vs ~5e-13 at the true Dj = 10."""
+        D_bc, iw, io, left_rows, left_idx, mirrored = wall_eliminated_pair_n12
+        eigs = np.linalg.eigvals(-D_bc)
+        s_star = eigs[np.argmax(eigs.real)]
+
+        for dj_wrong in (11, 12):
+            E = round_trip_matrix(iw, io, left_rows, mirrored, s_star,
+                                  dj_wrong, left_row_indices=left_idx)
+            ev = np.linalg.eigvals(E)
+            assert np.min(np.abs(ev - 1.0)) > 0.3
+
+
+class TestRoundTripWallEliminatedAcceptance:
+    """Plan 48 item 3.3 acceptance, first half: the (Gaussian eps = 0.1,
+    psi = 1 uniform ends) pair must be flagged — round_trip_radius > 1 OR
+    reflection_product > 1 — at the Dj corresponding to the N = 20 case
+    where L3 catches it.
+
+    Mechanism refinement (established here; sharpens the item-2.5
+    account): the operator L3 actually eigendecomposes is the
+    wall-eliminated D_bc = D[1:, 1:], a 19-node interval (Dj = 18). Its
+    unstable eigenvalue converges with N to a LEFT-half-line det-zero of
+    the wall-eliminated 3-row closure (kreiss check below: unstable,
+    witness s ~ 0.09834 + 1.37803j = the N -> infinity limit of the dense
+    eigenvalue; N-drift measured 0.1014 -> 0.09834 over n = 12..40), i.e.
+    the mechanism is a per-end eigensolution of the ELIMINATED block —
+    the full 4-row block items 0.3/2.5 analyzed is genuinely half-line
+    stable, so both were right about the operator they looked at. On the
+    axis the round-trip radius therefore stays < 1 (measured 0.8706 —
+    the per-end pole sits at Re(s) ~ 0.098, off the axis) and the flag
+    comes from the product screen; AT the dense eigenvalue the round-trip
+    identity rho(E_18(s*)) = 1 holds to ~4e-12 (Lemma 1, hypothesis
+    intact at finite N since sigma_min(M_L(s*)) ~ 2.4e-5 > 0)."""
+
+    def test_round_trip_wall_eliminated_pair_flagged_at_matched_dj(
+        self, wall_eliminated_pair_n20
+    ):
+        D_bc, iw, io, left_rows, left_idx, mirrored = wall_eliminated_pair_n20
+        assert D_bc.shape == (19, 19)
+
+        res = round_trip_check(iw, io, left_rows, mirrored,
+                               delta_j_values=[18],
+                               left_row_indices=left_idx)
+        assert isinstance(res, RoundTripResult)
+        assert res.delta_j_values == (18,)
+        assert res.finite is True
+
+        # The plan's acceptance flag (radius > 1 OR product > 1).
+        assert (res.round_trip_radius > 1.0
+                or res.reflection_product > 1.0)
+        # Sharpened: the flag comes from the product screen (measured
+        # 2.58e11); the axis radius stays below 1 (measured 0.8706)
+        # because the instability is the per-end pole at Re(s) ~ 0.098,
+        # not an axis round-trip resonance.
+        assert res.reflection_product > 1.0
+        assert 0.5 < res.round_trip_radius < 1.0
+
+    def test_round_trip_wall_eliminated_identity_at_dense_eigenvalue(
+        self, wall_eliminated_pair_n20
+    ):
+        """rho(E_18(s*)) = 1 at the dense unstable eigenvalue of -D_bc
+        (measured min|eig - 1| ~ 4.4e-12): the analytic tier reproduces
+        the repo's documented L3-only catch."""
+        D_bc, iw, io, left_rows, left_idx, mirrored = wall_eliminated_pair_n20
+        eigs = np.linalg.eigvals(-D_bc)
+        s_star = eigs[np.argmax(eigs.real)]
+        assert s_star.real == pytest.approx(0.0983, abs=2e-3)
+        assert abs(s_star.imag) == pytest.approx(1.3780, abs=2e-3)
+
+        E = round_trip_matrix(iw, io, left_rows, mirrored, s_star, 18,
+                              left_row_indices=left_idx)
+        ev = np.linalg.eigvals(E)
+        assert np.min(np.abs(ev - 1.0)) < 1e-8
+
+    def test_round_trip_wall_eliminated_left_end_is_the_mechanism(
+        self, wall_eliminated_pair_n20
+    ):
+        """The wall-eliminated LEFT closure alone is GKS-unstable with the
+        half-line witness at the N -> infinity limit of the dense
+        eigenvalue (measured witness 0.09834 + 1.37803j, sigma ~ 3e-17;
+        dense s* at n = 20 is 6.5e-5 away) — the per-end tier, run on the
+        operator L3 actually time-steps, owns this instability."""
+        D_bc, iw, io, left_rows, left_idx, _ = wall_eliminated_pair_n20
+        eigs = np.linalg.eigvals(-D_bc)
+        s_star = eigs[np.argmax(eigs.real)]
+
+        result = kreiss_stability_check(iw, io, left_rows,
+                                        row_indices=left_idx)
+        assert result.is_stable is False
+        witness = result.witness_s
+        assert min(abs(witness - s_star),
+                   abs(witness - np.conj(s_star))) < 1e-3
+
+
+class TestRoundTripE2_1Pairs:
+    """Plan 48 item 3.3 acceptance, second half: E2_1 alpha = 0 at several
+    (psi_L, psi_R) — radius < 1. Pairs are the dense-stable cut-left +
+    uniform-right configurations; per the item-3.2 outflow-law finding,
+    every psi_R < 1 cut-RIGHT pair is genuinely eigenvalue-unstable
+    through a per-end det-zero (covered by the dedicated test below), so
+    those cannot be radius-<-1 acceptance cases."""
+
+    @pytest.mark.parametrize("pair", [(0.5, 1.0), (0.1, 1.0),
+                                      (0.9999, 1.0), (1.0, 1.0)])
+    def test_round_trip_e2_1_stable_pairs_radius_below_one(
+        self, e2_1_alpha_zero, pair
+    ):
+        res = cutcell_round_trip(E2_1, e2_1_alpha_zero, *pair,
+                                 s_grid=_RT_S_GRID)
+        assert isinstance(res, RoundTripResult)
+        assert res.finite is True
+        assert res.defective_points == ()
+        # E2_1: t = T - 1 = 4 both ends -> Dj_min = 4 + 4 - 1 = 7, and
+        # the default window is the plan's {Dj_min, ..., Dj_min + 5}.
+        assert res.delta_j_min == 7
+        assert res.delta_j_values == (7, 8, 9, 10, 11, 12)
+        # Marginally-stable hyperbolic pair: the radius approaches 1 from
+        # below (near-origin consistency physics; measured 1 - 6.1e-6 on
+        # the strip) but never crosses it.
+        assert 0.99 < res.round_trip_radius < 1.0
+
+        # Dense cross-check at N = 20 (same convention u_t = -D u).
+        D = build_interval_operator(E2_1, e2_1_alpha_zero, *pair, 20)
+        assert float(np.max(np.linalg.eigvals(-D).real)) < 1e-4
+
+    def test_round_trip_e2_1_product_upper_bounds_radius(
+        self, e2_1_alpha_zero
+    ):
+        """On the axis ||K^Dj|| = ||Mdiag^-Dj|| <= 1, so the decoupled
+        reflection product pointwise upper-bounds rho(E_Dj) for every Dj
+        — the documented screen property."""
+        res = cutcell_round_trip(E2_1, e2_1_alpha_zero, 0.5, 1.0,
+                                 s_grid=_RT_S_GRID)
+        rho_max = np.nanmax(res.rho, axis=1)
+        assert np.all(rho_max <= res.products * (1 + 1e-9) + 1e-12)
+        assert res.reflection_product >= res.round_trip_radius
+
+    def test_round_trip_e2_1_outflow_pair_per_end_mechanism(
+        self, e2_1_evaluator, e2_1_alpha_zero
+    ):
+        """Cut-right pair (0.5, 0.5): genuinely unstable — dense max Re
+        eig(-D) = (1 - psi_R)/(1 + psi_R) = 1/3 exactly (the item-3.2
+        outflow law) — through a PER-END det-zero of the mirrored right
+        closure at s = 1/3 (measured sigma_min ~ 9e-17), which violates
+        Lemma 1's per-end-invertibility hypothesis: the round-trip radius
+        on the axis stays < 1 and must NOT be read as a certificate —
+        per-end screening is a mandatory companion (module docstring)."""
+        # Dense instability (outflow law).
+        D = build_interval_operator(E2_1, e2_1_alpha_zero, 0.5, 0.5, 12)
+        assert float(np.max(np.linalg.eigvals(-D).real)) == pytest.approx(
+            1.0 / 3.0, rel=1e-9
+        )
+
+        # Per-end det-zero at s = 1/3 on the mirrored right closure ...
+        interior = e2_1_evaluator.interior()
+        rows_R, idx_R = e2_1_evaluator.rows(0.5, e2_1_alpha_zero)
+        mirrored = mirror_closure(rows_R, interior,
+                                  from_physical_right=False,
+                                  row_indices=[int(i) for i in idx_R])
+        sigma_R, status_R = min_singular_value_ex(
+            mirrored.interior_weights, mirrored.interior_offsets,
+            mirrored.boundary_rows, 1.0 / 3.0 + 0j,
+            row_indices=mirrored.row_indices, equilibrate=True,
+        )
+        assert status_R == "ok"
+        assert sigma_R < 1e-12
+        # ... while the left end is fine there (measured ~3.2e-2).
+        rows_L, idx_L = e2_1_evaluator.rows(0.5, e2_1_alpha_zero)
+        sigma_L, status_L = min_singular_value_ex(
+            interior[0], interior[1], rows_L, 1.0 / 3.0 + 0j,
+            row_indices=[int(i) for i in idx_L], equilibrate=True,
+        )
+        assert status_L == "ok"
+        assert sigma_L > 1e-3
+
+        # The axis round-trip radius does not flag it (correctly: the
+        # mechanism is per-end, off-axis at real s = 1/3).
+        res = cutcell_round_trip(E2_1, e2_1_alpha_zero, 0.5, 0.5,
+                                 s_grid=_RT_S_GRID)
+        assert res.round_trip_radius < 1.0
+
+    def test_round_trip_e2_1_infeasible_marker(
+        self, e2_1_evaluator, e2_1_alpha_zero, monkeypatch
+    ):
+        """The item-1.2 feasibility guard runs at BOTH end psi before any
+        assembly; a vanishing structural denominator returns the distinct
+        CutCellInfeasible marker (parameterization failure, never a
+        stability verdict)."""
+        monkeypatch.setattr(
+            e2_1_evaluator, "denominators",
+            frozenset({Symbol("psi") - Rational(1, 2)}),
+        )
+        for pair in ((0.5, 0.9), (0.9, 0.5)):
+            marker = cutcell_round_trip(E2_1, e2_1_alpha_zero, *pair,
+                                        s_grid=_RT_S_GRID)
+            assert isinstance(marker, CutCellInfeasible)
+            assert marker.infeasible is True
+            assert marker.psi == 0.5
+            assert not hasattr(marker, "round_trip_radius")
+
+
+class TestRoundTripValidation:
+    """Dj minimum (tied to item 3.1's IntervalTooShort), defective
+    routing, and argument validation."""
+
+    def test_round_trip_delta_j_minimum_values(
+        self, e2_1_evaluator, e2_1_alpha_zero, wall_eliminated_pair_n20
+    ):
+        """Dj_min = max(t_L + t_R - 1, max_node_L + max_node_R + 1):
+        supports may not overlap — STRICTER than 3.1's assembly minimum
+        (N >= max(m_L + m_R, t_L, t_R) permits column overlap; E2_1's
+        assembly minimum is N = 6 nodes but the round trip needs
+        Dj >= 7, i.e. N >= 8)."""
+        interior = e2_1_evaluator.interior()
+        rows, idx = e2_1_evaluator.rows(0.5, e2_1_alpha_zero)
+        mirrored = mirror_closure(rows, interior, from_physical_right=False,
+                                  row_indices=[int(i) for i in idx])
+        assert min_round_trip_delta_j(rows, mirrored) == 7
+
+        # Wall-eliminated Gaussian pair: t_L = 5, t_R = 6 -> Dj_min = 10.
+        _, _, _, left_rows, left_idx, mirrored_g = wall_eliminated_pair_n20
+        assert min_round_trip_delta_j(
+            left_rows, mirrored_g, left_row_indices=left_idx
+        ) == 10
+
+    def test_round_trip_below_minimum_raises_interval_too_short(
+        self, e2_1_evaluator, e2_1_alpha_zero
+    ):
+        """Dj below the minimum raises the item-3.1 IntervalTooShort (a
+        ValueError subclass) from every entry point."""
+        interior = e2_1_evaluator.interior()
+        rows, idx = e2_1_evaluator.rows(0.5, e2_1_alpha_zero)
+        row_idx = [int(i) for i in idx]
+        mirrored = mirror_closure(rows, interior, from_physical_right=False,
+                                  row_indices=row_idx)
+
+        assert issubclass(IntervalTooShort, ValueError)
+        with pytest.raises(IntervalTooShort, match="supports"):
+            round_trip_matrix(interior[0], interior[1], rows, mirrored,
+                              1e-6 + 0.5j, 6, left_row_indices=row_idx)
+        with pytest.raises(IntervalTooShort, match="Dj >= 7"):
+            round_trip_check(interior[0], interior[1], rows, mirrored,
+                             delta_j_values=[7, 6],
+                             left_row_indices=row_idx)
+        with pytest.raises(IntervalTooShort):
+            cutcell_round_trip(E2_1, e2_1_alpha_zero, 0.5, 1.0,
+                               delta_j_values=[6], s_grid=_RT_S_GRID)
+
+    def test_round_trip_sonic_grid_point_flagged_not_clean(
+        self, e2_1_alpha_zero
+    ):
+        """A grid point at the exact E2 sonic point s = i has a defective
+        mode basis: it is recorded in defective_points with rho = nan and
+        finite = False — never a clean value (items 0.1 / 2.2 routing) —
+        while clean grid points still evaluate."""
+        grid = np.array([1j, 1e-6 + 2.0j])
+        res = cutcell_round_trip(E2_1, e2_1_alpha_zero, 0.5, 1.0,
+                                 delta_j_values=[7], s_grid=grid)
+
+        assert res.defective_points == (1j,)
+        assert res.finite is False
+        assert np.all(np.isnan(res.rho[0, :]))
+        assert np.isnan(res.products[0])
+        assert np.isfinite(res.round_trip_radius)
+        assert res.argmax_s == grid[1]
+
+    def test_round_trip_check_argument_validation(
+        self, e2_1_evaluator, e2_1_alpha_zero
+    ):
+        interior = e2_1_evaluator.interior()
+        rows, idx = e2_1_evaluator.rows(0.5, e2_1_alpha_zero)
+        row_idx = [int(i) for i in idx]
+        mirrored = mirror_closure(rows, interior, from_physical_right=False,
+                                  row_indices=row_idx)
+
+        with pytest.raises(ValueError, match="delta_j_values"):
+            round_trip_check(interior[0], interior[1], rows, mirrored,
+                             delta_j_values=[], left_row_indices=row_idx)
+        with pytest.raises(ValueError, match="n_delta_j"):
+            round_trip_check(interior[0], interior[1], rows, mirrored,
+                             n_delta_j=0, left_row_indices=row_idx)
+        with pytest.raises(ValueError, match="left_row_indices"):
+            min_round_trip_delta_j(rows, mirrored, left_row_indices=[0])
+        with pytest.raises(ValueError, match="at least one closure row"):
+            min_round_trip_delta_j([], mirrored)
+        for bad in (0.0, 1.5):
+            with pytest.raises(ValueError, match="psi"):
+                cutcell_round_trip(E2_1, e2_1_alpha_zero, bad, 0.5,
+                                   s_grid=_RT_S_GRID)
+            with pytest.raises(ValueError, match="psi"):
+                cutcell_round_trip(E2_1, e2_1_alpha_zero, 0.5, bad,
+                                   s_grid=_RT_S_GRID)
