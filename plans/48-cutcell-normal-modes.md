@@ -463,3 +463,47 @@ Script: `scripts/stencil_gen/calibration_plan48_4_4.py` (standalone findings scr
 - **(g) control sphere discriminates:** the 4.3 mild-ψ sphere ((0.7071, 0.7071), r = 0.25) through the SAME pipeline reproduces 4.3 exactly at N=31 (+7.929, t_end 0.4903 — delta ≈ 0, so the new code path is consistent), but at N=61 (realized ψ ∈ [0.031, 0.83]) it too goes fast: +37.8, delta +28.3. Correlation across the four (sphere, N) pairs: delta ≈ 0 only when min realized ψ = 0.088; delta large for min ψ ∈ {5.7e-6, 1.6e-3, 0.031}; near-1 ψ not implicated (the mild sphere's max ψ is 0.83 yet shows the largest delta). **Small realized ψ (≲ 0.03–0.09 threshold) is the prime suspect.** Note `E2_1.cpp` applies NO ψ clamp (only `E4_1.cpp:101,235` clamps to [1e-4, 1−1e-4]), so N=61 evaluates the closure at ψ = 5.7e-6 raw.
 - **Attribution NOT established here** (findings, not analysis): the uniform baseline is itself unstable (default-floating xmax/ymax walls — 4.3 caveat 1, certification hole already filed), and the 1D Dirichlet half-line certification (1.2/1.4: E2_1 α=0 stable at all ψ incl. 1e-4, dense-verified) covers neither 2D transverse coupling, nor the varying-coefficient radial flow, nor outflow-side Dirichlet over-specification around the sphere. Discriminating probes for 4.5: sphere variants realizing only-small vs only-large ψ; N=41 (fresh ψ draw); an all-certified-boundary configuration once the floating-wall hole is fixed; per-ψ-threshold bisection of the delta.
 - **Consequence for 4.5 acceptance:** E2_1 α=0 is a Python-pass (half-line Dirichlet block) / C++-fail (this template) pair. Under the plan's rule this disagreement is logged, but it is not yet attributable to the certified object: the template's floating walls dominate the baseline, and the cut delta correlates with small ψ where the *2D embedded* problem departs from the certified 1D half-line one. 4.5 must work with the delta-vs-uniform signal (4.3 option (b)) plus the discriminating probes above, not the raw rate.
+
+### 4.5 (2026-07-14) — End-to-end acceptance comparison: **ACCEPTANCE PASS — no Python-pass/C++-fail disagreement**, because the full Python suite (two-ended tiers, item-3.2 outflow law) already FAILS every configuration the cut template realizes; the 4.4.5 "Python-pass/C++-fail" framing dissolves once tiers (ii)/(iii) enter the comparison; one Python-fail/C++-pass probe logged; three plan-49 wiring caveats recorded
+
+Script: `scripts/stencil_gen/calibration_plan48_4_5.py` (standalone findings script, committed like 1.4/4.4's; deterministic — two full runs byte-identical on all reported figures; ≈ 3 min total, C++ = 25 shoccs invocations). Configs: **A** = E2_1 α = 0; **B** = E2_1 α₃ = +0.01, the "deliberately perturbed, marginal" pick. Pick rationale (part 0, a finding in itself): **the E2_1 GKS-stability region around α = 0 has ZERO width in every single-α direction** — α₃ = +0.002 is already unstable at 6/20 grid ψ (max Re s\* = 0.256), ±0.01 in any component at 12–17/20 — so "marginal" can only mean *weakly unstable*; B's witnesses are genuine (Re s\* = 0.4314 at ψ = 0.9999 matches the dense N=40 interval eigenvalue to 12 digits) and weak (σ_min at det-zeros ~1e-18, growth confined to Re s ≤ 0.43). Thresholds documented in the script: deep RK4-region violation = max|R(ζ)|−1 > 1e-3 over eig(dt·L); C++ cut-signal = cut-vs-uniform delta > 1.0 (rate noise floor 0.0013; measured deltas cluster at ~0 or ≥ +1.2).
+
+**(i)–(iii) Python suite** (default 20-ψ grid; 50 default (ψ_L, ψ_R) pairs; containment at CFL ∈ {0.8, 1.0}, h = √2/30, scan reused):
+
+| tier | A (α=0) | B (α₃=+0.01) |
+|---|---|---|
+| (i) half-line Kreiss over ψ | **stable 20/20**, worst σ 8.23e-8 @ ψ=0.9999 | **unstable 12/20** (ψ ∈ [0.136, 0.9999]), max Re s\* = 0.4314 |
+| (ii) reflection L / R | finite, max ‖R‖ = 2.554e6 @ ψ=1e-4, clean | finite, 2.553e6 @ ψ=1e-4, clean (per-end pole is off-axis) |
+| (ii) round-trip over 50 pairs | worst ρ = **0.999994** (< 1) @ (0.999, 0.9999) | worst ρ = **10.61** (> 1) @ (0.95, 0.136) — the 3.3 tier flags B on the axis |
+| (iii) 3.2 scan worst abscissa | **+0.9998** @ (1e-4, 1e-4, 6) — the outflow law | **+1.0337** @ (0.9999, 1e-4, 11) |
+| (iii) containment, sweep family (ψ_R=1, N=40) | max\|R\|−1 = **+4.6e-6** (CFL 0.8) — marginal noise only | **+0.412** (CFL 0.8) — deep; the half-line instability shows up |
+| (iii) containment, scan family | **+1.22** (0.8) / **+1.71** (1.0) — deep | **+1.28** / **+1.80** — deep |
+| Python overall | **FAIL** (two-ended tiers; half-line object PASSES) | **FAIL** (all stability tiers) |
+
+**(iv) C++ L8, standard ψ-spanning sphere** (cut vs uniform at matched (N, CFL); uniform baselines via a temp template with the hardcoded CFL 0.8 replaced by the marker):
+
+| config | N | CFL | cut rate | uniform rate | delta |
+|---|---|---|---|---|---|
+| A | 31 | 0.8 / 1.0 | +16.33 / +16.32 | +7.93 / +8.01 | **+8.40 / +8.32** |
+| A | 61 | 0.8 / 1.0 | +31.84 / +32.21 | +9.53 / +9.54 | **+22.32 / +22.67** |
+| B | 31 | 0.8 / 1.0 | +15.54 / +15.52 | +7.59 / +8.11 | **+7.95 / +7.41** |
+| B | 61 | 0.8 / 1.0 | +30.50 / +31.00 | +10.29 / +10.30 | **+20.21 / +20.69** |
+
+All 8 cut runs fail (raw and delta); CFL-insensitive (semi-discrete, reconfirming 4.4.5); delta ~ 1/h. **C++ cannot distinguish A from B on this template** (B's cut rates are marginally *lower*): B's certified-object mechanism (Re s\* = 0.43 → ~0.43·c/h) is subdominant to the small-ψ outflow-law modes ((1−ψ)/(1+ψ)·c_loc/h → ~c/h at ψ_min ~ 1e-3–1e-6) that dominate both configs. Both fail → agreement in verdict direction, no resolution power beyond that.
+
+**Discriminating probes (A, CFL 0.8; geometries located with the tested `_realized_psi_set` replication, min-ψ ladder with location control):**
+
+| probe (N=31 unless noted) | realized ψ (min, max, n) | cut rate | delta |
+|---|---|---|---|
+| P_mid, center (0.7357, 0.7294), r=0.1953 | 0.0700, 0.757, 32 | +7.929 | **+0.000** |
+| P_small, center (0.6823, 0.7606), r=0.2271 | 5.4e-6, 0.866, 38 | +18.80 | **+10.87** |
+| P_large, center (0.5430, 0.5422), r=0.1834 | 0.501, 0.930, 32 | +9.51 | **+1.58** (persistent: rates +9.11/+9.51/+9.80 at CFL 0.4/0.8/1.0) |
+| standard sphere, N=41 | 2.1e-3, 0.985, 54 | +21.08 | **+12.97** (fresh ψ draw; ~1/h scaling vs N=31's +8.40) |
+
+P_mid vs P_small share nearly the same sphere location — isolating min-ψ from the local-wave-speed confound: delta 0.0 vs +10.9. P_large shows the delta is NOT exclusively a ψ→0 pathology (+1.2…+1.6 at min ψ = 0.5, CFL-insensitive) — consistent with the outflow law being positive for *every* ψ_R < 1 and merely maximal as ψ→0, modulated by local speed c_loc and masked whenever the (uncertified) floating-wall mode's +7.9 is faster (P_mid). Max-ψ near 1 remains unimplicated (P_small has max 0.866 and the second-largest delta).
+
+**Acceptance determination (explicit):**
+- **PASS** — no Python-pass/C++-fail disagreement anywhere in the matrix. Config A: Python overall FAIL (outflow-law two-ended tiers) / C++ FAIL → agree. Config B: Python FAIL (half-line + round-trip + containment) / C++ FAIL → agree. The 4.4.5 framing of A as "Python-pass/C++-fail" referred to tier (i) alone; items 3.2/4.1 flag exactly the object class (cut Dirichlet *outflow* ends, realized at the sphere's leeward side on every probed geometry) whose growth the C++ delta tracks.
+- **Python-fail/C++-pass instances (acceptable, logged):** P_mid probe (Python flags its outflow ends at ψ ≥ 0.07; measured delta = 0 because the floating-wall mode outruns the cut mode) — the proxies are conservative exactly as the plan allows. Same holds for every (ψ_L, ψ_R) pair the scan flags that no C++ geometry realizes.
+- **The certified object (A's half-line inflow Dirichlet closure, tiers (i)/(ii) per-end) is never contradicted** — but also never isolated by any C++ configuration: every template has floating xmax/ymax walls (4.3 caveat 1 certification hole, still open) and leeward cut ends. Closing that hole (floating-closure GKS analysis, or an all-certified-boundary template) remains the follow-up filed at 4.3.
+- **Plan-49 wiring caveats (block nothing here, but must be handled in wiring):** (1) the containment *margin* headline is degenerate for the 3.1 interval class — every assembled operator has an exact zero eigenvalue, z = 0 ∈ ∂S ⇒ margin ≡ 0, margin_certified ≡ −arc/2 ≈ −0.0126 at n_boundary=1024, for stable and unstable configs alike; the discriminating fully-discrete quantity is max\|R(eig dt·L)\|−1 per family (or a zero-mode-deflated margin) — do not feed raw `worst_margin_certified` to the optimizer; (2) `eigs_inside` at eig_tol = 1e-10 trips on benign O(1e-7) finite-N real parts (A's sweep family flags eigs-outside at half the ψ grid while max\|R\|−1 ≤ 5e-6) — calibrate the tolerance or gate on the amplification excess; (3) any L8-based objective must use the delta-vs-uniform signal and geometry-aware probes, not raw rates, until the floating-wall hole is closed.
