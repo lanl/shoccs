@@ -769,6 +769,90 @@ def _refine_witness(
     return complex(eps_imag + abs(result.x[0] - eps_imag), result.x[1])
 
 
+def perturbed_root_directions(
+    interior_weights: np.ndarray,
+    interior_offsets: np.ndarray,
+    s: complex,
+    roots: np.ndarray,
+    *,
+    delta: float = 1e-4,
+    repeat_tol: float = 1e-7,
+) -> list[str]:
+    """Classify near-unit-modulus kappa roots by perturbing s into the RHP.
+
+    Shared perturbation test (Trefethen 1983 p. 207) between
+    _classify_imag_axis (GKS candidate triage) and reflection.mode_split
+    (borderline-mode resolution, plan 48 item 2.1). Sign convention: this
+    module analyzes u_t = -sum_k a_k u_{n+k} (the kappa_roots docstring
+    convention); under the "raw operator weights" reading all w-signs flip.
+
+    The kappa roots of the characteristic polynomial are recomputed at
+    s + delta (a perturbation into the right half-plane) and matched to
+    ``roots`` by nearest-neighbor. A root whose modulus decreases is
+    labeled ``'inward'`` — it is the half-plane limit of the admissible /
+    rightgoing family (Trefethen's *outgoing*-at-the-left-boundary mode:
+    group velocity pointing away from the boundary into the interior).
+    Otherwise it is labeled ``'outward'`` — the half-plane limit of the
+    |kappa| > 1 leftgoing family (incoming at the left boundary).
+
+    Parameters
+    ----------
+    interior_weights, interior_offsets
+        Interior stencil specification.
+    s : complex
+        The base point (typically on or near the imaginary axis).
+    roots : array-like of complex
+        The near-unit-modulus kappa roots at ``s`` to classify.
+    delta : float
+        Perturbation magnitude in Re(s).
+    repeat_tol : float
+        Two of ``roots`` closer than this are coalescing (sonic / branch
+        point): nearest-neighbor matching is ambiguous there.
+
+    Returns
+    -------
+    list[str]
+        One label per root, each ``'inward'`` or ``'outward'``.
+
+    Raises
+    ------
+    DefectiveKappaError
+        If any two of ``roots`` are within ``repeat_tol`` of each other.
+    """
+    roots = np.asarray(roots, dtype=complex)
+
+    # Defective check restricted to the supplied (near-unit) roots only.
+    # (The kappa_roots defective flag checks all admissible roots, which
+    # would false-positive on roots deep inside the unit disk.)
+    for i in range(len(roots)):
+        for j in range(i + 1, len(roots)):
+            if abs(roots[i] - roots[j]) < repeat_tol:
+                raise DefectiveKappaError(
+                    f"Coalescing near-unit kappa roots at s={s}: "
+                    f"{roots[i]} and {roots[j]} within repeat_tol={repeat_tol}"
+                )
+
+    # Roots at s + delta (perturb into the right half-plane)
+    all_delta, _, _ = kappa_roots(
+        interior_weights, interior_offsets, s + delta
+    )
+
+    directions = []
+    for k0 in roots:
+        # Find closest root in the perturbed set
+        distances = np.abs(all_delta - k0)
+        k_delta = all_delta[np.argmin(distances)]
+
+        # If |k_delta| < |k0|, the root moved inward (toward origin)
+        # under a Re(s) increase.
+        if abs(k_delta) < abs(k0) - 1e-10:
+            directions.append("inward")
+        else:
+            directions.append("outward")
+
+    return directions
+
+
 def _classify_imag_axis(
     interior_weights: np.ndarray,
     interior_offsets: np.ndarray,
@@ -780,6 +864,9 @@ def _classify_imag_axis(
     For a candidate s_0 near the imaginary axis, recompute kappa roots at
     s_0 and s_0 + delta, match by nearest-neighbor, and classify
     unit-modulus kappas as incoming or outgoing per Trefethen p. 207.
+    The per-root perturbation test lives in the shared helper
+    perturbed_root_directions (plan 48 item 2.1), also used by
+    reflection.mode_split.
 
     Note on naming convention: "outgoing_mode_detected" means a physical
     outgoing mode was found at the boundary — this is a GKS violation
@@ -818,29 +905,17 @@ def _classify_imag_axis(
     if not near_unit:
         return "no_candidates"
 
-    # Defective check restricted to near-unit-circle roots only.
-    # (The kappa_roots defective flag checks all admissible roots, which
-    # would false-positive on roots deep inside the unit disk.)
-    for i in range(len(near_unit)):
-        for j in range(i + 1, len(near_unit)):
-            if abs(near_unit[i] - near_unit[j]) < repeat_tol:
-                return "defective"
+    try:
+        directions = perturbed_root_directions(
+            interior_weights, interior_offsets, s_candidate, near_unit,
+            delta=delta, repeat_tol=repeat_tol,
+        )
+    except DefectiveKappaError:
+        return "defective"
 
-    # Roots at s_0 + delta (perturb into the right half-plane)
-    all_delta, _, _ = kappa_roots(
-        interior_weights, interior_offsets, s_candidate + delta
-    )
-
-    # Match near-unit roots to perturbed roots by nearest-neighbor
-    for k0 in near_unit:
-        # Find closest root in the perturbed set
-        distances = np.abs(all_delta - k0)
-        k_delta = all_delta[np.argmin(distances)]
-
-        # If |k_delta| < |k0|, the root moved inward (toward origin)
-        # under a Re(s) increase — this is an "outgoing mode" (GKS violation)
-        if abs(k_delta) < abs(k0) - 1e-10:
-            return "outgoing_mode_detected"
+    # An inward-moving unit root is an "outgoing mode" (GKS violation).
+    if "inward" in directions:
+        return "outgoing_mode_detected"
 
     return "all_incoming"
 
