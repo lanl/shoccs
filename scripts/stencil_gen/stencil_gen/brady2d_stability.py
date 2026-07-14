@@ -43,7 +43,13 @@ from stencil_gen.phs import (
     stability_eigenvalue,
     stability_eigenvalue_from_matrix,
 )
-from stencil_gen.cpp_bridge import BridgeResult, run_cpp_brady2d
+from stencil_gen.cpp_bridge import (
+    BRADY_LIVESCU_CUT_TEMPLATE,
+    BRADY_LIVESCU_TEMPLATE,
+    CUT_SPHERE_RADIUS,
+    BridgeResult,
+    run_cpp_brady2d,
+)
 
 logger = logging.getLogger("stencil_gen.brady2d_stability")
 
@@ -1126,6 +1132,45 @@ _L8_SCHEME_TYPE = {
 }
 
 
+# Cut-capable dispatch table for the embedded-sphere template (plan 48 item
+# 4.4.3). Deliberately a SEPARATE table, never a mutation of _L8_SCHEME_TYPE:
+# its ("E4", "classical") → "E4u" entry is the uniform-validation path and
+# would collide on the same key. Uniform-only stencil types are also a
+# *silent* trap on cut geometry — E4u accepts a sphere without any exception
+# and produces a garbage cut discretization (plan 48 findings, 4.3 caveat 2)
+# — so only the cut-capable types "E2" (make_E2_1) and "E4" (make_E4_1) are
+# admissible here.
+_L8_CUT_SCHEME_TYPE = {
+    ("E2", "classical"): "E2",
+    ("E4", "classical"): "E4",
+}
+
+
+# Template registry: template name → (dispatch table, Lua template path).
+_L8_TEMPLATES = {
+    "uniform": (_L8_SCHEME_TYPE, BRADY_LIVESCU_TEMPLATE),
+    "cut": (_L8_CUT_SCHEME_TYPE, BRADY_LIVESCU_CUT_TEMPLATE),
+}
+
+
+# Growth-rate tolerance for the cut rung's stability verdict (plan 48 item
+# 4.4.2): stable iff growth_rate < L8_RATE_TOL, replacing the blow-up-only
+# final_linf < 10 criterion which misses slow exponential growth within the
+# t_final window. Calibration (4.4.5, Findings log): the stable uniform E4u
+# anchor measures growth_rate = +0.0013 (N-independent over {31, 61}) on the
+# standard t_final = 10 window — 0.05 sits ~38x above that noise floor and
+# ~26x below the smallest measured unstable rate (Gaussian eps=0.1, +1.33).
+# Short windows sit inside the error transient (+0.33 at t_final = 1 — 4.3
+# caveat 3), so rate-based verdicts require the t_final = 10 default. Note
+# the absolute rate on THIS template measures the whole discretization
+# including the default-floating xmax/ymax walls (4.3 caveat 1): E2_1
+# alpha=0 grows at +7.9/+9.5 (N=31/61) on the UNIFORM template already, so
+# the cut-cell *signal* for a closure certified on the half-line is the
+# delta vs. the uniform baseline, not the raw rate (4.4.5: the delta is
+# itself nonzero once the sphere realizes small psi — see the Findings log).
+L8_RATE_TOL = 0.05
+
+
 def layer8_cpp_simulation(
     scheme: str,
     kernel: str,
@@ -1133,22 +1178,27 @@ def layer8_cpp_simulation(
     *,
     N: int = 31,
     t_final: float = 10.0,
+    template: str = "uniform",
+    cfl: float | None = None,
+    cfl_values: list[float] | None = None,
+    rate_tol: float = L8_RATE_TOL,
 ) -> dict:
     """L8: end-to-end C++ simulation via the shoccs Brady-Livescu 2D harness.
 
-    Renders a Lua config from the plan-42 template with the supplied scheme
+    Renders a Lua config from the selected template with the supplied scheme
     parameters, invokes the compiled shoccs binary, and reports the final
-    L∞ error. A layer-8 pass means the analytical predictions of L1–L7 survive
-    contact with the real solver; a failure flags an inconsistency to chase.
+    L∞ error and log-L∞ growth rate. A layer-8 pass means the analytical
+    predictions of L1–L7 survive contact with the real solver; a failure
+    flags an inconsistency to chase.
 
     Parameters
     ----------
     scheme : str
-        Scheme name ("E2" or "E4"). Plan 42 first cut supports "E4" only.
+        Scheme name ("E2" or "E4").
     kernel : str
         Kernel type ("classical", "tension", "gaussian", "multiquadric").
-        Plan 42.7a wires all four for the E4 scheme; E2 variants remain
-        deferred (plan 42.10a).
+        The uniform template wires all four for the E4 scheme; the cut
+        template supports only "classical" (cut-capable stencil types).
     params : dict
         Scheme-specific parameters; passed through verbatim to
         :func:`run_cpp_brady2d`. Classical uses ``{"alpha": [...]}``,
@@ -1158,52 +1208,129 @@ def layer8_cpp_simulation(
         Grid resolution (points per side). Default 31 matches the
         Brady-Livescu §4.3 coarsest grid.
     t_final : float
-        Physical end time. Default 10.0 — short enough to run in a
-        few seconds, long enough to catch an exponential blow-up.
+        Physical end time. Default 10.0 — short enough to run in a few
+        seconds, long enough to catch an exponential blow-up; also the
+        window the growth-rate noise floor is calibrated on (do not shrink
+        it for rate-based verdicts — 4.3 caveat 3).
+    template : str
+        "uniform" (plan-42 template, no embedded geometry, blow-up-only
+        verdict) or "cut" (plan-48 embedded-sphere template, growth-rate
+        verdict). Each template pairs with its own dispatch table so
+        uniform-only stencil types can never silently run on cut geometry.
+    cfl : float | None
+        Hyperbolic CFL for the cut template's --{{CFL}}-- marker (default
+        0.8 there). Passing it with the uniform template raises — that
+        template hardcodes cfl = 0.8 with no marker (plan 48 item 4.4.4).
+    cfl_values : list[float] | None
+        Finalist validation: run once per CFL value (sequentially; each run
+        is 0.1–6 s) and return per-CFL results with an all-pass aggregate
+        verdict. Mutually exclusive with ``cfl``.
+    rate_tol : float
+        Growth-rate threshold for the cut rung's verdict (default
+        :data:`L8_RATE_TOL`).
 
     Returns
     -------
-    dict with keys:
+    dict with keys (single run):
         final_linf : float
             Final L∞ error at t_final (nan on simulation failure).
         stable : bool
-            True iff the simulation ran to completion with a finite L∞
-            below the hard blow-up ceiling used by
-            :func:`run_cpp_brady2d`.
+            Uniform template: blow-up-only criterion (finite final L∞
+            below the ceiling used by :func:`run_cpp_brady2d`). Cut
+            template: ``growth_rate < rate_tol`` and not infeasible.
+        growth_rate : float | None
+            Trailing-half log-L∞ slope (see ``compute_growth_rate``).
+        infeasible : bool
+            True when the C++ run aborted with std::invalid_argument (a
+            stencil parameterization failure, e.g. E4_1's alpha[1] <
+            197/288 guard) — never conflated with instability.
+        reason : str
+            The stderr line explaining an infeasible run ("" otherwise).
         wall_time_s : float
             Wall-clock seconds for the C++ invocation.
         bridge_result : BridgeResult
             Full bridge result for debugging (exit_code, stderr, traces).
+    When ``cfl_values`` is given, the dict instead carries ``cfl_results``
+    (one single-run dict per CFL value, keyed by CFL), the aggregate
+    ``stable`` (all runs pass), ``infeasible`` (any run infeasible), and
+    the summed ``wall_time_s``.
 
     Raises
     ------
+    ValueError
+        Unknown ``template``, or both ``cfl`` and ``cfl_values`` given.
     NotImplementedError
-        When ``(scheme, kernel)`` has no registered Lua scheme type. Items
-        42.7a onward extend the dispatch table.
+        When ``(scheme, kernel)`` has no entry in the selected template's
+        dispatch table.
     """
+    if template not in _L8_TEMPLATES:
+        raise ValueError(
+            f"unknown L8 template {template!r}; expected one of "
+            f"{sorted(_L8_TEMPLATES)}"
+        )
+    dispatch, lua_template = _L8_TEMPLATES[template]
+
     key = (scheme, kernel)
-    if key not in _L8_SCHEME_TYPE:
+    if key not in dispatch:
         raise NotImplementedError(
             f"layer8_cpp_simulation has no dispatch for (scheme={scheme!r}, "
-            f"kernel={kernel!r}); only {sorted(_L8_SCHEME_TYPE)} supported so far",
+            f"kernel={kernel!r}) on template {template!r}; only "
+            f"{sorted(dispatch)} supported so far",
         )
-    scheme_type = _L8_SCHEME_TYPE[key]
+    scheme_type = dispatch[key]
 
-    result: BridgeResult = run_cpp_brady2d(
-        scheme_type, params, N=N, t_final=t_final,
-    )
+    if cfl is not None and cfl_values is not None:
+        raise ValueError("pass either cfl or cfl_values, not both")
 
-    logger.debug(
-        "L8 %s/%s N=%d t_final=%g: final_linf=%.4e stable=%s wall=%.1fs",
-        scheme, kernel, N, t_final, result.final_linf, result.stable,
-        result.wall_time_s,
-    )
+    def _single(cfl_value: float | None) -> dict:
+        run_kwargs: dict = {"N": N, "t_final": t_final, "template": lua_template}
+        if template == "cut":
+            run_kwargs["radius"] = CUT_SPHERE_RADIUS
+            run_kwargs["cfl"] = 0.8 if cfl_value is None else cfl_value
+        elif cfl_value is not None:
+            # No CFL marker on the uniform template: forward it so
+            # make_brady2d_lua raises loudly instead of silently running
+            # the hardcoded CFL (plan 48 item 4.4.4).
+            run_kwargs["cfl"] = cfl_value
 
+        result: BridgeResult = run_cpp_brady2d(scheme_type, params, **run_kwargs)
+
+        if template == "cut":
+            stable = (
+                not result.infeasible
+                and result.growth_rate is not None
+                and result.growth_rate < rate_tol
+            )
+        else:
+            stable = result.stable
+
+        logger.debug(
+            "L8[%s] %s/%s N=%d t_final=%g cfl=%s: final_linf=%.4e "
+            "growth_rate=%s infeasible=%s stable=%s wall=%.1fs",
+            template, scheme, kernel, N, t_final, cfl_value,
+            result.final_linf, result.growth_rate, result.infeasible,
+            stable, result.wall_time_s,
+        )
+
+        return {
+            "final_linf": result.final_linf,
+            "stable": stable,
+            "growth_rate": result.growth_rate,
+            "infeasible": result.infeasible,
+            "reason": result.reason,
+            "wall_time_s": result.wall_time_s,
+            "bridge_result": result,
+        }
+
+    if cfl_values is None:
+        return _single(cfl)
+
+    cfl_results = {c: _single(c) for c in cfl_values}
     return {
-        "final_linf": result.final_linf,
-        "stable": result.stable,
-        "wall_time_s": result.wall_time_s,
-        "bridge_result": result,
+        "cfl_results": cfl_results,
+        "stable": all(e["stable"] for e in cfl_results.values()),
+        "infeasible": any(e["infeasible"] for e in cfl_results.values()),
+        "wall_time_s": sum(e["wall_time_s"] for e in cfl_results.values()),
     }
 
 

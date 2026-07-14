@@ -22,7 +22,23 @@ import numpy as np
 REPO_ROOT: Path = Path(__file__).resolve().parents[3]
 LUA_TEMPLATE_DIR: Path = REPO_ROOT / "lua-configs"
 BRADY_LIVESCU_TEMPLATE: Path = LUA_TEMPLATE_DIR / "brady_livescu_4_3.lua"
+BRADY_LIVESCU_CUT_TEMPLATE: Path = LUA_TEMPLATE_DIR / "brady_livescu_4_3_cut.lua"
 SHOCCS_BINARY: Path = REPO_ROOT / "build" / "src" / "app" / "shoccs"
+
+# Embedded-sphere geometry baked into brady_livescu_4_3_cut.lua (plan 48 item
+# 4.4.1). The center is hardcoded in the template (must match — asserted in
+# tests/test_cpp_bridge.py); the radius fills the --{{RADIUS}}-- marker and
+# this is its default. Chosen so the realized cut-cell psi set spans near-0
+# to near-1 at BOTH N=31 (44 cut points, psi in [1.6e-3, 0.99927]) and N=61
+# (84 cut points, psi in [5.7e-6, 0.99853]); cross-validated against the
+# shoccs binary's logs/geometry.csv (matches the Python ray-cast replication
+# in tests/test_cpp_bridge.py to ~1e-12).
+CUT_SPHERE_CENTER: tuple[float, float] = (0.8441, 0.6177)
+CUT_SPHERE_RADIUS: float = 0.2422
+
+# Growth-rate floor: traces with L-inf below this throughout carry no signal
+# for a log-linear fit (the solution is numerically zero).
+_GROWTH_RATE_LINF_FLOOR = 1e-12
 
 
 @dataclass
@@ -34,6 +50,16 @@ class BridgeResult:
     wall_time_s: float = 0.0
     exit_code: int = 0
     stderr: str = ""
+    #: Least-squares slope of log(L-inf) over the trailing half of the trace
+    #: (plan 48 item 4.4.2); None when undefined (non-finite trace, L-inf
+    #: below 1e-12 throughout, or too few points).
+    growth_rate: float | None = None
+    #: True when the C++ run died with std::invalid_argument — a
+    #: parameterization failure (e.g. E4_1's alpha[1] >= 197/288 denominator
+    #: positivity guard), never a stability verdict.
+    infeasible: bool = False
+    #: The stderr line explaining an infeasible run ("" otherwise).
+    reason: str = ""
 
 
 def _format_lua_number(x: float) -> str:
@@ -66,6 +92,15 @@ def _scheme_table_for(scheme_type: str, params: dict[str, Any]) -> str:
     return "{ " + ", ".join(entries) + " }"
 
 
+_ALL_MARKERS = (
+    "--{{N}}--",
+    "--{{T_FINAL}}--",
+    "--{{SCHEME_TABLE}}--",
+    "--{{RADIUS}}--",
+    "--{{CFL}}--",
+)
+
+
 def make_brady2d_lua(
     scheme_type: str,
     params: dict[str, Any],
@@ -73,18 +108,115 @@ def make_brady2d_lua(
     N: int,
     t_final: float,
     template: Path = BRADY_LIVESCU_TEMPLATE,
+    radius: float | None = None,
+    cfl: float | None = None,
 ) -> str:
     """Render the Brady-Livescu 2D Lua config with the supplied parameters.
 
-    Substitutes the three explicit markers --{{N}}--, --{{T_FINAL}}--, and
-    --{{SCHEME_TABLE}}-- with their runtime values. No regex, no Lua AST
-    parsing — just str.replace().
+    Substitutes the explicit markers --{{N}}--, --{{T_FINAL}}--, and
+    --{{SCHEME_TABLE}}-- (plus --{{RADIUS}}-- / --{{CFL}}-- on the cut
+    template) with their runtime values. No regex, no Lua AST parsing — just
+    str.replace().
+
+    Passing ``radius`` or ``cfl`` against a template lacking the matching
+    marker raises ValueError: the uniform template hardcodes
+    ``cfl = { hyperbolic = 0.8 }`` with no marker, so a silent str.replace
+    no-op would run the wrong CFL (plan 48 item 4.4.4). Conversely, any
+    marker left unfilled (e.g. the cut template rendered without ``radius``)
+    also raises, since the rendered Lua would not parse.
     """
     src = template.read_text()
     src = src.replace("--{{N}}--", str(int(N)))
     src = src.replace("--{{T_FINAL}}--", _format_lua_number(t_final))
     src = src.replace("--{{SCHEME_TABLE}}--", _scheme_table_for(scheme_type, params))
+    if radius is not None:
+        if "--{{RADIUS}}--" not in src:
+            raise ValueError(
+                f"radius={radius} passed but template {template.name!r} has no "
+                "--{{RADIUS}}-- marker"
+            )
+        src = src.replace("--{{RADIUS}}--", _format_lua_number(radius))
+    if cfl is not None:
+        if "--{{CFL}}--" not in src:
+            raise ValueError(
+                f"cfl={cfl} passed but template {template.name!r} has no "
+                "--{{CFL}}-- marker; the uniform template hardcodes "
+                "cfl = { hyperbolic = 0.8 } and a silent no-op replace would "
+                "run the wrong CFL"
+            )
+        src = src.replace("--{{CFL}}--", _format_lua_number(cfl))
+    leftover = [m for m in _ALL_MARKERS if m in src]
+    if leftover:
+        raise ValueError(
+            f"unfilled markers {leftover} in template {template.name!r}; the cut "
+            "template requires radius= and cfl= arguments"
+        )
     return src
+
+
+def compute_growth_rate(
+    t_trace: np.ndarray, linf_trace: np.ndarray
+) -> float | None:
+    """Least-squares growth rate of log(L-inf) over the trailing half.
+
+    Plan 48 item 4.4.2: fits ``log(linf) ~ a + rate * t`` on the trailing
+    half of the series (the leading half is discarded as an initial
+    transient — see the 4.3 findings caveat 3: a short window's trailing
+    half can still sit inside the error transient, so callers should use
+    the standard t_final = 10 window) and returns the slope, in units of
+    1/time.
+
+    Returns None when the rate is undefined:
+    - any non-finite entry in either trace (a NaN/inf blow-up gives no
+      meaningful log-linear fit; ``final_linf``/``stable`` already flag it),
+    - L-inf below 1e-12 throughout (numerically zero solution, no signal),
+    - fewer than two trailing-half points or zero time span.
+    """
+    t = np.asarray(t_trace, dtype=float)
+    y = np.asarray(linf_trace, dtype=float)
+    if t.size != y.size or y.size == 0:
+        return None
+    if not (np.all(np.isfinite(t)) and np.all(np.isfinite(y))):
+        return None
+    if np.all(y < _GROWTH_RATE_LINF_FLOOR):
+        return None
+    start = y.size // 2
+    t_tail = t[start:]
+    y_tail = y[start:]
+    if t_tail.size < 2 or not float(t_tail[-1] - t_tail[0]) > 0.0:
+        return None
+    # Clamp to avoid log(0) on isolated exact zeros; the all-below-floor
+    # case (no signal at all) already returned None above.
+    log_y = np.log(np.maximum(y_tail, 1e-300))
+    slope, _ = np.polyfit(t_tail, log_y, 1)
+    return float(slope)
+
+
+def _detect_infeasible(stderr: str) -> tuple[bool, str]:
+    """Map a C++ ``std::invalid_argument`` abort to ``(True, <stderr line>)``.
+
+    Cut-capable stencil constructors signal parameterization failures by
+    throwing std::invalid_argument (e.g. ``E4_1.cpp:37-41``: alpha[1] must be
+    >= 197/288 to keep the interior denominator positive). The uncaught throw
+    terminates the binary via SIGABRT with libstdc++'s banner on stderr::
+
+        terminate called after throwing an instance of 'std::invalid_argument'
+          what():  E4_1: alpha[1] must be >= 197/288 ...
+
+    Plan 48 item 4.4.3: this is *infeasibility* (a parameterization failure)
+    and must never be conflated with a stability verdict. Returns the
+    ``what():`` line as the reason when present, else the terminate banner.
+    """
+    lines = stderr.splitlines()
+    if not any("std::invalid_argument" in ln for ln in lines):
+        return False, ""
+    for ln in lines:
+        if "what():" in ln:
+            return True, ln.strip()
+    for ln in lines:
+        if "std::invalid_argument" in ln:
+            return True, ln.strip()
+    return True, ""
 
 
 def _parse_system_csv(path: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -117,6 +249,8 @@ def run_cpp_brady2d(
     timeout: float = 300.0,
     template: Path = BRADY_LIVESCU_TEMPLATE,
     binary: Path = SHOCCS_BINARY,
+    radius: float | None = None,
+    cfl: float | None = None,
 ) -> BridgeResult:
     """Run the shoccs Brady-Livescu 2D test and return the parsed result.
 
@@ -126,12 +260,25 @@ def run_cpp_brady2d(
     using a private tempdir isolates concurrent invocations — callers can
     run this in parallel without racing on the same CSV.
 
+    ``radius`` and ``cfl`` fill the cut template's --{{RADIUS}}-- and
+    --{{CFL}}-- markers (plan 48 item 4.4); passing them against a template
+    without the marker raises (see `make_brady2d_lua`).
+
     On nonzero exit, timeout, or parse failure, returns a BridgeResult with
     `final_linf=nan`, `stable=False`, and the diagnostic captured in
-    `exit_code`/`stderr`.
+    `exit_code`/`stderr`. A `std::invalid_argument` abort (stencil
+    parameterization failure) additionally sets `infeasible=True` with the
+    explanatory stderr line in `reason`. On success, `growth_rate` carries
+    the trailing-half log-L-inf slope (see `compute_growth_rate`).
     """
     lua_source = make_brady2d_lua(
-        scheme_type, params, N=N, t_final=t_final, template=template
+        scheme_type,
+        params,
+        N=N,
+        t_final=t_final,
+        template=template,
+        radius=radius,
+        cfl=cfl,
     )
 
     with tempfile.TemporaryDirectory(prefix="shoccs-brady2d-") as tmpdir:
@@ -162,12 +309,15 @@ def run_cpp_brady2d(
         wall = time.perf_counter() - start
 
         if completed.returncode != 0:
+            infeasible, reason = _detect_infeasible(completed.stderr)
             return BridgeResult(
                 final_linf=float("nan"),
                 stable=False,
                 wall_time_s=wall,
                 exit_code=completed.returncode,
                 stderr=completed.stderr,
+                infeasible=infeasible,
+                reason=reason,
             )
 
         csv_path = tmp / "logs" / "system.csv"
@@ -202,4 +352,5 @@ def run_cpp_brady2d(
             wall_time_s=wall,
             exit_code=completed.returncode,
             stderr=completed.stderr,
+            growth_rate=compute_growth_rate(t_trace, linf_trace),
         )
