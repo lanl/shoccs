@@ -11,8 +11,9 @@ are appended to the Findings log of ``plans/48-cutcell-normal-modes.md``.
 For E2_1 alpha = 0 (config A) and one deliberately perturbed alpha the
 Python margins call marginal (config B: alpha_3 = +0.01, picked after the
 1.4-style neighborhood scan in part 0 — the E2_1 stability region around
-alpha = 0 has ZERO width in every single-alpha direction, so "marginal"
-means weakly unstable: max Re(witness s) = 0.43, dense-confirmed), compare:
+alpha = 0 has ZERO width in every single-alpha direction: all 8 +/-0.01
+directions unstable at 12-20/20 grid psi, so "marginal" means weakly
+unstable: max Re(witness s) = 0.43, dense-confirmed), compare:
 
   (i)   kreiss_margin_over_psi          (item 1.3, half-line inflow tier)
   (ii)  max_reflection / round-trip     (items 2.4 / 3.3)
@@ -27,9 +28,14 @@ means weakly unstable: max Re(witness s) = 0.43, dense-confirmed), compare:
 plus the discriminating probes recommended by the 4.4.5 findings entry:
 probe spheres realizing only-large / mid / only-small min realized psi at
 N = 31 (a per-psi-threshold bisection of the delta), and an N = 41 fresh
-psi draw of the standard sphere.  Probe geometries were located with the
-ray-cast replication ``tests.test_cpp_bridge._realized_psi_set`` (validated
-against logs/geometry.csv to ~1e-12) and are hardcoded below.
+psi draw of the standard sphere.  Probe geometries were located by a
+fixed-seed random search using the ray-cast replication
+``tests.test_cpp_bridge._realized_psi_set`` (validated against
+logs/geometry.csv to ~1e-12), then their coordinates rounded to 4 digits
+and hardcoded below; the quoted min/max realized psi and cut-point counts
+are the replication re-evaluated AT the hardcoded coordinates (and match
+the shoccs binary's logs/geometry.csv there), not the search's
+pre-rounding values.
 
 Acceptance (plan): no Python-pass/C++-fail disagreement; Python-fail/
 C++-pass is acceptable (proxies may be conservative) but must be logged.
@@ -96,13 +102,15 @@ DEEP_AMPL = 1e-3
 DELTA_TOL = 1.0
 
 # Probe spheres (part 3): located by fixed-seed random search over
-# (cx, cy, r) with the tests._realized_psi_set replication at N = 31;
-# min/max realized psi and cut-point counts quoted from that replication.
+# (cx, cy, r) with the tests._realized_psi_set replication at N = 31, then
+# rounded to the 4-digit coordinates below.  min/max realized psi and
+# cut-point counts are quoted from the replication evaluated AT these
+# hardcoded coordinates (binary-verified against logs/geometry.csv).
 PROBES = {
     #                 cx      cy      r       min psi   max psi  n
-    "P_large": (0.5430, 0.5422, 0.1834),  # 0.501,   0.930,  32
-    "P_mid": (0.7357, 0.7294, 0.1953),  # 0.0700,  0.757,  32
-    "P_small": (0.6823, 0.7606, 0.2271),  # 5.4e-6,  0.866,  38
+    "P_large": (0.5430, 0.5422, 0.1834),  # 0.4988,  0.9298, 32
+    "P_mid": (0.7357, 0.7294, 0.1953),  # 0.0695,  0.755,  32
+    "P_small": (0.6823, 0.7606, 0.2271),  # 8.84e-4, 0.868,  38
 }
 # Standard template sphere realized psi (replication): N=31 [1.57e-3,
 # 0.99927] (44 pts), N=41 [2.10e-3, 0.98534] (54 pts), N=61 [5.70e-6,
@@ -142,14 +150,18 @@ def kreiss_stats(alpha: dict) -> dict:
 
 def part0_neighborhood() -> dict:
     print("== Part 0: perturbed-alpha pick (E2_1 stability region width) ==")
-    out = {}
-    for name, av in [
+    cases = [
         ("alpha_3=+0.002", [0, 0, 0, 0.002]),
         ("alpha_3=+0.005", [0, 0, 0, 0.005]),
-        ("alpha_3=+0.01", [0, 0, 0, 0.01]),
-        ("alpha_0=+0.01", [0.01, 0, 0, 0]),
-        ("alpha_0=-0.01", [-0.01, 0, 0, 0]),
-    ]:
+    ]
+    # All 8 single-alpha +/-0.01 directions
+    for i in range(4):
+        for sign, v in (("+", 0.01), ("-", -0.01)):
+            av = [0.0, 0.0, 0.0, 0.0]
+            av[i] = v
+            cases.append((f"alpha_{i}={sign}0.01", av))
+    out = {}
+    for name, av in cases:
         st = kreiss_stats({f"alpha_{i}": float(v) for i, v in enumerate(av)})
         out[name] = st
         print(
