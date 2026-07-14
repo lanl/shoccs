@@ -155,6 +155,31 @@ incident/reflected roles swap (time reversal), and the measured relation
 is the reciprocal one — A_R(i omega) * conj(A_L(i omega)) -> 1 for
 p = 1, i.e. ||A_R|| ||A_L|| -> 1 as eps -> 0 — NOT norm equality. Both
 behaviors are pinned by the mirror tests in tests/test_reflection.py.
+
+psi-swept reflection margin (plan 48 item 2.4)
+----------------------------------------------
+``reflection_over_psi`` worst-cases the reflection margin over the
+fractional wall position psi for a cut-cell closure, reusing item 1.3's
+infrastructure exactly: the default psi grid is
+``cutcell_normal_modes.default_psi_grid`` (clustered near 0, matched to
+the C++ clamp [1e-4, 1 - 1e-4]) and each psi point passes through the
+item-1.2 feasibility guard (``_vanishing_denominators`` ->
+:class:`~stencil_gen.cutcell_normal_modes.CutCellInfeasible`) before any
+assembly — denominator vanishing is a *parameterization* failure and is
+partitioned out, never folded into the margin. Closure rows come from
+the cached evaluator (item 1.1), so the symbolic derivation cost is paid
+once per scheme. ``side="left"`` analyzes the stored left-end Dirichlet
+rows directly; ``side="right"`` maps them through
+``mirror_closure(..., from_physical_right=False)`` (the production
+revneg entry point above). The result is a
+:class:`CutCellReflectionSweep` — a
+:class:`~stencil_gen.cutcell_normal_modes.CutCellPsiSweep` subtype whose
+reflection margin lives in ``max_reflection`` / ``argmax_psi``.
+
+Report wiring (same item): ``brady2d_stability.cutcell_stability_report``
+populates the opt-in ``StabilityReport.layer_cutcell`` dict from this
+sweep plus item 1.3's Kreiss sweep. It is NOT part of the L1-L8 cascade;
+objective/alias wiring is plan 49.
 """
 
 from __future__ import annotations
@@ -163,6 +188,14 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from stencil_gen.cutcell_eval import make_cutcell_evaluator
+from stencil_gen.cutcell_normal_modes import (
+    FEASIBILITY_TOL,
+    CutCellInfeasible,
+    CutCellPsiSweep,
+    _vanishing_denominators,
+    default_psi_grid,
+)
 from stencil_gen.gks_kreiss import (
     DefectiveKappaError,
     kappa_roots,
@@ -179,6 +212,8 @@ __all__ = [
     "max_reflection",
     "MirroredClosure",
     "mirror_closure",
+    "CutCellReflectionSweep",
+    "reflection_over_psi",
 ]
 
 
@@ -845,4 +880,209 @@ def mirror_closure(
         interior_offsets=mirrored_io,
         boundary_rows=rows_out,
         row_indices=idx_out,
+    )
+
+
+# ---------------------------------------------------------------------------
+# psi-swept reflection margin (plan 48 item 2.4)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CutCellReflectionSweep(CutCellPsiSweep):
+    """Worst-case-over-psi reflection margin for a cut-cell closure.
+
+    Plan 48 item 2.4: a :class:`~stencil_gen.cutcell_normal_modes.
+    CutCellPsiSweep` subtype (so ``reflection_over_psi`` returns the item
+    1.3 sweep container, as the plan specifies) whose reflection margin
+    lives in the fields below. The two aggregations mirror the base class,
+    with "worse" now meaning LARGER reflection:
+
+    - **margin**: ``max_reflection`` / ``argmax_psi`` are the max (and
+      argmax) over feasible psi of the per-psi
+      ``ReflectionResult.max_norm``. An inf per-psi norm (det M(s) = 0 on
+      the s-grid — a GKS-eigensolution witness) propagates: the margin is
+      inf at that psi. Per-psi nan (no cleanly evaluable grid point) is
+      excluded; if NO feasible psi produced a clean value,
+      ``max_reflection`` is nan and ``argmax_psi`` / ``argmax_s`` are
+      None (the ``ReflectionResult`` convention).
+    - **stability routing**: ``any_unstable`` is True iff any feasible
+      psi returned ``ReflectionResult.finite is False`` — either an inf
+      blowup or defective grid points (sonic/coalescence), both of which
+      must route through the non-clean path (items 0.1 / 2.2), never
+      count as clean margins.
+
+    The inherited Kreiss-margin fields (``worst_sigma_min`` /
+    ``worst_psi``) are NOT computed by the reflection sweep; they carry
+    the base class's no-finite-margin convention (inf / None). The Kreiss
+    margin comes from ``kreiss_margin_over_psi`` (item 1.3);
+    ``brady2d_stability.cutcell_stability_report`` reports both side by
+    side.
+
+    ``infeasible_psi`` / ``per_psi`` keep their base-class meaning:
+    infeasible psi points (vanishing structural denominator — a
+    *parameterization* failure) carry
+    :class:`~stencil_gen.cutcell_normal_modes.CutCellInfeasible` in
+    ``per_psi`` and are excluded from both aggregations; feasible points
+    carry :class:`ReflectionResult`.
+    """
+
+    max_reflection: float
+    """Max over feasible psi of the per-psi ``ReflectionResult.max_norm``
+    (inf if det M(s) = 0 on the grid at some psi; nan if no feasible psi
+    produced a clean value)."""
+
+    argmax_psi: float | None
+    """The psi attaining ``max_reflection`` (None if no clean value)."""
+
+    argmax_s: complex | None
+    """The s-grid point attaining ``max_reflection`` at ``argmax_psi``
+    (None if no clean value)."""
+
+    side: str
+    """Which physical end was analyzed: "left" (stored left-end Dirichlet
+    rows, direct) or "right" (their revneg image via
+    ``mirror_closure(..., from_physical_right=False)``)."""
+
+
+def reflection_over_psi(
+    scheme,
+    alpha: dict,
+    psi_grid=None,
+    side: str = "left",
+    *,
+    feasibility_tol: float = FEASIBILITY_TOL,
+    s_grid: np.ndarray | None = None,
+) -> CutCellPsiSweep:
+    """Worst-case the reflection margin over a psi grid (plan 48 item 2.4).
+
+    Runs :func:`max_reflection` on the cut-cell Dirichlet closure at each
+    psi of *psi_grid* and aggregates into a :class:`CutCellReflectionSweep`
+    (a ``CutCellPsiSweep`` subtype). Reuses item 1.3's infrastructure
+    exactly: the default grid is
+    ``cutcell_normal_modes.default_psi_grid()`` and each point passes the
+    item-1.2 feasibility guard before assembly — a vanishing structural
+    denominator partitions the psi into ``infeasible_psi`` (a
+    *parameterization* failure, never conflated with a reflection margin).
+    Closure rows come from the cached evaluator (item 1.1), so the
+    symbolic derivation cost is paid once per scheme.
+
+    The **Dirichlet (wall-eliminated) block is the canonical analysis
+    object** (plan 48 constraint). Sign convention: the raw
+    derivative-operator rows are passed through unflipped, exactly as
+    ``kreiss_cutcell_check`` feeds them to the module-wide
+    ``u_t = -sum_k a_k u_{n+k}`` convention.
+
+    Parameters
+    ----------
+    scheme : SchemeParams
+        Cut-cell scheme (e.g. ``temo.E2_1``, ``temo.E4_1``).
+    alpha : dict
+        Mapping from alpha symbol (or name) to value; must cover all of
+        the scheme's free parameters.
+    psi_grid : sequence of float, optional
+        psi values to sweep; defaults to ``default_psi_grid()``. Must be
+        non-empty; every psi must lie in (0, 1].
+    side : str
+        "left" (default): analyze the stored left-end rows directly.
+        "right": analyze the physical right end they represent via the
+        nu = 1 codegen revneg symmetry, i.e.
+        ``mirror_closure(rows, interior, from_physical_right=False)``
+        (item 2.3's production entry point).
+    feasibility_tol : float
+        |denominator| threshold for the per-psi feasibility guard.
+    s_grid : np.ndarray, optional
+        Forwarded to :func:`max_reflection` (default: the
+        ``default_reflection_s_grid()`` strip).
+
+    Returns
+    -------
+    CutCellReflectionSweep
+        Worst-cased reflection margin, non-clean routing flag, and the
+        per-psi partition of :class:`ReflectionResult` vs.
+        :class:`~stencil_gen.cutcell_normal_modes.CutCellInfeasible`.
+    """
+    if side not in ("left", "right"):
+        raise ValueError(f'side must be "left" or "right", got {side!r}')
+    if psi_grid is None:
+        psi_grid = default_psi_grid()
+    psi_values = [float(p) for p in psi_grid]
+    if not psi_values:
+        raise ValueError("psi_grid must contain at least one psi value")
+
+    evaluator = make_cutcell_evaluator(scheme)
+    interior = evaluator.interior()
+
+    per_psi: dict = {}
+    infeasible_psi: list = []
+    any_unstable = False
+    max_norm = float("nan")
+    argmax_psi: float | None = None
+    argmax_s: complex | None = None
+
+    for psi in psi_values:
+        if not 0.0 < psi <= 1.0:
+            raise ValueError(f"psi must be in (0, 1], got {psi}")
+
+        # Feasibility guard BEFORE assembly (item 1.2, reused verbatim):
+        # a vanishing denominator means the closure coefficients do not
+        # exist at this point — partition it out, never fold it in.
+        vanishing = _vanishing_denominators(
+            evaluator, psi, alpha, feasibility_tol
+        )
+        if vanishing:
+            per_psi[psi] = CutCellInfeasible(
+                scheme=scheme,
+                psi=psi,
+                alpha=tuple(
+                    (sym.name, v)
+                    for sym, v in zip(
+                        evaluator.alpha_symbols, evaluator._alpha_args(alpha)
+                    )
+                ),
+                vanishing=vanishing,
+                feasibility_tol=feasibility_tol,
+            )
+            infeasible_psi.append(psi)
+            continue
+
+        boundary_rows, row_indices = evaluator.rows(psi, alpha)
+        row_idx = [int(i) for i in row_indices]
+        if side == "right":
+            mc = mirror_closure(
+                boundary_rows,
+                interior,
+                from_physical_right=False,
+                row_indices=row_idx,
+            )
+            iw, io = mc.interior_weights, mc.interior_offsets
+            boundary_rows, row_idx = mc.boundary_rows, mc.row_indices
+        else:
+            iw, io = interior
+
+        result = max_reflection(
+            iw, io, boundary_rows, row_indices=row_idx, s_grid=s_grid
+        )
+        per_psi[psi] = result
+        if not result.finite:
+            any_unstable = True
+        if not np.isnan(result.max_norm) and (
+            argmax_psi is None or result.max_norm > max_norm
+        ):
+            max_norm = float(result.max_norm)
+            argmax_psi = psi
+            argmax_s = result.argmax_s
+
+    return CutCellReflectionSweep(
+        # Kreiss-margin fields: not computed here (base-class
+        # no-finite-margin convention; see class docstring).
+        worst_sigma_min=float("inf"),
+        worst_psi=None,
+        any_unstable=any_unstable,
+        infeasible_psi=infeasible_psi,
+        per_psi=per_psi,
+        max_reflection=max_norm,
+        argmax_psi=argmax_psi,
+        argmax_s=argmax_s,
+        side=side,
     )

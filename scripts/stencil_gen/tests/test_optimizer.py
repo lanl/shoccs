@@ -264,6 +264,29 @@ class TestExtractField:
         r = self._populated_report()
         assert extract_field(r, "kreiss.no_such_attr") == float("inf")
 
+    def test_extract_layer_cutcell_max_reflection(self):
+        """Plan 48 item 2.4: extract_field's dotted-path traversal handles
+        the opt-in ``layer_cutcell`` dict (populated only by
+        ``cutcell_stability_report``, never by the L1-L8 cascade).
+        Objective/alias wiring — ``_FIELD_LAYER_ALIAS`` /
+        ``make_objective`` — is deliberately NOT extended here (plan 49)."""
+        r = StabilityReport(
+            layer_cutcell={
+                "worst_kreiss_sigma": 0.42,
+                "worst_psi": 1e-4,
+                "max_reflection": 1.8,
+                "argmax_psi": 0.05,
+                "reflection_product": None,
+                "infeasible_psi": [],
+            }
+        )
+        assert extract_field(r, "layer_cutcell.max_reflection") == pytest.approx(1.8)
+        # Not populated (the cascade never fills it): inf, like any
+        # layer that was not run.
+        assert extract_field(
+            StabilityReport.empty(), "layer_cutcell.max_reflection"
+        ) == float("inf")
+
 
 class TestExtractFieldBL42:
     def test_extract_max_spectral_abscissa(self):

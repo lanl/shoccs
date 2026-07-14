@@ -13,13 +13,28 @@ Item 2.3 (right-end closures, mirror convention): every test name
 contains ``mirror`` so ``pytest tests/test_reflection.py -k mirror``
 selects exactly this item's tests.
 
+Item 2.4 (psi-swept reflection margin + report wiring): every test name
+contains ``cutcell`` (the plan's naming rule for this item) and avoids
+the other reserved tokens.
+
 Sign convention throughout: u_t = -sum_k a_k u_{n+k} (the
 ``gks_kreiss.kappa_roots`` docstring convention).
 """
 
 import numpy as np
 import pytest
+from sympy import Rational, Symbol
 
+from stencil_gen.brady2d_stability import (
+    StabilityReport,
+    cutcell_stability_report,
+)
+from stencil_gen.cutcell_eval import make_cutcell_evaluator
+from stencil_gen.cutcell_normal_modes import (
+    CutCellInfeasible,
+    CutCellPsiSweep,
+    default_psi_grid,
+)
 from stencil_gen.gks_kreiss import (
     DefectiveKappaError,
     _classify_imag_axis,
@@ -29,6 +44,7 @@ from stencil_gen.gks_kreiss import (
     kreiss_stability_check,
 )
 from stencil_gen.reflection import (
+    CutCellReflectionSweep,
     MirroredClosure,
     ModeSplit,
     ReflectionResult,
@@ -37,8 +53,10 @@ from stencil_gen.reflection import (
     mirror_closure,
     mode_split,
     reflection_matrix,
+    reflection_over_psi,
     reflection_system,
 )
+from stencil_gen.temo import E2_1
 
 # Centered E2 interior for u_t = -u_x: a_{-1} = -1/2, a_{+1} = 1/2.
 # Characteristic polynomial (multiply s + sum a_k kappa^k = 0 by kappa):
@@ -826,3 +844,235 @@ class TestMirrorConvention:
         with pytest.raises(ValueError, match="row_indices"):
             mirror_closure(left_like, E2_INTERIOR_3PT,
                            from_physical_right=False, row_indices=[0, 1])
+
+
+# ---------------------------------------------------------------------------
+# Item 2.4: psi-swept reflection margin + report wiring
+# ---------------------------------------------------------------------------
+
+# Reduced imaginary-axis strip for the psi sweeps: same construction as
+# the default grid, smaller so 20-psi sweeps stay fast.
+_CUTCELL_S_GRID = default_reflection_s_grid(imag_max=5.0, n_points=61)
+
+
+@pytest.fixture(scope="module")
+def e2_1_evaluator():
+    """Module-cached E2_1 evaluator (lru_cache makes this near-free)."""
+    return make_cutcell_evaluator(E2_1)
+
+
+@pytest.fixture()
+def e2_1_alpha_zero(e2_1_evaluator):
+    """The plan-35 baseline configuration: all four E2_1 alphas zero."""
+    return {s: 0.0 for s in e2_1_evaluator.alpha_symbols}
+
+
+class TestCutcellReflectionSweep:
+    """Plan 48 item 2.4: reflection_over_psi.
+
+    Every test name contains ``cutcell`` (the plan's naming rule for this
+    item's sweep/report tests).
+    """
+
+    def test_cutcell_sweep_e2_1_alpha0_default_psi_grid(self, e2_1_alpha_zero):
+        """E2_1 alpha = 0 across the full default psi grid: every psi is
+        feasible and cleanly evaluable, and the worst-case bookkeeping is
+        consistent with the per-psi results."""
+        sweep = reflection_over_psi(E2_1, e2_1_alpha_zero,
+                                    s_grid=_CUTCELL_S_GRID)
+
+        # The item-1.3 sweep container is reused (plan 48 item 2.4).
+        assert isinstance(sweep, CutCellPsiSweep)
+        assert isinstance(sweep, CutCellReflectionSweep)
+        assert sweep.side == "left"
+
+        # Default grid = item 1.3's default_psi_grid, keyed by float(psi).
+        assert sorted(sweep.per_psi) == [float(p) for p in default_psi_grid()]
+        assert sweep.infeasible_psi == []
+        assert sweep.any_unstable is False
+
+        for psi, res in sweep.per_psi.items():
+            assert isinstance(res, ReflectionResult), f"psi={psi}"
+            assert res.finite is True, f"non-clean sweep at psi={psi}"
+            assert res.defective_points == ()
+
+        # max_reflection / argmax_psi / argmax_s are the max (and argmax)
+        # over feasible psi of the per-psi margins.
+        per_psi_max = {p: r.max_norm for p, r in sweep.per_psi.items()}
+        assert np.isfinite(sweep.max_reflection)
+        assert sweep.max_reflection > 0.0
+        assert sweep.max_reflection == max(per_psi_max.values())
+        best = sweep.per_psi[sweep.argmax_psi]
+        assert best.max_norm == sweep.max_reflection
+        assert best.argmax_s == sweep.argmax_s
+
+        # The inherited Kreiss-margin fields are NOT computed by the
+        # reflection sweep: base-class no-finite-margin convention.
+        assert np.isinf(sweep.worst_sigma_min)
+        assert sweep.worst_psi is None
+
+    def test_cutcell_sweep_rows_depend_on_psi(self, e2_1_alpha_zero):
+        """The swept closures genuinely differ across psi: the per-psi
+        norm profiles are not all identical (guards against sweeping a
+        fixed closure by accident)."""
+        sweep = reflection_over_psi(E2_1, e2_1_alpha_zero,
+                                    psi_grid=[0.1, 0.9],
+                                    s_grid=_CUTCELL_S_GRID)
+        norms_a = sweep.per_psi[0.1].norms
+        norms_b = sweep.per_psi[0.9].norms
+        assert np.nanmax(np.abs(norms_a - norms_b)) > 0.0
+
+    def test_cutcell_sweep_side_right_matches_revneg_frame(
+        self, e2_1_evaluator, e2_1_alpha_zero
+    ):
+        """side="right" analyzes the stored left-end rows through the
+        production revneg entry point (mirror_closure with
+        from_physical_right=False) — cross-checked against a by-hand
+        application of that map at one psi."""
+        psi = 0.5
+        sweep = reflection_over_psi(E2_1, e2_1_alpha_zero, psi_grid=[psi],
+                                    side="right", s_grid=_CUTCELL_S_GRID)
+        assert isinstance(sweep, CutCellReflectionSweep)
+        assert sweep.side == "right"
+        res = sweep.per_psi[psi]
+        assert res.finite is True
+
+        rows, row_indices = e2_1_evaluator.rows(psi, e2_1_alpha_zero)
+        mc = mirror_closure(rows, e2_1_evaluator.interior(),
+                            from_physical_right=False,
+                            row_indices=[int(i) for i in row_indices])
+        expected = max_reflection(mc.interior_weights, mc.interior_offsets,
+                                  mc.boundary_rows,
+                                  row_indices=mc.row_indices,
+                                  s_grid=_CUTCELL_S_GRID)
+        assert res.max_norm == expected.max_norm
+        assert res.argmax_s == expected.argmax_s
+        np.testing.assert_array_equal(res.norms, expected.norms)
+
+    def test_cutcell_sweep_invalid_side_rejected(self, e2_1_alpha_zero):
+        with pytest.raises(ValueError, match="side"):
+            reflection_over_psi(E2_1, e2_1_alpha_zero, psi_grid=[0.5],
+                                side="top")
+
+    def test_cutcell_sweep_psi_out_of_range_rejected(self, e2_1_alpha_zero):
+        for bad in (0.0, -0.5, 1.5):
+            with pytest.raises(ValueError, match="psi"):
+                reflection_over_psi(E2_1, e2_1_alpha_zero, psi_grid=[bad],
+                                    s_grid=_CUTCELL_S_GRID)
+
+    def test_cutcell_sweep_empty_psi_grid_rejected(self, e2_1_alpha_zero):
+        with pytest.raises(ValueError, match="psi_grid"):
+            reflection_over_psi(E2_1, e2_1_alpha_zero, psi_grid=[])
+
+    def test_cutcell_sweep_partitions_infeasible(
+        self, e2_1_evaluator, e2_1_alpha_zero, monkeypatch
+    ):
+        """Infeasible psi points (item 1.2 guard, reused verbatim) are
+        listed in infeasible_psi, carried as CutCellInfeasible in per_psi,
+        and excluded from the margin — a parameterization failure never
+        folds into max_reflection.
+
+        E2_1's only structural denominator is psi + 1, which never
+        vanishes on (0, 1], so an engineered denominator psi - 1/2 is
+        substituted on the cached evaluator (monkeypatch restores it)."""
+        monkeypatch.setattr(
+            e2_1_evaluator, "denominators",
+            frozenset({Symbol("psi") - Rational(1, 2)}),
+        )
+        sweep = reflection_over_psi(E2_1, e2_1_alpha_zero,
+                                    psi_grid=[0.25, 0.5, 0.75],
+                                    s_grid=_CUTCELL_S_GRID)
+        assert sweep.infeasible_psi == [0.5]
+        marker = sweep.per_psi[0.5]
+        assert isinstance(marker, CutCellInfeasible)
+        assert marker.infeasible is True
+        assert not hasattr(marker, "is_stable")
+        assert isinstance(sweep.per_psi[0.25], ReflectionResult)
+        assert isinstance(sweep.per_psi[0.75], ReflectionResult)
+        assert sweep.argmax_psi in (0.25, 0.75)
+        assert np.isfinite(sweep.max_reflection)
+        assert sweep.any_unstable is False
+
+    def test_cutcell_sweep_all_infeasible(
+        self, e2_1_evaluator, e2_1_alpha_zero, monkeypatch
+    ):
+        """All-infeasible sweep: no margin (nan / None), not 'unstable'."""
+        monkeypatch.setattr(
+            e2_1_evaluator, "denominators",
+            frozenset({Symbol("psi") - Rational(1, 2)}),
+        )
+        sweep = reflection_over_psi(E2_1, e2_1_alpha_zero, psi_grid=[0.5],
+                                    s_grid=_CUTCELL_S_GRID)
+        assert sweep.infeasible_psi == [0.5]
+        assert np.isnan(sweep.max_reflection)
+        assert sweep.argmax_psi is None
+        assert sweep.argmax_s is None
+        assert sweep.any_unstable is False
+
+
+class TestCutcellStabilityReport:
+    """Plan 48 item 2.4: the opt-in layer_cutcell report wiring."""
+
+    def test_cutcell_stability_report_populates_layer_cutcell(
+        self, e2_1_alpha_zero
+    ):
+        """cutcell_stability_report fills exactly the plan-specified keys
+        from the item-1.3 Kreiss sweep and the item-2.4 reflection sweep."""
+        psi_grid = [0.5, 0.9]
+        report = cutcell_stability_report(E2_1, e2_1_alpha_zero,
+                                          psi_grid=psi_grid)
+        assert isinstance(report, StabilityReport)
+        lc = report.layer_cutcell
+        assert lc is not None
+        assert set(lc) == {
+            "worst_kreiss_sigma",
+            "worst_psi",
+            "max_reflection",
+            "argmax_psi",
+            "reflection_product",
+            "infeasible_psi",
+        }
+        # Kreiss margin (item 1.3): finite positive witness sigma at one
+        # of the swept psi (E2_1 alpha = 0 is the stable baseline).
+        assert 0.0 < lc["worst_kreiss_sigma"] < np.inf
+        assert lc["worst_psi"] in psi_grid
+        # Reflection margin (item 2.4).
+        assert np.isfinite(lc["max_reflection"])
+        assert lc["max_reflection"] > 0.0
+        assert lc["argmax_psi"] in psi_grid
+        # Filled by the two-boundary round-trip tier (plan 48 item 3.3).
+        assert lc["reflection_product"] is None
+        assert lc["infeasible_psi"] == []
+        assert report.compute_time > 0.0
+
+    def test_cutcell_stability_report_outside_cascade(self, e2_1_alpha_zero):
+        """The report is opt-in: no L1-L8 layer runs, the verdict stays
+        "unknown" (objective/alias wiring is plan 49), and an empty
+        StabilityReport leaves layer_cutcell None by default."""
+        report = cutcell_stability_report(E2_1, e2_1_alpha_zero,
+                                          psi_grid=[0.5])
+        for i in range(1, 9):
+            assert getattr(report, f"layer{i}") is None
+        assert report.layer_bl42 is None
+        assert report.kreiss is None
+        assert report.non_normality is None
+        assert report.overall_verdict == "unknown"
+        assert report.failed_layer is None
+
+        assert StabilityReport.empty().layer_cutcell is None
+
+    def test_cutcell_stability_report_partitions_infeasible(
+        self, e2_1_evaluator, e2_1_alpha_zero, monkeypatch
+    ):
+        """Infeasible psi points surface in layer_cutcell["infeasible_psi"]
+        (union over both sweeps), never as a margin."""
+        monkeypatch.setattr(
+            e2_1_evaluator, "denominators",
+            frozenset({Symbol("psi") - Rational(1, 2)}),
+        )
+        report = cutcell_stability_report(E2_1, e2_1_alpha_zero,
+                                          psi_grid=[0.5, 0.9])
+        lc = report.layer_cutcell
+        assert lc["infeasible_psi"] == [0.5]
+        assert lc["worst_psi"] == 0.9
+        assert lc["argmax_psi"] == 0.9
