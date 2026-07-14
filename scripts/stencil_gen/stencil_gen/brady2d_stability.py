@@ -88,6 +88,12 @@ class StabilityReport:
     Numeric ``layerN`` are the primary cascade; ``layer_bl42`` runs during
     the L3 tier (parallel 1D eigenvalue check on the Brady-Livescu §4.2
     reflecting-hyperbolic model problem).
+
+    ``layer_cutcell`` is the opt-in cut-cell normal-mode tier (plan 48
+    item 2.4): it is NEVER populated by the L1-L8 cascade
+    (:func:`brady2d_stability_score` does not touch it) — only by the
+    separate entry point :func:`cutcell_stability_report`. Objective /
+    alias wiring is plan 49.
     """
 
     layer1: dict | None = None
@@ -99,6 +105,7 @@ class StabilityReport:
     layer7: dict | None = None
     layer8: dict | None = None
     layer_bl42: dict | None = None
+    layer_cutcell: dict | None = None  # opt-in; see cutcell_stability_report
     non_normality: NonNormalityReport | None = None
     kreiss: KreissResult | None = None
     overall_verdict: Literal["pass", "fail", "unknown"] = "unknown"
@@ -1380,5 +1387,75 @@ def brady2d_stability_score(
 
     # Final verdict
     report.overall_verdict = "fail" if report.failed_layer is not None else "pass"
+    report.compute_time = time.perf_counter() - t0
+    return report
+
+
+def cutcell_stability_report(scheme, alpha: dict, *, psi_grid=None) -> StabilityReport:
+    """Opt-in cut-cell normal-mode report (plan 48 item 2.4).
+
+    Runs the psi-swept rigorous checks on a cut-cell Dirichlet closure —
+    the item-1.3 Kreiss margin (``kreiss_margin_over_psi``) and the
+    item-2.4 reflection margin (``reflection_over_psi``) — and returns a
+    :class:`StabilityReport` whose ONLY populated payload is the
+    ``layer_cutcell`` dict. This entry point is deliberately outside the
+    L1-L8 cascade: :func:`brady2d_stability_score` never populates
+    ``layer_cutcell``, ``overall_verdict`` stays ``"unknown"`` (verdict /
+    objective / alias wiring is plan 49), and ``extract_field`` reaches
+    the metrics via dotted paths like ``"layer_cutcell.max_reflection"``.
+
+    Both sweeps are resolvent / root-locus based — no time integration
+    (plan 48 hard constraint) — and analyze the **Dirichlet
+    (wall-eliminated) block**, the canonical analysis object.
+
+    Parameters
+    ----------
+    scheme : SchemeParams
+        Cut-cell scheme (e.g. ``temo.E2_1``, ``temo.E4_1``) — NOT the
+        string scheme name of :func:`brady2d_stability_score`.
+    alpha : dict
+        Mapping from alpha symbol (or name) to value; must cover all of
+        the scheme's free parameters.
+    psi_grid : sequence of float, optional
+        psi values to sweep; defaults to
+        ``cutcell_normal_modes.default_psi_grid()`` in both sweeps.
+
+    Returns
+    -------
+    StabilityReport
+        Report with ``layer_cutcell`` set to a dict with keys:
+
+        - ``worst_kreiss_sigma`` — min over feasible psi of the witness
+          sigma_min (item 1.3 ``worst_sigma_min``);
+        - ``worst_psi`` — the psi attaining it (None if no finite margin);
+        - ``max_reflection`` — max over feasible psi of the imaginary-axis
+          reflection norm (item 2.4);
+        - ``argmax_psi`` — the psi attaining it (None if no clean value);
+        - ``reflection_product`` — None; filled by the two-boundary
+          round-trip tier (plan 48 item 3.3);
+        - ``infeasible_psi`` — sorted union of the psi points either sweep
+          flagged infeasible (vanishing structural denominator — a
+          parameterization failure, never a stability verdict).
+    """
+    # Local import: keeps the (sympy-heavy) cut-cell derivation stack out
+    # of this module's import path for cascade-only users.
+    from stencil_gen.cutcell_normal_modes import kreiss_margin_over_psi
+    from stencil_gen.reflection import reflection_over_psi
+
+    t0 = time.perf_counter()
+    kreiss_sweep = kreiss_margin_over_psi(scheme, alpha, psi_grid)
+    refl_sweep = reflection_over_psi(scheme, alpha, psi_grid)
+
+    report = StabilityReport.empty()
+    report.layer_cutcell = {
+        "worst_kreiss_sigma": kreiss_sweep.worst_sigma_min,
+        "worst_psi": kreiss_sweep.worst_psi,
+        "max_reflection": refl_sweep.max_reflection,
+        "argmax_psi": refl_sweep.argmax_psi,
+        "reflection_product": None,  # filled by 3.3 (round-trip tier)
+        "infeasible_psi": sorted(
+            set(kreiss_sweep.infeasible_psi) | set(refl_sweep.infeasible_psi)
+        ),
+    }
     report.compute_time = time.perf_counter() - t0
     return report
