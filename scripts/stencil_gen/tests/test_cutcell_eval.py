@@ -200,11 +200,9 @@ class TestE4_1Evaluator:
     """E4_1 variant (plan test d) — symbolic derivation > 170 s, slow-marked.
 
     E4_1 has ``zeros=(3, 4)`` so make_cutcell_evaluator dispatches to
-    ``derive_cut_cell_mathematica`` (the singularity-free workflow, exactly
-    as ``psi_sweep_group_velocity`` does), whose parameterization keeps the
-    four uniform-boundary alphas free — NOT the 2-parameter
-    (alpha_2, w_4) coordinates of the legacy zeros path that generated
-    ``src/stencils/E4_1.cpp``.
+    ``derive_cut_cell_paper`` (the published Brady & Livescu 2021
+    construction, exactly as ``psi_sweep_group_velocity`` does), whose
+    parameterization keeps the four uniform-boundary alphas free.
     """
 
     @pytest.fixture(scope="class")

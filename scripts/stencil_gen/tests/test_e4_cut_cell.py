@@ -2672,13 +2672,13 @@ class TestMathematicaUniformConservation:
 
 @pytest.fixture(scope="module")
 def mathematica_result():
-    """Cache the derive_cut_cell_mathematica result for the module."""
+    """Cache the derive_cut_cell_paper result for the module."""
     import os
     os.environ.setdefault("SYMPY_CACHE_SIZE", "50000")
-    from stencil_gen.temo import derive_cut_cell_mathematica
+    from stencil_gen.temo import derive_cut_cell_paper
 
     psi = Symbol("psi")
-    return derive_cut_cell_mathematica(E4_1, psi)
+    return derive_cut_cell_paper(E4_1, psi)
 
 
 @pytest.mark.slow
@@ -2714,4 +2714,178 @@ class TestMathematicaWorkflow:
     def test_dirichlet_shape(self, mathematica_result):
         """Dirichlet stencil should be 4x7 (drop row 0)."""
         assert mathematica_result.dirichlet.shape == (4, 7)
+
+
+# ---------------------------------------------------------------------------
+# Paper-reference acceptance tests (e4-align A1)
+#
+# Anchored to tests/fixtures/e4_1_paper_reference.json — the machine-verified
+# ground truth for the Brady & Livescu 2021 (JCP 426:109794) E4_1 cut-cell
+# closure at the id=1 alphas.  Row 0 of the floating block IS the wall row
+# (derivative at the wall point); row 4 is the transition row (no wall
+# support, support through node 5).
+# ---------------------------------------------------------------------------
+
+
+PAPER_FIXTURE = (
+    pathlib.Path(__file__).parent / "fixtures" / "e4_1_paper_reference.json"
+)
+
+
+@pytest.fixture(scope="module")
+def paper_fixture():
+    """Load the paper ground-truth fixture."""
+    import json
+
+    with open(PAPER_FIXTURE) as f:
+        return json.load(f)
+
+
+@pytest.fixture(scope="module")
+def paper_cc():
+    """Cache the symbolic derive_cut_cell_paper result for the module."""
+    import os
+    os.environ.setdefault("SYMPY_CACHE_SIZE", "50000")
+    from stencil_gen.temo import derive_cut_cell_paper
+
+    psi = Symbol("psi")
+    return derive_cut_cell_paper(E4_1, psi), psi
+
+
+@pytest.fixture(scope="module")
+def paper_uniform_stage():
+    """Conserved uniform closure B_u (4x6) + weights w_u, symbolic in alpha."""
+    from stencil_gen.temo import (
+        build_uniform_for_mathematica,
+        solve_uniform_conservation_direct,
+    )
+
+    uniform = build_uniform_for_mathematica(E4_1)
+    sol, weights = solve_uniform_conservation_direct(
+        uniform.B_u, uniform.interior, E4_1.p
+    )
+    B_u = uniform.B_u.applyfunc(lambda e: cancel(e.xreplace(sol)))
+    w_u = [cancel(w) for w in weights]
+    return B_u, w_u, uniform
+
+
+@pytest.mark.slow
+class TestPaperE41Construction:
+    """derive_cut_cell_paper reproduces the paper reference fixture."""
+
+    def test_paper_shapes_and_alphas(self, paper_cc):
+        """5x7 floating, 4x7 dirichlet (wall row dropped), 5 weights,
+        full 4-alpha dependence (no alpha elimination)."""
+        cc, psi = paper_cc
+        assert cc.floating.shape == (5, 7)
+        assert cc.dirichlet.shape == (4, 7)
+        assert len(cc.weights) == 5
+        assert len(cc.alpha_symbols) == 4
+        free = cc.floating.free_symbols - {psi}
+        assert free == set(cc.alpha_symbols), (
+            "all 4 uniform alphas must survive symbolically"
+        )
+
+    def test_paper_blocks_match_fixture(self, paper_cc, paper_fixture):
+        """Floating block, Dirichlet slice, and conservation weights match
+        the fixture at the id=1 alphas for all 5 psi values to <= 1e-10."""
+        from sympy import lambdify
+
+        cc, psi = paper_cc
+        alphas = list(paper_fixture["alpha_id1"].values())
+        subs_a = dict(zip(cc.alpha_symbols, alphas))
+
+        entry = [[lambdify([psi], cc.floating[i, j].xreplace(subs_a))
+                  for j in range(7)] for i in range(5)]
+        wfun = [lambdify([psi], w.xreplace(subs_a)) for w in cc.weights]
+
+        for psi_val in paper_fixture["psi_values"]:
+            blk = paper_fixture["blocks"][str(psi_val)]
+            B_ref = blk["floating_5x7"]
+            D_ref = blk["dirichlet_4x6_wall_row_and_col_dropped"]
+            w_ref = blk["conservation_weights_w0_to_w4"]
+
+            B = [[float(entry[i][j](psi_val)) for j in range(7)]
+                 for i in range(5)]
+            for i in range(5):
+                for j in range(7):
+                    assert abs(B[i][j] - B_ref[i][j]) <= 1e-10, (
+                        f"floating[{i},{j}] at psi={psi_val}: "
+                        f"{B[i][j]} vs {B_ref[i][j]}"
+                    )
+            # Dirichlet variant: wall row AND wall column dropped.
+            for i in range(4):
+                for j in range(6):
+                    assert abs(B[i + 1][j + 1] - D_ref[i][j]) <= 1e-10, (
+                        f"dirichlet[{i},{j}] at psi={psi_val}"
+                    )
+            for k in range(5):
+                w_k = float(wfun[k](psi_val))
+                assert abs(w_k - w_ref[k]) <= 1e-10, (
+                    f"weight w_{k} at psi={psi_val}: {w_k} vs {w_ref[k]}"
+                )
+
+    def test_paper_psi1_uniform_identity_symbolic(
+        self, paper_cc, paper_uniform_stage
+    ):
+        """B(1) = [conserved uniform closure (cols 0..5), 0; interior row]
+        EXACTLY — symbolic zero residual with all alphas free."""
+        cc, psi = paper_cc
+        B_u, _, uniform = paper_uniform_stage
+
+        expected = Matrix.zeros(5, 7)
+        for i in range(4):
+            for j in range(6):
+                expected[i, j] = B_u[i, j]
+        for k, c in enumerate(uniform.interior):
+            expected[4, 2 + k] = c
+
+        F1 = cc.floating.subs(psi, 1)
+        for i in range(5):
+            for j in range(7):
+                assert cancel(F1[i, j] - expected[i, j]) == 0, (
+                    f"psi=1 identity violated at [{i},{j}]"
+                )
+
+    def test_paper_wall_column_identity(self, paper_cc, paper_uniform_stage):
+        """Wall-column equation: w_0 * B[0,0] = w_u^T B_u[:,0] = -1 exactly
+        (symbolically, for all alpha)."""
+        cc, psi = paper_cc
+        B_u, w_u, _ = paper_uniform_stage
+
+        wall_rhs = cancel(sum(w_u[i] * B_u[i, 0] for i in range(4)))
+        assert wall_rhs == -1, f"w_u^T B_u[:,0] = {wall_rhs}, expected -1"
+        assert cancel(cc.weights[0] * cc.floating[0, 0] + 1) == 0, (
+            "w_0 * B[0,0] must equal -1 exactly"
+        )
+
+    def test_paper_transition_row_structure(self, paper_cc):
+        """Transition row (row 4): no wall support, support through node 5
+        (column 6 generically nonzero)."""
+        cc, psi = paper_cc
+        assert cc.floating[4, 0] == 0
+        assert cc.floating[4, 6] != 0
+
+    def test_paper_row_centers_taylor(self, paper_cc):
+        """Row i approximates f'(x_i) with x = [0 (wall), psi, ..., psi+5]:
+        q+1 = 4 Taylor moment conditions hold about the PAPER centers."""
+        from sympy import Rational as R_, factorial as fact
+
+        cc, psi = paper_cc
+        alpha_vals = {a: R_(k + 1, 7) for k, a in enumerate(cc.alpha_symbols)}
+        x = [S.Zero] + [psi + k for k in range(6)]
+        centers = [x[0], x[1], x[2], x[3], x[4]]  # wall, f0, f1, f2, f3
+        for psi_val in [R_(3, 10), R_(7, 10)]:
+            subs = {psi: psi_val, **alpha_vals}
+            for i in range(5):
+                for k in range(4):
+                    moment = sum(
+                        (cc.floating[i, j] * (x[j] - centers[i]) ** k
+                         / fact(k)).subs(subs)
+                        for j in range(7)
+                    )
+                    target = 1 if k == 1 else 0
+                    assert cancel(moment - target) == 0, (
+                        f"Taylor k={k} fails for row {i} at psi={psi_val}"
+                    )
 
