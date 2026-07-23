@@ -45,7 +45,7 @@ from stencil_gen.temo import (
     CutCellResult,
     Dimensions,
     SchemeParams,
-    derive_cut_cell_mathematica,
+    derive_cut_cell_paper,
     derive_cut_cell_scheme,
 )
 
@@ -230,8 +230,8 @@ def make_cutcell_evaluator(
     """Build (or fetch from cache) the cut-cell evaluator for *scheme*.
 
     Dispatches by ``scheme.zeros`` exactly as production does
-    (``derive_cut_cell_mathematica`` for zeros-constrained schemes like
-    E4_1, ``derive_cut_cell_scheme`` otherwise — the same dispatch as
+    (``derive_cut_cell_paper`` for schemes with structural uniform zeros
+    like E4_1, ``derive_cut_cell_scheme`` otherwise — the same dispatch as
     ``group_velocity.psi_sweep_group_velocity``), then lambdifies every
     entry of the Dirichlet block once.  ``SchemeParams`` is a frozen
     dataclass, hence hashable, so the cache is keyed on the scheme
@@ -260,7 +260,7 @@ def make_cutcell_evaluator(
         )
     psi = Symbol("psi")
     if scheme.zeros:
-        cc = derive_cut_cell_mathematica(scheme, psi)
+        cc = derive_cut_cell_paper(scheme, psi)
     else:
         cc = derive_cut_cell_scheme(scheme, psi)
     return CutCellEvaluator(scheme, bc, cc, psi)

@@ -642,7 +642,7 @@ def cut_cell_group_velocity(
     Parameters
     ----------
     cut_cell_result : CutCellResult
-        Precomputed symbolic cut-cell stencil (from ``derive_cut_cell_mathematica``
+        Precomputed symbolic cut-cell stencil (from ``derive_cut_cell_paper``
         or ``derive_cut_cell_scheme``).
     psi_sym : Symbol
         The SymPy symbol for psi used in ``cut_cell_result``.
@@ -747,13 +747,13 @@ def psi_sweep_group_velocity(
     """
     from sympy import Symbol
 
-    from stencil_gen.temo import derive_cut_cell_mathematica, derive_cut_cell_scheme
+    from stencil_gen.temo import derive_cut_cell_paper, derive_cut_cell_scheme
 
     psi_sym = Symbol("psi")
-    # Use singularity-free Mathematica workflow for schemes with zeros;
-    # otherwise use the standard pipeline.
+    # Use the published paper construction for schemes with structural
+    # uniform zeros (E4_1); otherwise use the standard pipeline.
     if scheme_params.zeros:
-        cc_result = derive_cut_cell_mathematica(scheme_params, psi_sym)
+        cc_result = derive_cut_cell_paper(scheme_params, psi_sym)
     else:
         cc_result = derive_cut_cell_scheme(scheme_params, psi_sym)
 
