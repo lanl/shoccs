@@ -54,12 +54,6 @@ class BridgeResult:
     #: (plan 48 item 4.4.2); None when undefined (non-finite trace, L-inf
     #: below 1e-12 throughout, or too few points).
     growth_rate: float | None = None
-    #: True when the C++ run died with std::invalid_argument — a
-    #: parameterization failure (e.g. E4_1's alpha[1] >= 197/288 denominator
-    #: positivity guard), never a stability verdict.
-    infeasible: bool = False
-    #: The stderr line explaining an infeasible run ("" otherwise).
-    reason: str = ""
 
 
 def _format_lua_number(x: float) -> str:
@@ -192,33 +186,6 @@ def compute_growth_rate(
     return float(slope)
 
 
-def _detect_infeasible(stderr: str) -> tuple[bool, str]:
-    """Map a C++ ``std::invalid_argument`` abort to ``(True, <stderr line>)``.
-
-    Cut-capable stencil constructors signal parameterization failures by
-    throwing std::invalid_argument (e.g. ``E4_1.cpp:37-41``: alpha[1] must be
-    >= 197/288 to keep the interior denominator positive). The uncaught throw
-    terminates the binary via SIGABRT with libstdc++'s banner on stderr::
-
-        terminate called after throwing an instance of 'std::invalid_argument'
-          what():  E4_1: alpha[1] must be >= 197/288 ...
-
-    Plan 48 item 4.4.3: this is *infeasibility* (a parameterization failure)
-    and must never be conflated with a stability verdict. Returns the
-    ``what():`` line as the reason when present, else the terminate banner.
-    """
-    lines = stderr.splitlines()
-    if not any("std::invalid_argument" in ln for ln in lines):
-        return False, ""
-    for ln in lines:
-        if "what():" in ln:
-            return True, ln.strip()
-    for ln in lines:
-        if "std::invalid_argument" in ln:
-            return True, ln.strip()
-    return True, ""
-
-
 def _parse_system_csv(path: Path) -> tuple[np.ndarray, np.ndarray]:
     """Parse `logs/system.csv` written by the shoccs scalar-wave system.
 
@@ -266,10 +233,8 @@ def run_cpp_brady2d(
 
     On nonzero exit, timeout, or parse failure, returns a BridgeResult with
     `final_linf=nan`, `stable=False`, and the diagnostic captured in
-    `exit_code`/`stderr`. A `std::invalid_argument` abort (stencil
-    parameterization failure) additionally sets `infeasible=True` with the
-    explanatory stderr line in `reason`. On success, `growth_rate` carries
-    the trailing-half log-L-inf slope (see `compute_growth_rate`).
+    `exit_code`/`stderr`. On success, `growth_rate` carries the trailing-half
+    log-L-inf slope (see `compute_growth_rate`).
     """
     lua_source = make_brady2d_lua(
         scheme_type,
@@ -309,15 +274,12 @@ def run_cpp_brady2d(
         wall = time.perf_counter() - start
 
         if completed.returncode != 0:
-            infeasible, reason = _detect_infeasible(completed.stderr)
             return BridgeResult(
                 final_linf=float("nan"),
                 stable=False,
                 wall_time_s=wall,
                 exit_code=completed.returncode,
                 stderr=completed.stderr,
-                infeasible=infeasible,
-                reason=reason,
             )
 
         csv_path = tmp / "logs" / "system.csv"

@@ -1139,7 +1139,11 @@ _L8_SCHEME_TYPE = {
 # *silent* trap on cut geometry — E4u accepts a sphere without any exception
 # and produces a garbage cut discretization (plan 48 findings, 4.3 caveat 2)
 # — so only the cut-capable types "E2" (make_E2_1) and "E4" (make_E4_1) are
-# admissible here.
+# admissible here. The "E4" (make_E4_1) closure is the paper-aligned
+# construction (Brady & Livescu 2021): four free boundary alphas
+# (alphau_04, alphau_14, alphau_24, alphau_25) passed via ``params["alpha"]``,
+# and — unlike the removed mis-port — no parameterization guard, so every
+# alpha vector runs to a stability verdict (there is no infeasible branch).
 _L8_CUT_SCHEME_TYPE = {
     ("E2", "classical"): "E2",
     ("E4", "classical"): "E4",
@@ -1237,23 +1241,16 @@ def layer8_cpp_simulation(
         stable : bool
             Uniform template: blow-up-only criterion (finite final L∞
             below the ceiling used by :func:`run_cpp_brady2d`). Cut
-            template: ``growth_rate < rate_tol`` and not infeasible.
+            template: ``growth_rate < rate_tol``.
         growth_rate : float | None
             Trailing-half log-L∞ slope (see ``compute_growth_rate``).
-        infeasible : bool
-            True when the C++ run aborted with std::invalid_argument (a
-            stencil parameterization failure, e.g. E4_1's alpha[1] <
-            197/288 guard) — never conflated with instability.
-        reason : str
-            The stderr line explaining an infeasible run ("" otherwise).
         wall_time_s : float
             Wall-clock seconds for the C++ invocation.
         bridge_result : BridgeResult
             Full bridge result for debugging (exit_code, stderr, traces).
     When ``cfl_values`` is given, the dict instead carries ``cfl_results``
     (one single-run dict per CFL value, keyed by CFL), the aggregate
-    ``stable`` (all runs pass), ``infeasible`` (any run infeasible), and
-    the summed ``wall_time_s``.
+    ``stable`` (all runs pass), and the summed ``wall_time_s``.
 
     Raises
     ------
@@ -1297,8 +1294,7 @@ def layer8_cpp_simulation(
 
         if template == "cut":
             stable = (
-                not result.infeasible
-                and result.growth_rate is not None
+                result.growth_rate is not None
                 and result.growth_rate < rate_tol
             )
         else:
@@ -1306,9 +1302,9 @@ def layer8_cpp_simulation(
 
         logger.debug(
             "L8[%s] %s/%s N=%d t_final=%g cfl=%s: final_linf=%.4e "
-            "growth_rate=%s infeasible=%s stable=%s wall=%.1fs",
+            "growth_rate=%s stable=%s wall=%.1fs",
             template, scheme, kernel, N, t_final, cfl_value,
-            result.final_linf, result.growth_rate, result.infeasible,
+            result.final_linf, result.growth_rate,
             stable, result.wall_time_s,
         )
 
@@ -1316,8 +1312,6 @@ def layer8_cpp_simulation(
             "final_linf": result.final_linf,
             "stable": stable,
             "growth_rate": result.growth_rate,
-            "infeasible": result.infeasible,
-            "reason": result.reason,
             "wall_time_s": result.wall_time_s,
             "bridge_result": result,
         }
@@ -1329,7 +1323,6 @@ def layer8_cpp_simulation(
     return {
         "cfl_results": cfl_results,
         "stable": all(e["stable"] for e in cfl_results.values()),
-        "infeasible": any(e["infeasible"] for e in cfl_results.values()),
         "wall_time_s": sum(e["wall_time_s"] for e in cfl_results.values()),
     }
 
