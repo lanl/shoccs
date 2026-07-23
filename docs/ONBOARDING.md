@@ -262,9 +262,10 @@ test_interior, test_boundary, test_codegen, test_phs, …) is fast (~13s) and
 reliably green — treat it as ground truth. The **BoTorch/optimizer** suites
 (`test_bo.py`, `test_optimizer.py`, `test_sweep_bo.py`) are stochastic and can
 **flake under `-x`** (a failing acquisition-optimization retry); re-run a flaky
-test in isolation before believing it. There is 1 documented `xfail` (E4_1
-conservation infeasibility at `nextra=0`) and a few `skipif`/`pytest.skip` guards
-when an optional dep or a `known_values.json` sub-key is absent — all expected.
+test in isolation before believing it. There are a few `skipif`/`pytest.skip`
+guards when an optional dep or a `known_values.json` sub-key is absent — all
+expected. (The old E4_1 conservation `xfail` was retired in the e4-align test
+overhaul: the paper construction solves cut conservation linearly.)
 
 ---
 

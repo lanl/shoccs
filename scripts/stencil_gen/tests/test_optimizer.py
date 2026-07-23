@@ -35,7 +35,7 @@ class TestParamsVector:
             ("tension", [3.0], {"sigma": 3.0}),
             ("gaussian", [1.5], {"epsilon": 1.5}),
             ("multiquadric", [0.7], {"epsilon": 0.7}),
-            ("classical", [-0.5, 197.0 / 288.0], {"alpha": [-0.5, 197.0 / 288.0]}),
+            ("classical", [-0.5, 0.75], {"alpha": [-0.5, 0.75]}),
         ],
     )
     def test_params_from_vector(self, kernel, x, expected):
@@ -1838,7 +1838,7 @@ class TestAlphaBasinSurvey:
 
     The live pipeline is exercised by the slow ``43.9d`` test.  Here we
     monkey-patch :func:`run_staged_optimize` so each branch — basin
-    clustering, winner-replaces-basin, fallback-infeasible, flag propagation,
+    clustering, winner-replaces-basin, fallback-infeasible,
     input validation, and markdown rendering — is deterministic and fast.
     """
 
@@ -1847,13 +1847,10 @@ class TestAlphaBasinSurvey:
         *,
         best_x,
         best_objective,
-        cpp_flag=None,
         stage="validated",
     ):
         x = np.asarray(best_x, dtype=float)
         extras = {"stage": stage, "inner_method": "Nelder-Mead"}
-        if cpp_flag is not None:
-            extras["cpp_cutcell_violates_197_288"] = cpp_flag
         return OptimizeResult(
             best_params={"alpha": x.tolist()} if x.shape[0] == 2 else {"sigma": float(x[0])},
             best_x=x,
@@ -1875,9 +1872,9 @@ class TestAlphaBasinSurvey:
         # Seed 2 has the *lower* objective, so the shared basin should
         # retain seed-2's alpha/objective (winner-replaces-basin branch).
         seed_to_result = {
-            0: self._canned(best_x=[-0.803, 0.102], best_objective=5.0, cpp_flag=True),
-            1: self._canned(best_x=[-0.300, 0.900], best_objective=2.0, cpp_flag=False),
-            2: self._canned(best_x=[-0.797, 0.099], best_objective=1.0, cpp_flag=True),
+            0: self._canned(best_x=[-0.803, 0.102], best_objective=5.0),
+            1: self._canned(best_x=[-0.300, 0.900], best_objective=2.0),
+            2: self._canned(best_x=[-0.797, 0.099], best_objective=1.0),
             3: self._canned(
                 best_x=[0.0, 0.0], best_objective=float("inf"), stage="inner"
             ),
@@ -1938,40 +1935,6 @@ class TestAlphaBasinSurvey:
         assert len(r["seed_results"]) == 4
         assert r["compute_time"] >= 0.0
 
-    def test_run_survey_propagates_cpp_cutcell_flag(self, monkeypatch):
-        from stencil_gen.benchmarks import alpha_basin_survey as survey_mod
-
-        # Three distinct feasible basins with flag values {True, False, None}.
-        seed_to_result = {
-            0: self._canned(best_x=[-0.80, 0.10], best_objective=3.0, cpp_flag=True),
-            1: self._canned(best_x=[-0.30, 0.90], best_objective=2.0, cpp_flag=False),
-            2: self._canned(best_x=[0.50, 0.50], best_objective=1.0, cpp_flag=None),
-        }
-
-        def fake_staged(**kwargs):
-            return seed_to_result[kwargs["seed"]]
-
-        monkeypatch.setattr(survey_mod, "run_staged_optimize", fake_staged)
-
-        r = survey_mod.run_survey(
-            n_seeds=3,
-            bounds=[(-2.0, 2.0), (0.05, 2.0)],
-            cluster_decimals=2,
-        )
-
-        # Per-seed entries carry the flag untouched.
-        seed_map = {e["seed"]: e for e in r["seed_results"]}
-        assert seed_map[0]["cpp_cutcell_violates_197_288"] is True
-        assert seed_map[1]["cpp_cutcell_violates_197_288"] is False
-        assert seed_map[2]["cpp_cutcell_violates_197_288"] is None
-
-        # Per-basin summaries carry the flag too (each basin is a single
-        # seed here so the propagation is unambiguous).
-        basin_by_alpha = {tuple(round(a, 2) for a in b["alpha"]): b for b in r["basins"]}
-        assert basin_by_alpha[(-0.80, 0.10)]["cpp_cutcell_violates_197_288"] is True
-        assert basin_by_alpha[(-0.30, 0.90)]["cpp_cutcell_violates_197_288"] is False
-        assert basin_by_alpha[(0.50, 0.50)]["cpp_cutcell_violates_197_288"] is None
-
     def test_run_survey_all_infeasible_returns_empty_basins(self, monkeypatch):
         from stencil_gen.benchmarks import alpha_basin_survey as survey_mod
 
@@ -2022,21 +1985,18 @@ class TestAlphaBasinSurvey:
                     "best_objective": 4.83,
                     "n_seeds_in_basin": 3,
                     "seeds": [0, 2, 5],
-                    "cpp_cutcell_violates_197_288": True,
                 },
                 {
                     "alpha": [0.5, 0.9],
                     "best_objective": 7.21,
                     "n_seeds_in_basin": 2,
                     "seeds": [1, 3],
-                    "cpp_cutcell_violates_197_288": False,
                 },
                 {
                     "alpha": [1.0, 0.2],
                     "best_objective": 12.0,
                     "n_seeds_in_basin": 1,
                     "seeds": [4],
-                    "cpp_cutcell_violates_197_288": None,
                 },
             ],
             "n_distinct_basins": 3,
@@ -2064,14 +2024,12 @@ class TestAlphaBasinSurvey:
         assert "distinct basins=3" in stats
         assert "wall=12.3s" in stats
 
-        # The 5-column schema.
-        assert "| α₀ | α₁ | best_objective | n_seeds | 197/288 viol |" in lines[2]
+        # The 4-column schema.
+        assert "| α₀ | α₁ | best_objective | n_seeds |" in lines[2]
 
-        # viol cell renders yes / no / - for True / False / None.
         body = "\n".join(lines[4:])
-        assert "yes" in body
-        assert "no" in body
-        assert " - " in body or "| -" in body
+        assert "-0.7733" in body
+        assert "+7.2100e+00" in body
 
 
 class TestAlphaSurveyVsPublished:

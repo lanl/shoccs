@@ -11,7 +11,7 @@ The stencils subsystem produces the finite-difference *coefficients* the solver 
 | `src/stencils/stencil.hpp` | Public header: the `Stencil` concept, `info`/`interp_info`/`interp_line` structs, the type-erased `stencil` class (including the `interp()` cut-cell dispatch), all `make_*` factory declarations, the `second::E2`/`second::E4` externs, and the `ccs::stencil` alias. |
 | `src/stencils/stencil.cpp` | `stencil::from_lua` — **THE** production dispatch mapping `(order, type)` + `alpha`/`sigma`/`epsilon` to a concrete scheme. Only `order==2` and `order==1` branches exist. |
 | `src/stencils/E2_1.cpp` | 1st-derivative E2 cut-cell scheme. Full `interp_interior`/`interp_wall` (`query_interp() == {2,3}`). `alpha[4]`. |
-| `src/stencils/E4_1.cpp` | 1st-derivative E4 **cut-cell** scheme (psi-dependent coefficients). Production copy with hand-added singularity guards (see Gotchas). `query_interp() == {}`. `alpha[2]`. |
+| `src/stencils/E4_1.cpp` | 1st-derivative E4 **cut-cell** scheme (psi-dependent coefficients). Paper-aligned Brady & Livescu (2021) 4-alpha family, verbatim SymPy codegen output (see Gotchas). `query_interp() == {}`. `alpha[4]`. |
 | `src/stencils/E2_2.cpp` | 2nd-derivative E2 (Laplacian) scheme; defines the `second::E2` global. Supports cut-cell interp and Neumann (`nextra=2`). Used by `heat` (`order=2, type=E2`). |
 | `src/stencils/E4_2.cpp` | 2nd-derivative E4 scheme; defines `second::E4`. Cut-cell interp + Neumann. Reachable via `order=2, type=E4` but config-orphaned. |
 | `src/stencils/E4u_1.cpp` | **Uniform-mesh** E4 1st-derivative boundary closure. `alpha[2]`; ignores psi; no interp. The only first-derivative scheme used in a real config (`brady_livescu`). |
@@ -22,7 +22,7 @@ The stencils subsystem produces the finite-difference *coefficients* the solver 
 | `src/stencils/gaussian_E4u_1.cpp` | **Experimental** RBF (Gaussian-kernel) E4u closure parameterized by `epsilon`. |
 | `src/stencils/multiquadric_E4u_1.cpp` | **Experimental** RBF (multiquadric-kernel) E4u closure parameterized by `epsilon`. |
 | `src/operators/identity_stencil.hpp` | Test-only `detail::identity` stencil satisfying the `Stencil` concept; exercises operators without a real scheme. |
-| `scripts/stencil_gen/output/E4_1.cpp` | **Not built.** Raw SymPy codegen output — the upstream of `src/stencils/E4_1.cpp`. Differs (no singularity guards); see "Relationship to the SymPy codegen". |
+| `scripts/stencil_gen/output/E4_1.cpp` | **Not built.** Raw SymPy codegen output — the upstream of `src/stencils/E4_1.cpp`, byte-identical since the e4-align regeneration; see "Relationship to the SymPy codegen". |
 
 ## Public API / entry points
 
@@ -76,7 +76,7 @@ static std::optional<stencil> from_lua(const sol::table&, const logs& = {});
 stencil make_E2_2();                              // 2nd deriv, also bound to second::E2
 stencil make_E4_2();                              // 2nd deriv, also bound to second::E4
 stencil make_E2_1(std::span<const real>);         // alpha[4]
-stencil make_E4_1(std::span<const real>);         // alpha[2], cut-cell; throws if alpha[1] < 197/288
+stencil make_E4_1(std::span<const real>);         // alpha[4], cut-cell (paper-aligned Brady & Livescu 2021)
 stencil make_E4u_1(std::span<const real>);        // alpha[2], uniform
 stencil make_E6u_1(std::span<const real>);        // alpha[5], uniform
 stencil make_E8u_1(std::span<const real>);        // alpha[7], uniform
@@ -97,7 +97,7 @@ void copy_zero_padded(std::span<const real> src, std::span<real> dst);  // helpe
 | `2` | `"E2"` | `second::E2` (E2_2) | — (alpha ignored) |
 | `2` | `"E4"` | `second::E4` (E4_2) | — (alpha ignored) |
 | `1` | `"E2"` | `make_E2_1(alpha)` | `alpha[4]` |
-| `1` | `"E4"` | `make_E4_1(alpha)` (cut-cell) | `alpha[2]`, `alpha[1] >= 197/288` |
+| `1` | `"E4"` | `make_E4_1(alpha)` (cut-cell) | `alpha[4]` |
 | `1` | `"E4u"` | `make_E4u_1(alpha)` | `alpha[2]` |
 | `1` | `"E6u"` | `make_E6u_1(alpha)` | `alpha[5]` |
 | `1` | `"E8u"` | `make_E8u_1(alpha)` | `alpha[7]` |
@@ -130,11 +130,11 @@ To add a new scheme `foo_1`:
 4. **Wire `from_lua`**: add a branch in `src/stencils/stencil.cpp` keyed on `order` + `type` that reads any free parameters and calls your factory.
 5. **Write `src/stencils/foo_1.t.cpp`** asserting `query`/`interior`/`nbs` coefficient values (compare against a known-good reference).
 
-**For *derived* (not hand-written) schemes**, coefficients come from the SymPy pipeline in `scripts/stencil_gen/`, which emits to `scripts/stencil_gen/output/<name>.cpp`. The workflow is: regenerate → copy into `src/stencils/` → **manually re-add any hand-written guards** (see the E4_1 note below). See [stencil-pipeline](../../scripts/stencil_gen/docs/pipeline_reference.md) and the `stencil-pipeline` skill.
+**For *derived* (not hand-written) schemes**, coefficients come from the SymPy pipeline in `scripts/stencil_gen/`, which emits to `scripts/stencil_gen/output/<name>.cpp`. The workflow is: regenerate → copy into `src/stencils/` verbatim (see the E4_1 note below). See [stencil-pipeline](../../scripts/stencil_gen/docs/pipeline_reference.md) and the `stencil-pipeline` skill.
 
 ## Gotchas & invariants
 - **`from_lua` only branches on `order==2` and `order==1`.** `order=2` returns the pre-built globals `second::E2`/`second::E4` (the 2nd-derivative E2_2/E4_2 used by the Laplacian/heat) and **ignores the alpha array**. All first-derivative schemes live under `order==1`.
-- **`src/stencils/E4_1.cpp` is NOT a verbatim copy of `scripts/stencil_gen/output/E4_1.cpp`.** The production file adds hand-written singularity guards: it throws `std::invalid_argument` if `alpha[1] < 197/288` (≈0.684, where the interior polynomial denominator `D(psi)` hits zero) and clamps `psi` to `[1e-4, 1-1e-4]` (coefficients have poles at `psi=0` and `psi=1`). **Re-running codegen silently drops these guards — they must be re-added** (see commit `956d97c`).
+- **`src/stencils/E4_1.cpp` IS a verbatim copy of `scripts/stencil_gen/output/E4_1.cpp`** since the e4-align regeneration (2026-07). The paper-aligned 4-alpha construction (`derive_cut_cell_paper`) has no psi-pole in `(0, 1)` at feasible alpha, so the retired mis-ported scheme's hand-added guards (the `alpha[1] >= 197/288` constructor throw and the psi clamp) were removed, not re-added — regenerate-and-copy needs no manual patching.
 - **Coefficient scaling is the scheme's responsibility, sizing is the caller's.** Coefficients are generated at `h=1`, then divided by `h` (or `h*h`); the `right` boundary block is negated+reversed (odd derivatives) or just reversed (even). The method writes into a caller-provided scratch span and returns a subspan; size scratch with `query_max()`.
 - **Only `E2_1`/`E2_2`/`E4_2`/`polyE2_1` support cut-cell wall interpolation.** `E4_1`, all `E*u` uniform schemes, and all RBF schemes return `query_interp() == {}` and have no-op `interp_interior`/`interp_wall`. Using them with embedded geometry that needs interpolation will not interpolate.
 - **`E2-poly` has a "dubious" optimizer convention** (`stencil.cpp:81-87`): if a *single* `alpha` array is supplied it is split as `subspan(0,6)` = floating, `subspan(6,9)` = dirichlet, `subspan(9,13)` = interpolant; otherwise the named `floating_alpha`/`dirichlet_alpha`/`interpolant_alpha` arrays are used. **Mismatched sizes read out of bounds.**
@@ -148,13 +148,13 @@ Per-item status (from the verified audit flags):
 - **`tension_E4u_1` / `gaussian_E4u_1` / `multiquadric_E4u_1`** — *experimental.* Complete, compiling, test-passing RBF research closures from git plan 42.5/42.6 (Apr 2026). Reachable via `from_lua` and exercised by the Python `brady2d_stability.py` optimization harness, but **no production config selects them** and each is verified at exactly one shape parameter. `multiquadric_E4u_1` additionally **failed the BL42 reflecting-layer stability test** (plan 44). Document as experimental; do not delete (they back live tests + the optimizer harness), do not treat as production. See [Cleanup Plan](../CLEANUP_PLAN.md).
 - **`E6u_1`** — *mature but config-orphaned.* The audit refutes the "partial" label: fully implemented (complete interior + 5×8 floating / 4×8 dirichlet coefficient tables), reachable from the production `from_lua` path, passing end-to-end unit test, and cross-validated by the SymPy boundary pipeline (plan 20.3f). The only true gap is that no shipped `.lua` selects it. Keep as-is.
 - **`E8u_1`** — *partial.* Real, fully implemented (`P=4,R=7,T=11`), unit-tested, and backed by a SymPy derivation pipeline (`p=4`). Config-orphaned with no system-level coverage — 8th-order boundary closures are stability-sensitive and unproven inside a time-stepping loop. The `known_limitations.md` "no Python derivation pipeline" note is stale (only the *sweeps* layer lacks E6/E8 params). Document as experimental/awaiting-demand; do not delete.
-- **`E4_1` (cut-cell, `order=1 type=E4`)** — *mature.* The audit refutes "partial": fully built, dispatched, heavily unit-tested (golden values at psi=0.3/0.7/0.9 plus 9 singularity-guard sections), recently maintained, and the **sole provider of variable-psi cut-cell first-derivative coefficients**. The `known_limitations.md` "use E4u instead of E4" note is a narrowly-scoped optimizer-validation workaround (the BL feasible region `alpha1≈0.16` violates the legitimate `197/288` physics constraint), not a statement that E4_1 is broken. Gap: no end-to-end cut-cell simulation regression exercises it.
+- **`E4_1` (cut-cell, `order=1 type=E4`)** — *mature.* The paper-aligned Brady & Livescu (2021, JCP 426:109794) 4-alpha cut-cell family (`alpha_0..3` = the paper's `alphau_04, alphau_14, alphau_24, alphau_25`), regenerated from `derive_cut_cell_paper` in the e4-align rewrite and anchored by `scripts/stencil_gen/tests/fixtures/e4_1_paper_reference.json`. Fully built, dispatched, unit-tested at the paper id=1 alphas, and the **sole provider of variable-psi cut-cell first-derivative coefficients**. Gap: no end-to-end cut-cell simulation regression exercises it.
 - **`from_lua` `order=2 type=E4` → `second::E4` (E4_2)** — *partial / available but not exercised end-to-end.* The `E4_2` stencil object is fully implemented and directly unit-tested, but the `from_lua` selection branch and config path have **zero coverage** (every `order=2` caller uses `type="E2"`). The sibling E2 path proves the machinery works. Cheap to lock down with one `laplacian.t.cpp` case.
-- **`scripts/stencil_gen/output/E4_1.cpp`** — *experimental / regenerable codegen artifact (not built).* Intentionally tracked-but-not-promoted raw generator output; differs from the in-tree file by the deliberately-omitted singularity guards (the documented "copy then re-add guards" 27.6a workflow). Not the source of truth, not dead. Hazard: a new dev mistaking it for source — mitigated by a README/header note.
+- **`scripts/stencil_gen/output/E4_1.cpp`** — *regenerable codegen artifact (not built).* Raw generator output; since the e4-align regeneration it is byte-identical to `src/stencils/E4_1.cpp` (the old "copy then re-add guards" workflow is retired). The SymPy pipeline is the source of truth.
 
 ## Tests
 - **11 Catch2 unit tests, label `"stencils"`**, one per scheme struct: `t-E2_1`, `t-E2_2`, `t-E4_1`, `t-E4_2`, `t-E4u_1`, `t-E6u_1`, `t-E8u_1`, `t-polyE2_1`, `t-tension_E4u_1`, `t-gaussian_E4u_1`, `t-multiquadric_E4u_1`. Run with `ctest --test-dir build -L stencils`.
-- **Central/cut-cell (E2_1/E2_2/E4_1/E4_2) and polyE2_1** verify `nbs`/`interior`/`interp` coefficient values; `E4_1.t.cpp` (361 lines) adds golden checks at psi=0.3/0.7/0.9 and 9 singularity-guard sections (`REQUIRE_THROWS`/`NOTHROW` around the `alpha[1] >= 197/288` constructor guard, magnitude bounds, `D(psi)>0` positivity).
+- **Central/cut-cell (E2_1/E2_2/E4_1/E4_2) and polyE2_1** verify `nbs`/`interior`/`interp` coefficient values; `E4_1.t.cpp` checks the paper-aligned 4-alpha family at the id=1 alphas: interior row plus golden floating/Dirichlet `nbs` blocks at psi=0.3 and 0.7 (values cross-checked against the Python `derive_cut_cell_paper` fixture).
 - **Uniform (E4u_1/E6u_1/E8u_1)** test the floating + dirichlet boundary closures at sample alpha, driven through `from_lua`.
 - **RBF (tension @ sigma=3, gaussian @ eps=0.9, multiquadric @ eps=1.0)** assert the cached 5×7 block matches a Python fixture (`scripts/stencil_gen/tests/fixtures/{tension,gaussian,multiquadric}_e4u1_reference.py`) at **one parameter value only**, plus h-scaling / Dirichlet-row-drop / right-flip transforms. No parameter sweep, no cut-cell/interp coverage (those return `{}`).
 - **Not covered in C++:** end-to-end use of E6u/E8u/E4-cut-cell/RBF inside a running system; the `order=2 type=E4` dispatch branch; the `stencil::interp()` dispatch logic (exercised only indirectly via `operators/derivative.t.cpp` and `laplacian.t.cpp`, which construct `stencils::second::E2` directly). No disabled/commented stencil tests.
