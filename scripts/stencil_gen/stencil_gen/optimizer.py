@@ -58,20 +58,8 @@ from stencil_gen.brady2d_stability import brady2d_stability_score
 # Extending the layered pipeline to those kernels is deferred — see the
 # "What this plan does NOT do" section of the plan file.
 #
-# Classical-α note (plan 43.9a): the C++ ``E4_1`` stencil in
-# ``src/stencils/E4_1.cpp`` imposes ``alpha[1] >= 197/288 ≈ 0.684`` to avoid
-# an interior singularity in the cut-cell psi denominator for ``psi ∈ (0, 1)``.
-# That constraint is cut-cell-specific.  The analytical layers L1–L7 (and the
-# Python ``_build_classical_diff_matrix``) operate on uniform grids with no
-# psi involvement, and the Brady-Livescu published feasible point
-# ``α ≈ [-0.7733, 0.1624]`` lives *below* 197/288 — a grid-probe of
-# ``alpha[1] ∈ [0.0, 2.0]`` at ``alpha[0] = -0.77`` finds L3-feasibility only
-# in ``alpha[1] ∈ [~0.08, ~0.17]`` and total infeasibility once
-# ``alpha[1] ≥ 0.2``.  The analytical and cut-cell feasible regions therefore
-# do not overlap for E4 classical-α, so the optimizer uses the *analytical*
-# feasible envelope.  L8 C++ validation (plan 43.10) will reject any winner
-# that violates ``alpha[1] ≥ 197/288``; that rejection is the diagnostic
-# signal, not an optimizer bound.
+# Classical-α note: E4_1's cut-cell closure is the 4-parameter paper family
+# (Brady & Livescu 2021, JCP 426:109794); see docs/reference/py-derivation.md.
 DEFAULT_BOUNDS: dict[tuple[str, str], list[tuple[float, float]]] = {
     ("E2", "tension"): [(0.5, 20.0)],
     ("E4", "tension"): [(0.5, 20.0)],
@@ -789,32 +777,6 @@ def _top_k_candidates(
     return ordered[:top_k]
 
 
-_E4_CLASSICAL_ALPHA1_CPP_FLOOR = 197.0 / 288.0
-
-
-def _record_cpp_cutcell_diagnostic(
-    extras: dict, scheme: str, kernel: str, best_x: np.ndarray | None
-) -> None:
-    """Populate the L8 cut-cell ``α₁ ≥ 197/288`` diagnostic flag (plan 43.9b-r1).
-
-    The C++ ``E4_1.cpp`` stencil enforces ``α₁ ≥ 197/288`` to keep the
-    cut-cell psi denominator non-zero.  The Python analytical pipeline
-    (L1–L7) does not enforce this floor (see plan 43.9a), so an analytical
-    winner with ``α₁ < 197/288`` is expected and not an error.  The flag is
-    purely informational for downstream plan-43.10 L8 wiring.
-    """
-    if scheme != "E4" or kernel != "classical":
-        return
-    if best_x is None:
-        return
-    x_arr = np.asarray(best_x, dtype=float).ravel()
-    if x_arr.size < 2 or not np.isfinite(x_arr[1]):
-        return
-    extras["cpp_cutcell_violates_197_288"] = bool(
-        x_arr[1] < _E4_CLASSICAL_ALPHA1_CPP_FLOOR
-    )
-
-
 def run_staged_optimize(
     scheme: str,
     kernel: str,
@@ -950,9 +912,6 @@ def run_staged_optimize(
             "validator_max_layer": validator_max_layer,
             "inner_max_layer": inner_max_layer,
         }
-        _record_cpp_cutcell_diagnostic(
-            fallback_extras, scheme, kernel, inner_result.best_x
-        )
         fallback = replace(
             inner_result,
             method="staged",
@@ -995,7 +954,6 @@ def run_staged_optimize(
         "validator_max_layer": validator_max_layer,
         "inner_max_layer": inner_max_layer,
     }
-    _record_cpp_cutcell_diagnostic(success_extras, scheme, kernel, best_x)
     return OptimizeResult(
         best_params=params_from_vector(kernel, best_x),
         best_x=np.asarray(best_x, dtype=float).copy(),

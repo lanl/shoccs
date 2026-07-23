@@ -31,7 +31,6 @@ from stencil_gen.optimizer import (
     DEFAULT_BOUNDS,
     OptimizeResult,
     _infer_max_layer,
-    _record_cpp_cutcell_diagnostic,
     run_staged_optimize,
 )
 
@@ -284,10 +283,9 @@ def _run_cpp_validation(
     """Re-run ``result.best_x`` at ``max_layer=8`` via the shoccs bridge.
 
     Returns a JSON-friendly dict with keys ``l8_stable``, ``l8_final_linf``,
-    ``wall_time_s`` (and ``cpp_cutcell_violates_197_288`` for E4-classical),
-    or ``None`` when validation is globally skipped: empty / non-finite
-    winner, unsupported ``(scheme, kernel)``, or the shoccs binary cannot
-    be found.  Per-call failures (L8 raises, bridge returns no payload)
+    ``wall_time_s``, or ``None`` when validation is globally skipped: empty /
+    non-finite winner, unsupported ``(scheme, kernel)``, or the shoccs binary
+    cannot be found.  Per-call failures (L8 raises, bridge returns no payload)
     are captured as ``l8_error`` and do **not** raise — the analytical MF-BO
     verdict stands; L8 disagreement is purely diagnostic, matching the
     contract in :func:`sweeps.optimize._run_cpp_validation` and
@@ -334,7 +332,6 @@ def _run_cpp_validation(
     )
 
     entry: dict[str, Any] = {}
-    _record_cpp_cutcell_diagnostic(entry, result.scheme, result.kernel, result.best_x)
 
     try:
         report = brady2d_stability_score(

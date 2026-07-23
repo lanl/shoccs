@@ -261,12 +261,6 @@ def _result_to_persist_dict(
     rebuild ``make_objective`` at the exact configuration the CLI used, rather
     than silently relying on defaults that may drift.  ``validator_max_layer``
     is only present for ``method == "staged"``.
-
-    Plan 43.9b-r2: a short allow-list of scalar diagnostics from
-    ``result.extras`` is copied into the persisted entry so downstream
-    consumers of ``known_values.json`` can read them without recomputing.
-    Currently just ``cpp_cutcell_violates_197_288`` (the E4 classical-alpha
-    C++ cut-cell floor flag); keys absent in ``extras`` are not written.
     """
     d: dict[str, Any] = {
         "scheme": scheme,
@@ -286,11 +280,6 @@ def _result_to_persist_dict(
     }
     if validator_max_layer is not None:
         d["validator_max_layer"] = int(validator_max_layer)
-    extras = result.extras or {}
-    if "cpp_cutcell_violates_197_288" in extras:
-        d["cpp_cutcell_violates_197_288"] = bool(
-            extras["cpp_cutcell_violates_197_288"]
-        )
     if cpp_validation is not None:
         d["cpp_validation"] = {
             "stable": bool(cpp_validation["stable"]),

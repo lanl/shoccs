@@ -23,7 +23,7 @@ import numpy as np
 
 from stencil_gen.brady2d_stability import brady2d_stability_score
 from stencil_gen.cpp_bridge import SHOCCS_BINARY
-from stencil_gen.optimizer import DEFAULT_BOUNDS, _record_cpp_cutcell_diagnostic
+from stencil_gen.optimizer import DEFAULT_BOUNDS
 from stencil_gen.pareto import ParetoResult, run_nsga2
 
 from ._pareto_io import save_pareto_front
@@ -112,8 +112,8 @@ def _run_front_cpp_validation(
     Walks the non-dominated set in ascending order of the *first* objective
     (deterministic, reproducible), calls :func:`brady2d_stability_score` at
     L8 for each, and returns a list of ``{x, params, l8_stable, l8_final_linf,
-    wall_time_s [, cpp_cutcell_violates_197_288, l8_error]}`` dicts — one per
-    validated member.  A per-member failure is captured as ``l8_error`` and
+    wall_time_s [, l8_error]}`` dicts — one per validated member.  A
+    per-member failure is captured as ``l8_error`` and
     does NOT abort the loop: the analytical Pareto front stands on its own;
     L8 disagreement is purely diagnostic (same contract as
     ``sweeps.optimize._run_cpp_validation``).
@@ -159,16 +159,6 @@ def _run_front_cpp_validation(
             "x": x_list,
             "params": dict(pt.params),
         }
-        # E4-classical cut-cell α₁ ≥ 197/288 diagnostic (absent for other
-        # scheme/kernel combinations, matching the optimizer persistence shape).
-        extras_tmp: dict[str, Any] = {}
-        _record_cpp_cutcell_diagnostic(
-            extras_tmp, result.scheme, result.kernel, pt.x
-        )
-        if "cpp_cutcell_violates_197_288" in extras_tmp:
-            entry["cpp_cutcell_violates_197_288"] = bool(
-                extras_tmp["cpp_cutcell_violates_197_288"]
-            )
 
         try:
             report = brady2d_stability_score(

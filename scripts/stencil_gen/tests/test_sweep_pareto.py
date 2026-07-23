@@ -470,8 +470,7 @@ class TestValidateWithCpp:
     2. Member count is capped at ``_CPP_VALIDATION_MAX_MEMBERS`` (10), in
        ascending-``objectives[0]`` order, for fronts larger than the cap.
     3. Per-member entry shape on success: ``x``, ``params``, ``l8_stable``,
-       ``l8_final_linf``, ``wall_time_s`` (+ ``cpp_cutcell_violates_197_288``
-       when the scheme/kernel pair is E4-classical).
+       ``l8_final_linf``, ``wall_time_s``.
     4. A raising :func:`brady2d_stability_score` records ``l8_error`` on the
        failing entry and lets the remaining members validate — matches the
        ``sweeps.optimize._run_cpp_validation`` contract.
@@ -599,8 +598,6 @@ class TestValidateWithCpp:
             assert entry["l8_stable"] is True
             assert entry["l8_final_linf"] == pytest.approx(2.5e-4)
             assert entry["wall_time_s"] == pytest.approx(0.33)
-            # E4-classical with 2D x → the cut-cell 197/288 diagnostic fires.
-            assert "cpp_cutcell_violates_197_288" in entry
             assert "l8_error" not in entry
 
     def test_failure_records_error_not_raises(self, tmp_path, monkeypatch, capsys):

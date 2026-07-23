@@ -11,9 +11,8 @@ Covers:
   acceptance (plan 47.4d).
 - :class:`TestValidateWithCpp` — branch coverage for
   :func:`sweeps.bo._run_cpp_validation` (plan 47.5c): happy path, soft
-  failure, all skip paths, the L8-raises capture path, the unconditional
-  ``cpp_cutcell_violates_197_288`` recording for E4-classical, and the
-  end-to-end "validate runs before persist" lifecycle.
+  failure, all skip paths, the L8-raises capture path, and the end-to-end
+  "validate runs before persist" lifecycle.
 - :class:`TestBaselineStaged` — failure-mode (47.5b.2) plus the remaining
   47.5c contract: ``--baseline`` omitted ⇒ no ``extras["baseline"]``;
   ``--baseline staged --persist`` ⇒ both winners on disk.
@@ -812,13 +811,12 @@ class TestValidateWithCpp:
     """Plan 47.5c: pin the branch surface of :func:`_run_cpp_validation`.
 
     The 47.5a smoke tests covered only the skip paths and the L8-raises
-    path; three real branches were uncovered: the L8-PASS print, the
-    soft-failure (stable=True, final_linf > tol) print, and the
-    unconditional ``cpp_cutcell_violates_197_288`` record for
-    E4-classical.  All tests here patch ``sweeps.bo.brady2d_stability_score``
-    rather than the upstream symbol so the patch is module-local, and they
-    construct ``best_params`` via :func:`params_from_vector` so the
-    codified path matches what :func:`run_mfbo` actually produces.
+    path; two real branches were uncovered: the L8-PASS print and the
+    soft-failure (stable=True, final_linf > tol) print.  All tests here
+    patch ``sweeps.bo.brady2d_stability_score`` rather than the upstream
+    symbol so the patch is module-local, and they construct ``best_params``
+    via :func:`params_from_vector` so the codified path matches what
+    :func:`run_mfbo` actually produces.
     """
 
     def test_happy_path_records_full_schema(self, monkeypatch, capsys):
@@ -826,8 +824,7 @@ class TestValidateWithCpp:
 
         Schema for a non-classical kernel: exactly the three keys
         ``{l8_stable, l8_final_linf, wall_time_s}``.  No ``l8_error`` (no
-        exception) and no ``cpp_cutcell_violates_197_288`` (kernel != classical
-        keeps :func:`_record_cpp_cutcell_diagnostic` from writing the flag).
+        exception raised).
         """
         monkeypatch.setattr(
             bo_cli,
@@ -1067,81 +1064,6 @@ class TestValidateWithCpp:
         assert entry["l8_error"] == "RuntimeError: synthetic L8 boom"
         out = capsys.readouterr().out
         assert "L8 raised" in out
-
-    @pytest.mark.parametrize(
-        "scheme,kernel,best_x,expected_flag",
-        [
-            # Below the cut-cell floor (197/288 ≈ 0.6840) ⇒ flag True.
-            ("E4", "classical", np.array([-0.7733, 0.1624]), True),
-            # Above the cut-cell floor ⇒ flag False (still recorded).
-            ("E4", "classical", np.array([-0.7733, 0.7]), False),
-            # Non-classical kernel ⇒ flag absent entirely (per 47.5a Done note).
-            ("E4", "tension", np.array([10.0]), None),
-        ],
-    )
-    def test_cpp_cutcell_flag_recorded_for_e4_classical(
-        self,
-        monkeypatch,
-        scheme,
-        kernel,
-        best_x,
-        expected_flag,
-    ):
-        """Plan 47.5a Done note: ``cpp_cutcell_violates_197_288`` is
-        recorded unconditionally for E4-classical (regardless of whether
-        L8 actually ran), and is absent for non-classical kernels."""
-        # Patch the L8 call to a benign return so the test does not actually
-        # invoke C++ — the cut-cell flag is set BEFORE the brady2d call so
-        # both paths exercise the unconditional record.
-        monkeypatch.setattr(
-            bo_cli,
-            "brady2d_stability_score",
-            lambda *a, **kw: _fake_layer8_report(
-                stable=True, final_linf=0.001, wall_time_s=1.5
-            ),
-        )
-        monkeypatch.setattr(
-            bo_cli,
-            "SHOCCS_BINARY",
-            types.SimpleNamespace(exists=lambda: True),
-        )
-        result = _make_classical_result(
-            scheme=scheme, kernel=kernel, best_x=best_x
-        )
-        entry = bo_cli._run_cpp_validation(result)
-        assert entry is not None
-        if expected_flag is None:
-            assert "cpp_cutcell_violates_197_288" not in entry
-        else:
-            assert entry["cpp_cutcell_violates_197_288"] is expected_flag
-
-    def test_cpp_cutcell_flag_present_when_l8_raises(
-        self, monkeypatch, capsys
-    ):
-        """Combine the L8-raises path with E4-classical at α₁ < 197/288:
-        the cut-cell flag must appear in the returned dict alongside the
-        ``l8_error`` breadcrumb (the flag is recorded BEFORE the L8 call,
-        so a raising L8 cannot suppress it)."""
-        def _boom(*args, **kwargs):
-            raise RuntimeError("synthetic L8 boom")
-
-        monkeypatch.setattr(bo_cli, "brady2d_stability_score", _boom)
-        monkeypatch.setattr(
-            bo_cli,
-            "SHOCCS_BINARY",
-            types.SimpleNamespace(exists=lambda: True),
-        )
-        result = _make_classical_result(
-            scheme="E4",
-            kernel="classical",
-            best_x=np.array([-0.7733, 0.1624]),
-        )
-        entry = bo_cli._run_cpp_validation(result)
-        assert entry is not None
-        assert entry["cpp_cutcell_violates_197_288"] is True
-        assert entry["l8_error"] == "RuntimeError: synthetic L8 boom"
-        assert entry["l8_stable"] is False
-        assert math.isnan(entry["l8_final_linf"])
 
 
 # ---------------------------------------------------------------------------
