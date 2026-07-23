@@ -1,6 +1,15 @@
 """Tests for the cached lambdified cut-cell evaluator (plan 48 item 1.1)
-and the psi-parameterized Kreiss check built on it (plan 48 item 1.2)."""
+and the psi-parameterized Kreiss check built on it (plan 48 item 1.2).
 
+Includes the e4-align A2 stability money test: the corrected 4-parameter
+E4_1 paper construction at the published id=1 alphas
+(``tests/fixtures/e4_1_paper_reference.json``) is GKS-stable and
+dense-eigenvalue-stable across psi, with the known interior branch-point
+artifact at s ~ 1.1760 adjudicated by the deflated winding number.
+"""
+
+import json
+import pathlib
 import time
 
 import numpy as np
@@ -29,6 +38,113 @@ from stencil_gen.temo import (
 # vanishes on (0, 1]); breaks the alpha = 0 degeneracy where all three
 # uniform E2_1 boundary rows coincide.
 E2_1_ALPHA_NONZERO = [0.3, -0.2, 0.15, 0.05]
+
+# Machine-verified paper ground truth for the E4_1 cut-cell closure
+# (Brady & Livescu 2021, JCP 426:109794), committed by e4-align A0.
+PAPER_FIXTURE = (
+    pathlib.Path(__file__).parent / "fixtures" / "e4_1_paper_reference.json"
+)
+
+# Interior kappa-collision (branch point) of the E4 centered stencil on the
+# positive real s-axis: the two admissible roots coincide there, so the
+# item-0.5 defective-kappa guard fires a *conservative* fail with
+# witness_sigma_min = inf.  This is a property of the INTERIOR stencil, not
+# of any boundary closure; verdicts with this witness are adjudicated by
+# the deflated winding number below (the approach used in the E4_1 mis-port
+# investigation).
+E4_BRANCH_POINT_S = 1.1760072966846
+
+
+def _load_paper_fixture():
+    with open(PAPER_FIXTURE) as f:
+        return json.load(f)
+
+
+def _paper_id1_alpha(fix):
+    """Map the fixture's paper alpha names onto the canonical evaluator
+    order alpha_0..alpha_3 = (alphau_04, alphau_14, alphau_24, alphau_25)
+    — the documented C++ ``alpha[]`` contract."""
+    a = fix["alpha_id1"]
+    return {
+        "alpha_0": a["alphau_0_4"],
+        "alpha_1": a["alphau_1_4"],
+        "alpha_2": a["alphau_2_4"],
+        "alpha_3": a["alphau_2_5"],
+    }
+
+
+def _deflated_winding(iw, io, rows, row_indices,
+                      eps=0.02, rect_r=None, rect_y=15.0, n_pts=4000):
+    """Winding number of the deflated Kreiss determinant on an RHP rectangle.
+
+    G(s) = (det M(s) / (kappa_1 - kappa_2))^2 is swap-invariant in the two
+    admissible interior roots and finite through the interior branch point,
+    so its winding on the rectangle [eps, rect_r] x [-rect_y, rect_y]
+    counts genuine RHP zeros of the Kreiss determinant (each zero of det M
+    is a double zero of G, hence the /2).  This is the adjudicator used in
+    the E4_1 mis-port investigation for verdicts whose witness sits on the
+    interior kappa-collision at s ~ 1.1760 (E4_BRANCH_POINT_S), where the
+    pointwise sigma_min check is conservative-by-design.
+
+    Returns ``(W, max_dphase)``; ``W is None`` flags an under-resolved
+    contour (a phase step > 2.5 rad), which must fail the caller.
+    """
+    from stencil_gen.gks_kreiss import (
+        eigensolution_s_bound,
+        kappa_roots,
+        kreiss_matrix_general,
+    )
+
+    if rect_r is None:
+        rect_r = eigensolution_s_bound(iw, rows) * 1.05
+
+    def g_phase(s):
+        M = kreiss_matrix_general(iw, io, rows, s, row_indices=row_indices)
+        _, adm, defective = kappa_roots(iw, io, s)
+        if defective or len(adm) != 2:
+            raise RuntimeError(f"defective interior roots on contour at {s}")
+        k1, k2 = adm
+        with np.errstate(divide="ignore", invalid="ignore"):
+            sign, _logdet = np.linalg.slogdet(M)
+        if sign == 0 or not np.isfinite(sign):
+            raise RuntimeError(
+                f"Kreiss determinant collapsed on contour at {s}"
+            )
+        return 2.0 * (np.angle(sign) - np.angle(k1 - k2))
+
+    pts = []
+    pts += [complex(x, -rect_y) for x in np.linspace(eps, rect_r, n_pts // 4)]
+    pts += [complex(rect_r, y) for y in np.linspace(-rect_y, rect_y, n_pts // 4)]
+    pts += [complex(x, rect_y) for x in np.linspace(rect_r, eps, n_pts // 4)]
+    pts += [complex(eps, y) for y in np.linspace(rect_y, -rect_y, n_pts)]
+    phases = np.array([g_phase(s) for s in pts])
+    d = np.diff(phases)
+    d = (d + np.pi) % (2 * np.pi) - np.pi
+    max_dphase = float(np.max(np.abs(d)))
+    if max_dphase > 2.5:
+        return None, max_dphase
+    return float(d.sum() / (2 * np.pi) / 2.0), max_dphase
+
+
+def _e4_dense_dirichlet_operator(rows, iw, io, right_block, n=60):
+    """Assemble the N x N dense operator of the mis-port investigation.
+
+    Homogeneous Dirichlet at the left wall: the evaluator's 4
+    wall-eliminated closure rows sit at nodes 0..3.  Centered interior on
+    nodes 4..n-6.  Outflow at the right: the reflected 5 x 7 *floating*
+    closure ``right_block`` (sign-flipped for nu = 1) occupies nodes
+    n-5..n-1, its wall row included — no BC is imposed at the outflow end.
+    Returns Q = -D so stability is max Re eig(Q) < 0 for u_t = Q u.
+    """
+    O = np.zeros((n, n))
+    for i, (w, cols) in enumerate(rows):
+        O[i, cols] = w
+    for i in range(len(rows), n - 5):
+        O[i, i + io] = iw
+    for i in range(5):
+        for j in range(7):
+            O[n - 1 - i, n - 1 - j] = -right_block[i, j]
+    return -O
 
 
 @pytest.fixture(scope="module")
@@ -260,6 +376,74 @@ class TestE4_1Evaluator:
         psi = Symbol("psi")
         assert len(ev.denominators) > 0
         assert any(psi in den.free_symbols for den in ev.denominators)
+
+    def test_denominator_structure(self, e4_evaluator):
+        """The corrected 4-param closure's denominators (e4-align A2).
+
+        Exactly five irreducible factors:
+
+        - ``psi + 1``, ``psi + 2``, ``psi + 3`` — pure-psi Vandermonde
+          factors of the f0 row; no zeros on (0, 1];
+        - ``66*alpha_0 - 73`` — psi-INDEPENDENT uniform-conservation
+          factor (f2 row); pole only at alpha_0 = 73/66;
+        - one mixed cut-conservation polynomial in all of (psi, alpha_0..3)
+          of degree 8 in psi (transition row).
+
+        This replaces the dead mis-port lore (the D6 denominator and the
+        C++ ``alpha[1] >= 197/288`` guard): the corrected closure has NO
+        psi-pole at fixed feasible alpha — infeasibility is an alpha-driven
+        surface, tested pointwise by the feasibility guard.
+        """
+        from sympy import Poly
+
+        ev = e4_evaluator
+        psi = Symbol("psi")
+        a0 = Symbol("alpha_0")
+        dens = ev.denominators
+        assert len(dens) == 5
+        assert {psi + 1, psi + 2, psi + 3} <= dens
+        assert 66 * a0 - 73 in dens
+
+        mixed = [d for d in dens if len(d.free_symbols) == 5]
+        assert len(mixed) == 1
+        assert Poly(mixed[0], psi).degree() == 8
+
+        # No denominator vanishes on the C++ clamp range [1e-4, 1 - 1e-4]
+        # at either the alpha = 0 baseline or the paper id=1 alphas.
+        from sympy import lambdify
+
+        id1 = _paper_id1_alpha(_load_paper_fixture())
+        grid = np.linspace(1e-4, 1.0 - 1e-4, 4001)
+        for avals in ([0.0] * 4, [id1[s.name] for s in ev.alpha_symbols]):
+            for den in dens:
+                f = lambdify((psi, *ev.alpha_symbols), den)
+                v = np.broadcast_to(
+                    np.asarray(f(grid, *avals), dtype=float), grid.shape
+                )
+                assert np.all(np.abs(v) > 1.0), f"near-zero of {den}"
+                assert np.all(np.sign(v) == np.sign(v[0])), f"zero of {den}"
+
+    def test_alpha_order_matches_paper_fixture(self, e4_evaluator):
+        """Pins the canonical alpha order to the paper order (e4-align A2).
+
+        Feeding the fixture id=1 values through the documented mapping
+        alpha_0..alpha_3 = (alphau_04, alphau_14, alphau_24, alphau_25)
+        must reproduce the fixture's wall-eliminated Dirichlet block at
+        every fixture psi — any permutation of the order breaks this.
+        The same order is the C++ ``alpha[]`` contract.
+        """
+        ev = e4_evaluator
+        fix = _load_paper_fixture()
+        alpha = _paper_id1_alpha(fix)
+        for key in ["0.05", "0.3", "0.7", "0.97"]:
+            ref = np.array(fix["blocks"][key]["dirichlet_4x6_wall_row_and_col_dropped"])
+            rows, row_indices = ev.rows(float(key), alpha)
+            got = np.array([w for w, _ in rows])
+            np.testing.assert_allclose(
+                got, ref, atol=1e-12,
+                err_msg=f"Dirichlet block mismatch vs paper fixture at psi={key}",
+            )
+            np.testing.assert_array_equal(row_indices, np.arange(4))
 
     def test_interior(self, e4_evaluator):
         weights, offsets = e4_evaluator.interior()
@@ -633,3 +817,167 @@ class TestKreissCutcellCheckE4_1:
         assert isinstance(result, KreissResult)
         assert not getattr(result, "infeasible", False)
         assert result.n_admissible_roots == 2
+
+
+# ---------------------------------------------------------------------------
+# e4-align A2 money test: paper id=1 alphas are stable across psi
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+class TestE4_1PaperId1MoneyTest:
+    """Stability of the corrected E4_1 closure at the published id=1 alphas.
+
+    The paper's true id=1 scheme (Appendix B text values; the printed
+    Table A.4 is corrupted and NOT used) was verified during the mis-port
+    investigation to pass dense eigenvalues through N = 240 and GKS
+    winding W = 0 at 14 psi.  These tests assert the repo pipeline now
+    reproduces that: (a) the augmented Kreiss check reports stable at the
+    fixture psi, with the interior branch-point artifact at
+    s ~ E4_BRANCH_POINT_S adjudicated by the deflated winding + a dense
+    fallback; (b) dense eigenvalues of the investigation's assembled
+    operator at N = 60 have max Re < 0; (c) the default 20-psi sweep runs,
+    and every unstable verdict it reports is the adjudicated branch-point
+    artifact — no genuine bad-psi pocket.
+    """
+
+    FIXTURE_PSI = [0.05, 0.3, 0.7, 0.97]
+
+    @pytest.fixture(scope="class")
+    def e4_evaluator(self):
+        return make_cutcell_evaluator(E4_1)
+
+    @pytest.fixture(scope="class")
+    def paper_fix(self):
+        return _load_paper_fixture()
+
+    @pytest.fixture(scope="class")
+    def id1_alpha(self, paper_fix):
+        return _paper_id1_alpha(paper_fix)
+
+    def _adjudicate_branch_point_verdict(self, ev, alpha, psi, result,
+                                         right_block):
+        """A not-stable verdict may ONLY be the known interior
+        branch-point artifact; adjudicate it via the deflated winding and
+        assert stability via the dense fallback."""
+        # 1. Artifact signature: conservative defective-kappa fail exactly
+        #    at the interior kappa collision, margin inf (not a genuine
+        #    determinant zero).
+        assert result.defective_kappa_detected is True, (
+            f"psi={psi}: unstable verdict without the branch-point "
+            f"signature (witness {result.witness_s})"
+        )
+        assert abs(result.witness_s - E4_BRANCH_POINT_S) < 1e-6, (
+            f"psi={psi}: defective-kappa witness {result.witness_s} is not "
+            f"the interior branch point"
+        )
+        assert np.isinf(result.witness_sigma_min)
+
+        # 2. Deflated winding: zero RHP zeros of the Kreiss determinant.
+        iw, io = ev.interior()
+        rows, row_indices = ev.rows(psi, alpha)
+        W, max_dphase = _deflated_winding(iw, io, rows, list(row_indices))
+        assert W is not None, (
+            f"psi={psi}: winding contour under-resolved "
+            f"(max dphase {max_dphase:.2f} rad)"
+        )
+        assert abs(W) < 1e-6, (
+            f"psi={psi}: deflated winding W = {W} != 0 — genuine RHP zero"
+        )
+
+        # 3. Dense fallback: the assembled operator is strictly stable.
+        Q = _e4_dense_dirichlet_operator(rows, iw, io, right_block, n=60)
+        max_re = float(np.max(np.real(np.linalg.eigvals(Q))))
+        assert max_re < 0.0, (
+            f"psi={psi}: dense fallback contradicts adjudication, "
+            f"max Re = {max_re:.3e}"
+        )
+
+    @pytest.mark.parametrize("psi", FIXTURE_PSI)
+    def test_kreiss_stable_at_fixture_psi(self, e4_evaluator, paper_fix,
+                                          id1_alpha, psi):
+        """(a) kreiss_cutcell_check (augmented Kreiss matrix, evaluator
+        row_indices) at the id=1 alphas: stable at every fixture psi.
+
+        Measured 2026-07-23: psi in {0.05, 0.3, 0.7} report is_stable=True
+        directly (finite margins 2.2e-2 / 3.9e-2 / 1.1e-1); at psi = 0.97
+        the interior branch-point artifact fires (witness s = 1.17600...,
+        defective kappa, sigma = inf) and is adjudicated: winding W = 0,
+        dense max Re < 0.
+        """
+        result = kreiss_cutcell_check(
+            E4_1, id1_alpha, psi, s_grid_params=_CUT_GRID
+        )
+        assert isinstance(result, KreissResult)
+        if result.is_stable:
+            assert np.isfinite(result.witness_sigma_min)
+            assert result.witness_sigma_min > 0.0
+            return
+        right = np.array(paper_fix["blocks"][repr(psi)]["floating_5x7"])
+        self._adjudicate_branch_point_verdict(
+            e4_evaluator, id1_alpha, psi, result, right
+        )
+
+    @pytest.mark.parametrize("psi", FIXTURE_PSI)
+    def test_dense_eigenvalues_at_fixture_psi(self, e4_evaluator, paper_fix,
+                                              id1_alpha, psi):
+        """(b) Dense eigenvalues of the assembled operator at N = 60:
+        max Re lambda < 0 at every fixture psi (the investigation's
+        acceptance assembly — left cut Dirichlet closure under test, right
+        reflected floating closure from the committed fixture).
+
+        Measured 2026-07-23: max Re in [-1.5e-4, -1.6e-5].
+        """
+        rows, _ = e4_evaluator.rows(psi, id1_alpha)
+        iw, io = e4_evaluator.interior()
+        right = np.array(paper_fix["blocks"][repr(psi)]["floating_5x7"])
+        Q = _e4_dense_dirichlet_operator(rows, iw, io, right, n=60)
+        max_re = float(np.max(np.real(np.linalg.eigvals(Q))))
+        assert max_re < -1e-6, (
+            f"psi={psi}: N=60 dense spectrum not strictly stable, "
+            f"max Re = {max_re:.3e}"
+        )
+
+    def test_psi_sweep_default_grid_verdict(self, e4_evaluator, paper_fix,
+                                            id1_alpha):
+        """(c) kreiss_margin_over_psi on the default 20-psi grid.
+
+        RECORDED VERDICT (2026-07-23, faithfully): the sweep returns
+        ``any_unstable=True`` — but every one of the 6 unstable per-psi
+        verdicts (the near-one grid points psi >= 0.864) carries the
+        identical interior branch-point witness s = 1.1760... with
+        sigma = inf and defective kappa, and every one adjudicates clean
+        (deflated winding W = 0, dense N = 60 max Re < 0).  The remaining
+        14 psi are stable with finite margins; the worst finite margin is
+        2.10e-2 at psi = 0.0720 (near-wall regime, as the ILW literature
+        predicts).  No genuine bad-psi pocket was found — the raw
+        any_unstable flag is entirely the adjudicated artifact.
+        """
+        sweep = kreiss_margin_over_psi(
+            E4_1, id1_alpha, s_grid_params=_CUT_GRID
+        )
+        assert isinstance(sweep, CutCellPsiSweep)
+        assert sweep.infeasible_psi == []
+        grid = default_psi_grid()
+        assert sorted(sweep.per_psi) == [float(p) for p in grid]
+        for psi, res in sweep.per_psi.items():
+            assert isinstance(res, KreissResult), f"psi={psi}"
+
+        # Adjudicate every unstable verdict; none may be genuine.
+        uniform_right = np.array(paper_fix["blocks"]["1.0"]["floating_5x7"])
+        unstable = {p: r for p, r in sweep.per_psi.items() if not r.is_stable}
+        for psi, res in unstable.items():
+            self._adjudicate_branch_point_verdict(
+                e4_evaluator, id1_alpha, psi, res, uniform_right
+            )
+
+        # Recorded-verdict regression anchors (loose bands around the
+        # measured values; a drift outside them is a real finding).
+        assert sweep.any_unstable is (len(unstable) > 0)
+        assert all(p >= 0.8 for p in unstable), (
+            f"branch-point artifact fired outside the near-one block: "
+            f"{sorted(unstable)}"
+        )
+        assert np.isfinite(sweep.worst_sigma_min)
+        assert 0.01 < sweep.worst_sigma_min < 0.05
+        assert sweep.worst_psi is not None and sweep.worst_psi < 0.15
