@@ -3,11 +3,12 @@
 Every downstream normal-mode item (psi-parameterized Kreiss checks,
 reflection coefficients, interval operators) consumes cut-cell closure rows
 at (psi, alpha) points.  Deriving the symbolic stencil per call is fine for
-E2_1 (~0.03 s) but measured > 170 s for E4_1 — unusable in any sweep or
-optimizer loop (see ``group_velocity.psi_sweep_group_velocity`` for the
-derive-per-call antipattern this module replaces).  Here the symbolic
-derivation runs once per (scheme, bc) — cached via ``functools.lru_cache``
-— and every entry of the chosen block is ``sympy.lambdify``-compiled over
+E2_1 (~0.03 s) but measured ~7 s for E4_1's paper construction
+(``derive_cut_cell_paper``) — unusable in any sweep or optimizer loop (see
+``group_velocity.psi_sweep_group_velocity`` for the derive-per-call
+antipattern this module replaces).  Here the symbolic derivation runs once
+per (scheme, bc) — cached via ``functools.lru_cache`` — and every entry of
+the chosen block is ``sympy.lambdify``-compiled over
 ``(psi, *alpha_symbols)`` once, so subsequent evaluations cost microseconds.
 
 The **Dirichlet (wall-eliminated) block is the canonical analysis object**:
@@ -25,6 +26,31 @@ block has R-1 rows and T columns; column 0 is the wall (at fractional
 position -psi relative to grid node 0), columns 1..T-1 are grid nodes
 0..T-2.  After dropping the wall column, Dirichlet row i sits at grid node
 i, so ``row_indices = [0, ..., R-2]``.
+
+Alpha ordering (the C++ ``alpha[]`` contract): ``alpha_symbols`` is the
+canonical parameter order.  For E4_1 these are the four *surviving uniform
+alphas* of the paper construction (Brady & Livescu 2021, JCP 426:109794),
+in the paper order
+
+    ``alpha_0 = alphau_{0,4}``, ``alpha_1 = alphau_{1,4}``,
+    ``alpha_2 = alphau_{2,4}``, ``alpha_3 = alphau_{2,5}``
+
+(row, column indices into the 4 x 6 uniform-stage closure B_u; see
+``temo.build_uniform_for_mathematica``).  No alpha is eliminated by cut
+conservation — all four survive symbolically in the cut block — and this
+order is the contract for the C++ ``alpha[]`` array when ``E4_1.cpp`` is
+regenerated.  The ``tests/fixtures/e4_1_paper_reference.json`` key names
+(``alphau_0_4``, ``alphau_1_4``, ``alphau_2_4``, ``alphau_2_5``) map to
+``alpha_0..alpha_3`` in that order.
+
+Denominator structure (E4_1, asserted in tests/test_cutcell_eval.py):
+exactly five irreducible factors — the pure-psi Vandermonde factors
+``psi + 1``, ``psi + 2``, ``psi + 3`` (no zeros on (0, 1]); the
+psi-independent uniform-conservation factor ``66*alpha_0 - 73`` (pole at
+``alpha_0 = 73/66`` only); and one mixed cut-conservation polynomial
+(degree 8 in psi, degree 3 in the alphas).  There is no psi-pole at fixed
+feasible alpha: infeasibility is an alpha-driven surface, tested pointwise
+by the ``denominators`` feasibility guard.
 
 Sign convention: the returned weights are the *raw derivative-operator*
 rows (the same convention ``brady2d_stability._extract_stencil_data``
@@ -94,9 +120,13 @@ class CutCellEvaluator:
         Stencil dimensions (r, t, R, T, X).
     alpha_symbols : list[Symbol]
         Free alpha symbols of the derived closure, in canonical order.
+        For E4_1 this is the paper order (alphau_04, alphau_14, alphau_24,
+        alphau_25) — the C++ ``alpha[]`` contract; see the module
+        docstring.
     denominators : frozenset[Expr]
         Irreducible non-constant denominator polynomials in (psi, alpha)
-        collected from the block entries, for feasibility pre-checks.
+        collected from the block entries, for feasibility pre-checks
+        (E4_1 structure documented in the module docstring).
     """
 
     def __init__(
