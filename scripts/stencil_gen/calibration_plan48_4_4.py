@@ -25,9 +25,16 @@ Parts (plan 48 item 4.4.5, recalibrated per the 4.3 findings caveat 1):
     baseline for the delta).
 (c) Gaussian epsilon = 0.1 on the UNCUT template — the known-unstable
     anchor from known_values.json; expect a positive growth_rate.
-(d) E4_1 (alpha_0, w_4) = (0.1, 0.16) on the cut template — expect
-    infeasible=True via the std::invalid_argument guard
-    (E4_1.cpp:37-41, w_4 >= 197/288).
+(d) Paper-aligned E4_1 (Brady & Livescu 2021) at the id=1 free boundary
+    alphas (alphau_04, alphau_14, alphau_24, alphau_25 from
+    tests/fixtures/e4_1_paper_reference.json) on the cut template,
+    N in {31, 61}, CFL 0.8 — records growth_rate and final_linf, plus
+    the E4_1 uniform baseline on the UNCUT template for the cut-vs-uniform
+    DELTA (the cut signal; the cut template's default-floating xmax/ymax
+    walls grow on their own — 4.3 caveat 1).  The mis-port's 197/288
+    std::invalid_argument guard is gone from the corrected 4-alpha E4_1,
+    so there is no infeasible branch: every alpha vector runs to a
+    numeric verdict.
 (e) Classical E4u on the UNCUT template (the stable anchor) — the
     growth-rate noise floor that rate_tol must sit safely above
     (4.3 caveat 3: only meaningful over the standard t_final = 10
@@ -59,6 +66,17 @@ from stencil_gen.cpp_bridge import (
 
 E2_1_ALPHA0 = {"alpha": [0.0, 0.0, 0.0, 0.0]}
 E4U_CLASSICAL = {"alpha": [-0.7733323791884821, 0.1623961700641681]}
+# Paper-aligned E4_1 (Brady & Livescu 2021) id=1 free boundary alphas,
+# order alpha_0..alpha_3 = (alphau_04, alphau_14, alphau_24, alphau_25);
+# from tests/fixtures/e4_1_paper_reference.json ("alpha_id1").
+E4_1_FIXTURE = {
+    "alpha": [
+        -0.0228413686378388,
+        -0.0582315114712024,
+        0.0258161783004396,
+        -0.0111107179663226,
+    ]
+}
 
 
 def fmt(result_dict: dict) -> str:
@@ -67,7 +85,7 @@ def fmt(result_dict: dict) -> str:
     return (
         f"growth_rate={gr if gr is None else f'{gr:+.4f}'} "
         f"final_linf={result_dict['final_linf']:.4g} "
-        f"stable={result_dict['stable']} infeasible={result_dict['infeasible']} "
+        f"stable={result_dict['stable']} "
         f"exit={br.exit_code} t_end={br.t_trace[-1] if br.t_trace.size else float('nan'):.4f} "
         f"wall={result_dict['wall_time_s']:.2f}s"
     )
@@ -78,8 +96,6 @@ def as_dict(br) -> dict:
         "final_linf": br.final_linf,
         "stable": br.stable,
         "growth_rate": br.growth_rate,
-        "infeasible": br.infeasible,
-        "reason": br.reason,
         "wall_time_s": br.wall_time_s,
         "bridge_result": br,
     }
@@ -128,14 +144,35 @@ def main() -> int:
     records["c_gaussian_eps01_N31"] = out
     print(f"  N=31: {fmt(out)}")
 
-    print("== (d) E4_1 (0.1, 0.16), CUT template (expect infeasible) ==")
-    out = layer8_cpp_simulation(
-        "E4", "classical", {"alpha": [0.1, 0.16]}, N=31, t_final=10.0,
-        template="cut",
-    )
-    records["d_E4_1_below_floor"] = out
-    print(f"  N=31: {fmt(out)}")
-    print(f"  reason: {out['reason']}")
+    print("== (d) paper-aligned E4_1 at id=1 alphas, CUT template, CFL 0.8 ==")
+    for N in (31, 61):
+        out = layer8_cpp_simulation(
+            "E4", "classical", E4_1_FIXTURE, N=N, t_final=10.0, template="cut",
+        )
+        records[f"d_cut_E4_1_N{N}"] = out
+        print(f"  N={N}: {fmt(out)}")
+
+    print("== (d') E4_1 at id=1 alphas, UNCUT template (uniform baseline) ==")
+    for N in (31, 61):
+        # Lua type "E4" (make_E4_1) on the uncut template is the shapes-free
+        # baseline of the same cut-capable closure; drive the bridge directly
+        # (the uniform dispatch maps ("E4", "classical") -> "E4u", a different
+        # stencil).
+        br = run_cpp_brady2d(
+            "E4", E4_1_FIXTURE, N=N, t_final=10.0,
+            template=BRADY_LIVESCU_TEMPLATE,
+        )
+        out = as_dict(br)
+        records[f"d_uniform_E4_1_N{N}"] = out
+        print(f"  N={N}: {fmt(out)}")
+
+    for N in (31, 61):
+        gd = records[f"d_cut_E4_1_N{N}"]["growth_rate"]
+        gu = records[f"d_uniform_E4_1_N{N}"]["growth_rate"]
+        delta = None if (gd is None or gu is None) else gd - gu
+        print(f"  N={N}: E4_1 cut-vs-uniform delta = "
+              f"{delta if delta is None else f'{delta:+.4f}'}")
+        records[f"delta_E4_1_N{N}"] = {"delta": delta}
 
     print("== (e) classical E4u, UNCUT template (stable anchor / noise floor) ==")
     for N in (31, 61):

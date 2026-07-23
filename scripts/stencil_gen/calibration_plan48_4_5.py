@@ -358,7 +358,6 @@ def bridge_row(br) -> dict:
         "growth_rate": br.growth_rate,
         "final_linf": br.final_linf,
         "t_end": float(br.t_trace[-1]) if br.t_trace.size else float("nan"),
-        "infeasible": br.infeasible,
         "exit_code": br.exit_code,
         "raw_fail": (br.growth_rate is None) or (br.growth_rate >= L8_RATE_TOL),
     }

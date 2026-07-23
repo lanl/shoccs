@@ -375,8 +375,6 @@ class TestBridgeResultDefaults:
         assert r.linf_trace.shape == (0,)
         assert r.t_trace.shape == (0,)
         assert r.growth_rate is None
-        assert r.infeasible is False
-        assert r.reason == ""
 
     def test_final_linf_defaults_to_nan(self):
         r = BridgeResult()
@@ -661,61 +659,6 @@ class TestComputeGrowthRate:
         )
 
 
-_TERMINATE_BANNER = (
-    "terminate called after throwing an instance of 'std::invalid_argument'"
-)
-_E4_1_WHAT = (
-    "  what():  E4_1: alpha[1] must be >= 197/288 ≈ 0.684 to avoid interior "
-    "denominator singularity"
-)
-
-
-class TestInfeasibleDetection:
-    """4.4.3 — std::invalid_argument aborts surface as infeasible, hermetically."""
-
-    def _make_aborting_shoccs(self, tmp_path: Path) -> Path:
-        stderr_src = tmp_path / "abort_stderr.txt"
-        stderr_src.write_text(_TERMINATE_BANNER + "\n" + _E4_1_WHAT + "\n")
-        script = tmp_path / "aborting_shoccs.sh"
-        script.write_text(f"#!/bin/sh\ncat {stderr_src} >&2\nexit 134\n")
-        script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
-        return script
-
-    def test_invalid_argument_abort_is_infeasible(self, tmp_path: Path):
-        fake = self._make_aborting_shoccs(tmp_path)
-        result = run_cpp_brady2d(
-            scheme_type="E4",
-            params={"alpha": [0.1, 0.16]},
-            N=31,
-            t_final=1.0,
-            template=BRADY_LIVESCU_CUT_TEMPLATE,
-            radius=CUT_SPHERE_RADIUS,
-            cfl=0.8,
-            binary=fake,
-        )
-        assert result.infeasible is True
-        assert "197/288" in result.reason
-        assert result.reason.startswith("what():")
-        assert result.stable is False
-        assert np.isnan(result.final_linf)
-        assert result.exit_code == 134
-
-    def test_generic_failure_is_not_infeasible(self, tmp_path: Path):
-        script = tmp_path / "failing_shoccs.sh"
-        script.write_text("#!/bin/sh\necho boom >&2\nexit 2\n")
-        script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
-        result = run_cpp_brady2d(
-            scheme_type="E4u",
-            params={"alpha": [-0.77, 0.16]},
-            N=21,
-            t_final=1.0,
-            binary=script,
-        )
-        assert result.infeasible is False
-        assert result.reason == ""
-        assert result.stable is False
-
-
 class TestL8CutDispatch:
     """4.4.3/4.4.4 — separate cut dispatch table, template selection, CFL knob.
 
@@ -769,13 +712,22 @@ class TestL8CutDispatch:
     def test_cut_dispatch_e4_uses_cut_capable_type(self, monkeypatch):
         """("E4", "classical") maps to "E4" (make_E4_1) on the cut template,
         NOT "E4u" — the uniform-only type silently accepts shapes and
-        produces a garbage cut discretization (4.3 caveat 2)."""
+        produces a garbage cut discretization (4.3 caveat 2). The
+        paper-aligned E4_1 takes FOUR free boundary alphas; they pass through
+        verbatim in ``params["alpha"]``."""
         stub = BridgeResult(final_linf=1e-3, stable=True, growth_rate=0.001)
         calls = self._patch_bridge(monkeypatch, stub)
+        four_alphas = [
+            -0.0228413686378388,
+            -0.0582315114712024,
+            0.0258161783004396,
+            -0.0111107179663226,
+        ]
         layer8_cpp_simulation(
-            "E4", "classical", {"alpha": [0.1, 0.7]}, template="cut",
+            "E4", "classical", {"alpha": four_alphas}, template="cut",
         )
         assert calls[0]["scheme_type"] == "E4"
+        assert calls[0]["params"]["alpha"] == four_alphas
 
     def test_cut_rejects_uniform_only_kernels(self, monkeypatch):
         self._patch_bridge(monkeypatch, BridgeResult())
@@ -846,21 +798,6 @@ class TestL8CutDispatch:
         assert loose["stable"] is True
         assert tight["stable"] is False
 
-    def test_infeasible_propagates_and_fails(self, monkeypatch):
-        stub = BridgeResult(
-            final_linf=float("nan"),
-            stable=False,
-            infeasible=True,
-            reason="what():  E4_1: alpha[1] must be >= 197/288 ...",
-        )
-        self._patch_bridge(monkeypatch, stub)
-        out = layer8_cpp_simulation(
-            "E4", "classical", {"alpha": [0.1, 0.16]}, template="cut",
-        )
-        assert out["stable"] is False
-        assert out["infeasible"] is True
-        assert "197/288" in out["reason"]
-
     def test_explicit_cfl_forwarded(self, monkeypatch):
         stub = BridgeResult(final_linf=1e-3, stable=True, growth_rate=0.0)
         calls = self._patch_bridge(monkeypatch, stub)
@@ -880,7 +817,6 @@ class TestL8CutDispatch:
         assert [c["cfl"] for c in calls] == [0.4, 0.8, 1.0]
         assert sorted(out["cfl_results"]) == [0.4, 0.8, 1.0]
         assert out["stable"] is True
-        assert out["infeasible"] is False
         assert out["wall_time_s"] == pytest.approx(1.5)
         for entry in out["cfl_results"].values():
             assert entry["stable"] is True
@@ -902,24 +838,32 @@ class TestCutBridgeSmoke:
     Skipped entirely if the binary hasn't been built.
     """
 
+    # Paper-aligned E4_1 (Brady & Livescu 2021) id=1 free boundary alphas,
+    # order alpha_0..alpha_3 = (alphau_04, alphau_14, alphau_24, alphau_25);
+    # from tests/fixtures/e4_1_paper_reference.json ("alpha_id1").
+    _E4_1_FIXTURE_ALPHA = [
+        -0.0228413686378388,
+        -0.0582315114712024,
+        0.0258161783004396,
+        -0.0111107179663226,
+    ]
+
     @pytest.mark.slow
-    def test_e4_1_below_floor_is_infeasible(self):
-        """alpha[1]=0.16 < 197/288 trips E4_1's std::invalid_argument guard
-        (E4_1.cpp:37-41) and must surface as infeasible, not a crash."""
+    def test_e4_1_cut_run_at_fixture_alphas(self):
+        """The corrected 4-alpha E4_1 runs end-to-end on the cut template at
+        the paper id=1 alphas and yields a finite growth rate. The mis-port's
+        197/288 std::invalid_argument guard is gone, so no alpha vector is
+        infeasible — this must run to a numeric verdict, never abort."""
         if not SHOCCS_BINARY.exists():
             pytest.skip("shoccs binary not built")
-        result = run_cpp_brady2d(
-            scheme_type="E4",
-            params={"alpha": [0.1, 0.16]},
-            N=31,
-            t_final=1.0,
-            template=BRADY_LIVESCU_CUT_TEMPLATE,
-            radius=CUT_SPHERE_RADIUS,
-            cfl=0.8,
+        out = layer8_cpp_simulation(
+            "E4", "classical", {"alpha": self._E4_1_FIXTURE_ALPHA},
+            N=31, t_final=1.0, template="cut",
         )
-        assert result.infeasible is True, f"stderr: {result.stderr}"
-        assert "197/288" in result.reason
-        assert result.stable is False
+        br = out["bridge_result"]
+        assert br.exit_code == 0, f"stderr: {br.stderr}"
+        assert out["growth_rate"] is not None
+        assert math.isfinite(out["growth_rate"])
 
     @pytest.mark.slow
     def test_e2_1_cut_run_reports_growth_rate(self):
@@ -935,6 +879,5 @@ class TestCutBridgeSmoke:
         )
         br = out["bridge_result"]
         assert br.exit_code == 0, f"stderr: {br.stderr}"
-        assert out["infeasible"] is False
         assert out["growth_rate"] is not None
         assert math.isfinite(out["growth_rate"])
