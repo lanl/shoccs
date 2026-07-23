@@ -35,7 +35,7 @@ The optimizer layers two cascades on top of the analytical stack:
 | Tension | E2_1, E4_1 | 1 | σ ∈ [0.5, 20] | analytical stability only |
 | Gaussian | E2_1, E4_1 | 1 | ε ∈ [0.1, 5] | analytical stability only |
 | Multiquadric | E2_1, E4_1 | 1 | ε ∈ [0.1, 5] | analytical stability only |
-| Classical-α | E4_1 | 2 | α₀ ∈ [-2, 2], α₁ ∈ [0.05, 2] | L8 cut-cell floor α₁ ≥ 197/288 reported as a diagnostic flag, not enforced (see plan 43.9a) |
+| Classical-α | E4_1 | 2 | α₀ ∈ [-2, 2], α₁ ∈ [0.05, 2] | analytical stability only |
 
 Tension-penalty, mixed-ε, E2 classical-α, and E6/E8 families are explicitly
 out of scope — see plan 43's "What this plan does NOT do" section.
@@ -65,10 +65,12 @@ Frozen dataclass returned by every driver.
 
 Dict mapping `(scheme, kernel)` tuples to bound lists. E4 classical-α
 bounds were widened in plan 43.9a to admit the Brady-Livescu analytical
-feasible region (α₁ ≈ 0.162 sits below the C++ cut-cell floor 197/288).
-The Python analytical pipeline L1–L7 does not enforce that cut-cell
-constraint; plan 43.10 records a `cpp_cutcell_violates_197_288` flag at L8
-diagnosis instead.
+feasible region (α₁ ≈ 0.162). This `("E4", "classical")` 2-parameter
+uniform-boundary space (consumed by `_build_classical_diff_matrix` for the
+L1–L7 analytical layers) is independent of the E4_1 cut-cell closure, which
+is the 4-parameter paper family (Brady & Livescu 2021, JCP 426:109794; see
+`docs/reference/py-derivation.md`) — the two are not directly comparable and
+neither constrains the other.
 
 ### Primitives
 
@@ -196,9 +198,6 @@ Extras include:
   `inner_n_feasible_restarts`, `inner_field`, `inner_best_objective`,
   `inner_best_x`, `inner_max_layer`, `validator_max_layer` — inner-stage
   diagnostics preserved for debugging.
-- `cpp_cutcell_violates_197_288` — informational flag for E4 classical-α
-  only (plan 43.9b-r1); `True` when `best_x[1] < 197/288`. Absent for
-  other kernels.
 
 Raises `ValueError` on `inner_max_layer < inner_gate`,
 `validator_max_layer < inner_max_layer`, or `top_k < 1`.
@@ -262,7 +261,6 @@ fields (plan 43.8a/43.8c):
 | `validator_max_layer` | Present only for `method="staged"` (the validator's layer depth — where `best_objective` was actually computed) |
 | `n_evals`, `compute_time`, `converged` | Run stats |
 | `best_report` | Serialized `StabilityReport` at the optimum |
-| `cpp_cutcell_violates_197_288` | Present only when `extras` carried it (E4 classical-α) |
 | `cpp_validation` | Present only under `--validate-with-cpp`; `{stable, final_linf, wall_time_s}` from the L8 bridge |
 
 `history` is never persisted.
@@ -290,8 +288,7 @@ Flags: `--n-seeds`, `--base-seed`, `--n-restarts`, `--survey-max-evals`,
 
 The returned dict carries a `basins` list (sorted ascending by
 `best_objective`) with per-basin `alpha`, `best_objective`,
-`n_seeds_in_basin`, `seeds`, and the propagated
-`cpp_cutcell_violates_197_288` flag.
+`n_seeds_in_basin`, `seeds`.
 
 ## Recipe: How to optimize a new family
 

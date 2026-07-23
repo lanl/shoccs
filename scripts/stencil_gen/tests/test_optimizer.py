@@ -116,13 +116,15 @@ class TestParamsVector:
 class TestClassicalAlphaBounds:
     """Sanity tests for the E4 classical-α bound decision in plan 43.9a.
 
-    The C++ ``E4_1`` stencil requires ``alpha[1] >= 197/288 ≈ 0.684`` to
-    avoid a cut-cell psi-denominator singularity.  The Python
     ``_build_classical_diff_matrix`` (used by L1–L7) operates on a uniform
-    grid and has no such constraint; its analytical feasible region sits
-    entirely *below* 197/288 around ``alpha[1] ≈ 0.16``.  ``DEFAULT_BOUNDS``
-    reflects the analytical envelope, not the cut-cell envelope — L8
-    validation is where the 197/288 check fires.
+    grid, independent of the E4_1 cut-cell closure; its analytical feasible
+    region sits around ``alpha[1] ≈ 0.16``, and ``DEFAULT_BOUNDS`` reflects
+    that analytical envelope. (An earlier revision of this note referenced a
+    C++ ``alpha[1] >= 197/288`` cut-cell guard from the mis-ported E4_1
+    closure; that guard did not belong to this analytical parameter space
+    and no longer exists — the e4-align rewrite replaced the mis-port with
+    the Brady & Livescu 2021 4-parameter cut-cell family, see
+    docs/reference/py-derivation.md.)
     """
 
     _BRADY_LIVESCU_E4 = (-0.7733323791884821, 0.1623961700641681)
@@ -139,14 +141,14 @@ class TestClassicalAlphaBounds:
         )
 
     def test_default_bounds_drop_cpp_cutcell_floor(self):
-        # The 197/288 floor is a cut-cell C++ constraint; L1-L7 use
-        # uniform grids with no psi denominator.  The analytical-only
-        # optimizer bound must therefore admit α₁ below 197/288.
+        # DEFAULT_BOUNDS reflects the analytical (uniform-grid) feasible
+        # envelope, which reaches below the historical 197/288 marker (an
+        # unrelated mis-ported cut-cell parameterization, since removed).
         (_, (lo1, _)) = DEFAULT_BOUNDS[("E4", "classical")]
         assert lo1 < 197.0 / 288.0, (
             f"DEFAULT_BOUNDS alpha[1] lower bound {lo1} >= 197/288; the "
             "analytical pipeline can't reach the Brady-Livescu feasible "
-            "region with a C++-cut-cell floor"
+            "region"
         )
 
     def test_params_roundtrip_at_brady_livescu(self):
@@ -159,7 +161,7 @@ class TestClassicalAlphaBounds:
 
     def test_python_accepts_alpha_below_cpp_floor(self):
         # Belt-and-braces: ``_build_classical_diff_matrix`` must not raise
-        # for the published α (where α₁ < 197/288); the analytical pipeline
+        # for the published Brady-Livescu α; the analytical pipeline
         # relies on this.
         from stencil_gen.brady2d_stability import _build_classical_diff_matrix
 
@@ -190,15 +192,13 @@ class TestClassicalAlphaBounds:
         )
 
     def test_objective_infeasible_above_cpp_floor(self):
-        # Picks a point inside DEFAULT_BOUNDS that lies *above* 197/288 —
-        # where the C++ cut-cell code is happy but the Python analytical
+        # Picks a point inside DEFAULT_BOUNDS where the Python analytical
         # pipeline is unstable.  The objective must return +inf gracefully
         # rather than raising.
         f = make_objective(
             "E4", "classical", "layer3.max_stab_eig",
             gate_layer=3, max_layer=3,
         )
-        # alpha[1] well above 197/288 is in the infeasible analytical zone.
         val = f(np.array([-0.77, 1.0]))
         assert not np.isfinite(val)
 
@@ -1256,9 +1256,9 @@ class TestGlobalOptimizers:
     @pytest.mark.slow
     def test_shgo_2d_classical_alpha(self):
         # 2D E4 classical-α.  Plan 43.9a widened ``DEFAULT_BOUNDS[("E4",
-        # "classical")]`` to ``[(-2, 2), (0.05, 2)]`` — dropping the C++
-        # cut-cell 197/288 floor since L1–L7 run on uniform grids where that
-        # constraint doesn't apply.  This test still uses the narrower
+        # "classical")]`` to ``[(-2, 2), (0.05, 2)]`` to reach the
+        # Brady-Livescu analytical feasible region.  This test still uses
+        # the narrower
         # relaxed bounds ``[(-1.2, -0.3), (0.05, 0.4)]`` to keep SHGO's
         # simplicial budget (n=6, iters=1) within the ~30 s time budget
         # while landing in the Brady-Livescu basin; a test on full
@@ -1527,166 +1527,6 @@ class TestStaged:
         assert len(ranking) >= 1
         assert all(not np.isfinite(fv) for (_x, fv) in ranking)
 
-    def test_staged_records_cpp_cutcell_flag_for_e4_classical(self, monkeypatch):
-        # Fast synthetic coverage for the ``cpp_cutcell_violates_197_288``
-        # diagnostic flag (plan 43.9b-r1 option a).  The flag must be
-        # populated on E4 classical results in both the success and
-        # fallback paths, and must encode ``best_x[1] < 197/288``.
-        import stencil_gen.optimizer as opt_mod
-
-        # Canned 2D inner history with the winner below the C++ floor
-        # (α₁ = 0.1 < 197/288 ≈ 0.684 → flag should be True).
-        winner_below = np.array([-0.8, 0.1])
-        canned_history = [(winner_below.copy(), -0.5)]
-        canned_inner = OptimizeResult(
-            best_params={"alpha": [-0.8, 0.1]},
-            best_x=winner_below.copy(),
-            best_objective=-0.5,
-            best_report={},
-            method="Nelder-Mead",
-            converged=True,
-            n_evals=1,
-            compute_time=0.0,
-            history=canned_history,
-            extras={
-                "inner_method": "Nelder-Mead",
-                "n_restarts": 1,
-                "seed": 0,
-                "n_feasible_restarts": 1,
-            },
-        )
-
-        def fake_multi_start(f, bounds, **kwargs):
-            return canned_inner
-
-        def fake_score_ok(scheme, kernel, params, *, max_layer, short_circuit=True):
-            return StabilityReport(
-                layer3={"max_stab_eig": -0.5},
-                layer6={
-                    "transient_growth_bound": 1.0,
-                    "spectral_abscissa": -0.1,
-                    "kreiss_constant": 1.0,
-                },
-                failed_layer=None,
-                overall_verdict="pass",
-            )
-
-        monkeypatch.setattr(opt_mod, "multi_start_optimize", fake_multi_start)
-        monkeypatch.setattr(opt_mod, "brady2d_stability_score", fake_score_ok)
-
-        r_ok = run_staged_optimize(
-            scheme="E4",
-            kernel="classical",
-            report_field="layer6.transient_growth_bound",
-            bounds=[(-2.0, 2.0), (0.05, 2.0)],
-            inner_gate=3,
-            inner_max_layer=3,
-            validator_max_layer=6,
-            top_k=1,
-        )
-        assert "cpp_cutcell_violates_197_288" in r_ok.extras
-        assert r_ok.extras["cpp_cutcell_violates_197_288"] is True
-
-        # Fallback path: validator raises every time.  Flag must still be
-        # recorded from the inner best_x.
-        def fake_score_blowup(scheme, kernel, params, *, max_layer, short_circuit=True):
-            if max_layer >= 6:
-                raise RuntimeError("validator blew up")
-            return fake_score_ok(scheme, kernel, params, max_layer=max_layer)
-
-        monkeypatch.setattr(opt_mod, "brady2d_stability_score", fake_score_blowup)
-
-        r_fb = run_staged_optimize(
-            scheme="E4",
-            kernel="classical",
-            report_field="layer6.transient_growth_bound",
-            bounds=[(-2.0, 2.0), (0.05, 2.0)],
-            inner_gate=3,
-            inner_max_layer=3,
-            validator_max_layer=6,
-            top_k=1,
-        )
-        assert r_fb.extras["stage"] == "inner"
-        assert "cpp_cutcell_violates_197_288" in r_fb.extras
-        assert r_fb.extras["cpp_cutcell_violates_197_288"] is True
-
-        # Winner above the floor → flag is False.
-        winner_above = np.array([-0.8, 0.9])
-        canned_inner_above = replace(
-            canned_inner,
-            best_x=winner_above.copy(),
-            history=[(winner_above.copy(), -0.5)],
-            best_params={"alpha": [-0.8, 0.9]},
-        )
-        monkeypatch.setattr(
-            opt_mod, "multi_start_optimize", lambda f, bounds, **kw: canned_inner_above
-        )
-        monkeypatch.setattr(opt_mod, "brady2d_stability_score", fake_score_ok)
-
-        r_above = run_staged_optimize(
-            scheme="E4",
-            kernel="classical",
-            report_field="layer6.transient_growth_bound",
-            bounds=[(-2.0, 2.0), (0.05, 2.0)],
-            inner_gate=3,
-            inner_max_layer=3,
-            validator_max_layer=6,
-            top_k=1,
-        )
-        assert r_above.extras["cpp_cutcell_violates_197_288"] is False
-
-    def test_staged_omits_cpp_cutcell_flag_for_other_kernels(self, monkeypatch):
-        # Non-E4-classical results must not carry the diagnostic flag (keep
-        # extras uncluttered for kernels where 197/288 is meaningless).
-        import stencil_gen.optimizer as opt_mod
-
-        canned_inner = OptimizeResult(
-            best_params={"sigma": 2.0},
-            best_x=np.array([2.0]),
-            best_objective=-0.5,
-            best_report={},
-            method="Nelder-Mead",
-            converged=True,
-            n_evals=1,
-            compute_time=0.0,
-            history=[(np.array([2.0]), -0.5)],
-            extras={
-                "inner_method": "Nelder-Mead",
-                "n_restarts": 1,
-                "seed": 0,
-                "n_feasible_restarts": 1,
-            },
-        )
-
-        def fake_score(scheme, kernel, params, *, max_layer, short_circuit=True):
-            return StabilityReport(
-                layer3={"max_stab_eig": -0.5},
-                layer6={
-                    "transient_growth_bound": 1.0,
-                    "spectral_abscissa": -0.1,
-                    "kreiss_constant": 1.0,
-                },
-                failed_layer=None,
-                overall_verdict="pass",
-            )
-
-        monkeypatch.setattr(
-            opt_mod, "multi_start_optimize", lambda f, bounds, **kw: canned_inner
-        )
-        monkeypatch.setattr(opt_mod, "brady2d_stability_score", fake_score)
-
-        r = run_staged_optimize(
-            scheme="E4",
-            kernel="tension",
-            report_field="layer6.transient_growth_bound",
-            bounds=[(0.5, 20.0)],
-            inner_gate=3,
-            inner_max_layer=3,
-            validator_max_layer=6,
-            top_k=1,
-        )
-        assert "cpp_cutcell_violates_197_288" not in r.extras
-
 
 class TestStagedClassicalAlpha:
     """Single-seed staged run on E4_1 classical-α (plan 43.9b).
@@ -1694,9 +1534,6 @@ class TestStagedClassicalAlpha:
     Drives :func:`run_staged_optimize` against the full widened
     ``DEFAULT_BOUNDS[("E4", "classical")]`` envelope (plan 43.9a) with the
     inner gate at L3 and a ``layer6.transient_growth_bound`` validator.
-    Records the L8 cut-cell diagnostic flag ``cpp_cutcell_violates_197_288``
-    in ``r.extras`` for downstream plan-43.10 wiring; the flag is purely
-    informational here and does not fail the test (see 43.9a-r1).
     """
 
     @pytest.mark.slow
@@ -1731,17 +1568,6 @@ class TestStagedClassicalAlpha:
         # ``params_from_vector`` on the classical kernel.
         assert list(r.best_params.keys()) == ["alpha"]
         assert len(r.best_params["alpha"]) == 2
-
-        # L8 cut-cell diagnostic flag — informational.  The 197/288 floor is a
-        # C++-side constraint (non-zero psi denominator in ``E4_1.cpp``) that
-        # the Python L1–L7 pipeline does not enforce, so an analytical winner
-        # with ``α₁ < 197/288`` is expected and *not* a failure (see 43.9a).
-        # ``run_staged_optimize`` records the flag itself for the E4 classical
-        # kernel (plan 43.9b-r1 option a); the test only observes it.
-        assert "cpp_cutcell_violates_197_288" in r.extras
-        assert r.extras["cpp_cutcell_violates_197_288"] == (
-            r.best_x[1] < 197.0 / 288.0
-        )
 
 
 class TestOptimizeCLI:
@@ -2004,52 +1830,6 @@ class TestOptimizeCLI:
         assert staged_opt["gate_layer"] == 2
         assert staged_opt["max_layer"] == 3
         assert staged_opt["validator_max_layer"] == 7
-
-        # Plan 43.9b-r2: the cpp_cutcell_violates_197_288 diagnostic flag
-        # (recorded in extras for E4 classical-alpha by
-        # _record_cpp_cutcell_diagnostic) is serialised into the persisted
-        # entry so 43.10 consumers reading known_values.json can see it
-        # without recomputing.  An E4-classical OptimizeResult with the flag
-        # set should round-trip; tension results (no such flag) must not
-        # carry the key.
-        cutcell_canned = OptimizeResult(
-            best_params={"alpha": [-0.8, 0.1]},
-            best_x=np.array([-0.8, 0.1]),
-            best_objective=-1.0,
-            best_report={"layer3": {"max_stab_eig": -1.0}},
-            method="staged",
-            converged=True,
-            n_evals=5,
-            compute_time=0.05,
-            history=[(np.array([-0.8, 0.1]), -1.0)],
-            extras={"cpp_cutcell_violates_197_288": True, "n_restarts": 1},
-        )
-        monkeypatch.setattr(
-            optimize_mod, "_run_method", lambda args, bounds: cutcell_canned
-        )
-        rc4 = optimize_mod.main(
-            [
-                "--scheme", "E4",
-                "--kernel", "classical",
-                "--objective", "layer3.max_stab_eig",
-                "--bounds", "-2", "2", "0.05", "2",
-                "--method", "staged",
-                "--n-restarts", "1",
-                "--max-evals", "4",
-                "--update-known-values",
-            ]
-        )
-        assert rc4 == 0
-        classical_opt = store["brady2d_optima"]["E4"]["classical"][
-            "layer3.max_stab_eig"
-        ]
-        assert classical_opt["cpp_cutcell_violates_197_288"] is True
-
-        # Tension entries (already persisted above without the flag in extras)
-        # must not carry the key.
-        assert "cpp_cutcell_violates_197_288" not in opt
-        assert "cpp_cutcell_violates_197_288" not in second_opt
-        assert "cpp_cutcell_violates_197_288" not in staged_opt
 
 
 class TestAlphaBasinSurvey:

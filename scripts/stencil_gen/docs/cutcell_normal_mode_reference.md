@@ -209,16 +209,16 @@ cascade; `extract_field` reaches them via dotted paths
   grid ψ feasible and Kreiss-stable (witness σ_min ∈ [8.2e-8, 0.43],
   worst at the ψ→1 row-coincidence edge); dense N=40 cross-check agrees
   at all 20 ψ (max Re eig(−D) ≤ 4.5e-7).
-- **E4_1's legacy (α₂, w₄) closure is genuinely GKS-unstable across
-  essentially the whole ψ grid at all tested w₄** — including the
-  shipped default (0.1, 0.7) — with machine-zero det M witnesses that
-  coincide with left-localized dense eigenvalues. The 197/288 floor is a
-  **parameterization** (denominator-positivity) constraint on w₄, not a
-  stability constraint: the true structural denominator is the degree-6
-  D₆(ψ; w₄) recorded in `E4_1.cpp:22-24` (the commit-15c0ddd cubic is
-  the wrong record), D₆(0) = 6·(288·w₄ − 197), and D₆ > 0 on (0,1) ⟺
-  w₄ ≥ 197/288 (verified symbolically). Stability-optimizing E4_1 in
-  its true (α₂, w₄) coordinates is plan-49 scope.
+- **Historical (superseded by e4-align): the pre-fix E4_1 closure was a
+  one-node-downwind mis-port of Brady & Livescu (2021) and was genuinely
+  GKS-unstable across essentially the whole ψ grid**, with machine-zero
+  det M witnesses that coincide with left-localized dense eigenvalues.
+  This finding drove the e4-align rewrite, which replaced the mis-ported
+  closure with the published 4-parameter cut-cell family (see
+  `docs/reference/py-derivation.md`); the legacy (α₂, w₄) parameterization
+  and its denominator-positivity floor no longer exist. Full derivation
+  detail lives in `cutcell_trefethen_theory.md` and
+  `e4_1_determinant_analysis.md`.
 - **Gaussian ε=0.1 (the documented GKS-passes-but-eigenvalue-unstable
   case) now has an analytic mechanism.** Full 4-row block: each end
   individually half-line stable with finite ‖R‖, two-boundary product

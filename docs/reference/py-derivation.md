@@ -26,15 +26,17 @@ The wider `scripts/stencil_gen/` tree also contains the sweep/optimizer/stabilit
 ## Public API / entry points
 `__init__.py` exports nothing; import modules by absolute path (`from stencil_gen.temo import ...`).
 
-### Cut-cell derivation (the two entry points — read this carefully)
+### Cut-cell derivation (single production entry point — read this carefully)
 ```python
 # temo.py
-derive_cut_cell_mathematica(scheme, psi, alpha_symbols=None, zero_pattern=None) -> CutCellResult
 derive_cut_cell_scheme(scheme, psi, alpha_symbols=None, conserve=True) -> CutCellResult
+derive_cut_cell_paper(scheme, psi, alpha_symbols=None) -> CutCellResult
 ```
-These are **complementary by scheme, not chronological old-vs-new** (the CLAUDE.md / SKILL "legacy vs current" framing is misleading — see [Gotchas](#gotchas--invariants)). In production (`group_velocity.run_psi_sweep`) the choice is dispatched on `scheme.zeros`:
-- **`derive_cut_cell_mathematica`** — singularity-free path mirroring Mathematica `explicitr-E4d1.nb`. Production path for schemes **with** a non-empty `zeros` pattern (currently **E4_1**). Keeps `alpha` free throughout to avoid `psi*(psi-1)` singularities.
-- **`derive_cut_cell_scheme`** — general entry. Production path for schemes **without** `zeros` (**E2_1, E2_2**). It also contains its own internal `zeros`-branch (lines ~3131+) exercised by E4_1 tests, plus `conserve`/non-conserve paths and the `nu=2` Neumann branch.
+`derive_cut_cell_scheme` dispatches internally on `scheme.zeros`, so calling it alone is always correct; production callers (`group_velocity.run_psi_sweep`, `cutcell_eval.make_cutcell_evaluator`) additionally branch on `scheme.zeros` themselves to call `derive_cut_cell_paper` directly for zeros-schemes — the same dispatch, just inlined at the call site:
+- Schemes **with** a non-empty `zeros` pattern (currently **E4_1**) route to **`derive_cut_cell_paper`** — a direct symbolic implementation of the published Brady & Livescu (2021, JCP 426:109794) Sec. 3.2/3.3 construction: a 5x7 block with row 0 evaluated at the wall, rows 1..r-1 centered at fluid nodes, a wall-free transition row, the paper blend rule `alpha_ij = psi*alphau_ij + (1-psi)*alphau_{i-1,j-1}`, and a linear (t+1)-equation cut-conservation solve in which all of the uniform stage's free alphas survive symbolically. See `derive_cut_cell_paper`'s docstring for the full rule set and `tests/fixtures/e4_1_paper_reference.json` for the anchoring fixture.
+- Schemes **without** `zeros` (**E2_1, E2_2**) run the general TEMO construction in `derive_cut_cell_scheme` itself (`conserve`/non-conserve paths, the `nu=2` Neumann branch).
+
+**History (e4-align, 2026-07):** `derive_cut_cell_mathematica` — a previously separate "singularity-free" entry point that mirrored Mathematica `explicitr-E4d1.nb` — has been deleted, along with `construct_cut_cell_with_free_gammas`, `blend_free_gammas`, `_safe_get`, `zeroed_col_default`, `zeroed_col_aza`, and the old internal `zeros`-branch inside `derive_cut_cell_scheme`. That construction was a defective one-node-downwind mis-port of the published Brady & Livescu construction (verified against the paper text; no wall row, wrong blend rule, no linear cut-conservation with surviving alphas). `derive_cut_cell_paper` is its replacement — there is no dual dispatch and no back-compat shim.
 
 Both return a `CutCellResult` dataclass:
 ```python
@@ -114,7 +116,7 @@ The symbolic core is exact-rational throughout (SymPy `Rational`); `phs.py` is t
 1. **Interior** (`derive_interior`) — Taylor-match a `2p+1`-point circulant against derivative order `nu`, exploiting (anti)symmetry, to get exact-rational `gamma`/`delta`. (`full_gamma_array` expands to the full symmetric array.)
 2. **Uniform boundary rows** (`solve_boundary_row` / `derive_uniform_boundary_for_temo`) — each row is an underdetermined Taylor system: `q+1` columns are *determined*; the remaining `t-(q+1)` are **free `alpha` constants**, carried symbolically.
 3. **Discrete conservation** (`solve_conservation`) — impose telescoping/flux column-sum conditions to fix conservation (quadrature) weights `w_i` and resolve the last row's placeholder `phi_k`. The conservation equations are **bilinear** (`w_{r-1}*phi_k`); they are **linearized via theta-substitution** (`theta_k = w_{r-1}*phi_k`), solved linearly, then `phi_k = theta_k / w_{r-1}` recovered.
-4. **Cut-cell rows** — extend the conserved uniform rows to embedded-boundary rows parameterized by `psi`. The `mathematica` path **blends** free gammas inline (`psi*base + (1-psi)*shifted`) with `alpha` kept free to dodge singularities; the `scheme` path uses a polynomial ansatz (and an internal `zeros` branch for E4_1).
+4. **Cut-cell rows** — extend the conserved uniform rows to embedded-boundary rows parameterized by `psi`. Schemes with a `zeros` pattern (E4_1) dispatch to `derive_cut_cell_paper`, which builds the row (wall + fluid-node-centered + wall-free transition) directly from the paper blend rule `alpha_ij = psi*alphau_ij + (1-psi)*alphau_{i-1,j-1}` and solves cut conservation linearly with the uniform stage's free alphas surviving symbolically. Schemes without `zeros` (E2_1, E2_2) use the general TEMO polynomial-ansatz construction (`construct_cut_cell_stencil`).
 5. **Neumann** (`nu=2` only) — `derive_uniform_neumann` + `construct_neumann_stencil` add the Neumann variant rows and `eta` coefficients.
 6. **Assembly** (`assemble_cut_cell_result`) → `CutCellResult` with `floating`/`dirichlet`/(`neumann`) matrices + conservation (quadrature) `weights`.
 
@@ -123,7 +125,7 @@ Codegen is a **separate, manual** step: build a `StencilGenSpec`, call `generate
 ## How to extend
 **Add a new derivative scheme:**
 1. Add a `SchemeParams(p, q, s, nextra, nu, zeros=...)` constant to the catalog in `temo.py` (~line 129). Set `zeros=(...)` **only** if the scheme needs zero-constrained cut-cell conservation (like E4_1).
-2. Route by `zeros`: schemes **with** `zeros` → `derive_cut_cell_mathematica`; **without** → `derive_cut_cell_scheme`. `group_velocity.run_psi_sweep` (~line 750) is the canonical dispatch example — copy that `if scheme.zeros:` branch.
+2. Route by `zeros`: `derive_cut_cell_scheme` dispatches internally (forwarding to `derive_cut_cell_paper` when `scheme.zeros` is non-empty), so calling it directly is always correct. `group_velocity.run_psi_sweep` (~line 750) additionally branches explicitly on `scheme.zeros` to call `derive_cut_cell_paper` directly for zeros-schemes — copy that `if scheme.zeros:` pattern if a caller needs the same short-circuit. `derive_cut_cell_paper` implements only the `nu=1` paper construction — a new `zeros`-scheme with `nu != 1` would need its own construction.
 3. Emit C++: build a `StencilGenSpec` (`codegen.py:234`), call `generate_stencil_cpp(spec)` + `generate_test_cpp(spec, cases)`, write to `output/`, then **manually copy** the file into `src/stencils/` and wire it into `src/stencils/stencil.cpp`'s `from_lua` dispatch (see the [Stencils](stencils.md) reference). There is no automated codegen driver.
 
 **Add a new RBF/spline kernel family:** add a branch in `phs._kernel_eval` / `_kernel_deriv` (~lines 179/211) and a `build_diff_matrix_*` wrapper, then thread the scalar shape parameter through `codegen.build_symbol_map(scalar_params=...)` and the C++ scheme table.
@@ -131,7 +133,7 @@ Codegen is a **separate, manual** step: build a `StencilGenSpec`, call `generate
 **Add a uniform-boundary distribution:** extend `derive_uniform_boundary_for_temo` (the current general builder) — **not** `derive_e2_uniform_boundary` (the retired E2-only oracle).
 
 ## Gotchas & invariants
-- **The "legacy vs current" cut-cell labeling is wrong.** CLAUDE.md and the stencil-pipeline SKILL describe `derive_cut_cell_scheme` as "legacy with psi-clamping" and `derive_cut_cell_mathematica` as "singularity-free, current." In reality the choice is by `scheme.zeros` (mathematica for E4_1; scheme for E2_1/E2_2), `derive_cut_cell_scheme` is the **production** path for non-`zeros` schemes, and nothing in the current `derive_cut_cell_scheme` source does psi-clamping. Do not treat either as deprecated.
+- **`derive_cut_cell_scheme` is the single production entry point.** The former separate `derive_cut_cell_mathematica` function has been deleted (e4-align, 2026-07) — it was a defective one-node-downwind mis-port of the published Brady & Livescu (2021) construction, not a legitimate "singularity-free, current" alternative. `derive_cut_cell_scheme` now dispatches internally on `scheme.zeros`, forwarding to `derive_cut_cell_paper` (the correct paper construction) for E4_1 and running the general TEMO polynomial-ansatz construction in place for E2_1/E2_2. Nothing in the current source does psi-clamping.
 - **`SYMPY_CACHE_SIZE=50000` is mandatory.** Default 1000 causes severe slowdowns on the large symbolic matrices; E4 derivation runs ~30s with it set.
 - **Linearize bilinear unknowns before solving.** Any product of two unknowns (`w_{r-1}*phi_k`, cut-cell `w*gamma`) must go through theta-substitution (`solve_conservation`, `temo._solve_with_linearization`) and then recover `phi=theta/w_last`. Forgetting this makes the system nonlinear and `linsolve` fails.
 - **Use `linear_eq_to_matrix` + `linsolve`, NOT `sympy.solve`** for these parameterized linear systems (project convention — performance + determinism). `_util.solve_linear` is the standard wrapper.
@@ -141,10 +143,10 @@ Codegen is a **separate, manual** step: build a `StencilGenSpec`, call `generate
 - **`phs.py` returns numeric (float) weights**, unlike the exact-rational symbolic core. Don't assume exact coefficients out of the PHS arm.
 
 ## Maturity & known gaps
-**Verdict: mature.** Evidence: dense, real test coverage (deterministic core ~351 passed / 5 skipped per the Python ground-truth audit) plus live production callers — `group_velocity.py` dispatches to *both* cut-cell entry points, and `output/E4_1.cpp` shares its regeneration commit with the shipped `src/stencils/E4_1.cpp`, confirming the pipeline produced real C++. The symbolic core is exact-rational and validated against hand-derived oracles; `phs.py` is exercised heavily by the sweeps/optimizer. Caveat: the core symbolic files (`temo`/`phs`/`interior`/`boundary`/`conservation`) were last touched 2026-04-06 — derivation itself is stable/frozen while the downstream analysis stack keeps evolving.
+**Verdict: mature.** Evidence: dense, real test coverage (deterministic core ~351 passed / 5 skipped per the Python ground-truth audit) plus live production callers — `group_velocity.py` dispatches to *both* cut-cell entry points (`derive_cut_cell_paper` and `derive_cut_cell_scheme`), and `output/E4_1.cpp` shares its regeneration commit with the shipped `src/stencils/E4_1.cpp`, confirming the pipeline produced real C++. The symbolic core is exact-rational and validated against hand-derived oracles; `phs.py` is exercised heavily by the sweeps/optimizer. Caveat: the core symbolic files (`temo`/`phs`/`interior`/`boundary`/`conservation`) were last touched 2026-04-06 — derivation itself is stable/frozen while the downstream analysis stack keeps evolving.
 
 Verified dead / partial / experimental items in THIS subsystem (from audited flags):
-- **`blend_free_gammas`** (`temo.py:1339`) — **dead** (zero callers; superseded by inline `blend_subs` in `derive_cut_cell_mathematica`). Safe to delete; keep the shared `_safe_get` helper. See [Cleanup Plan](../CLEANUP_PLAN.md).
+- **`blend_free_gammas`, `construct_cut_cell_with_free_gammas`, `_safe_get`, `zeroed_col_default`, `zeroed_col_aza`, `derive_cut_cell_mathematica`** — **deleted** (e4-align, 2026-07): dead code tied to the retired mis-ported E4_1 construction. No longer present in `temo.py`.
 - **`bspline_fd_weights`, `bspline_boundary_weights`, `build_diff_matrix_bspline`** (`phs.py:1009/1073/1088`) — **dead** (self-contained B-spline experiment, zero callers, no tests). Safe to delete all three. See [Cleanup Plan](../CLEANUP_PLAN.md).
 - **`cut_cell_weights`** (`phs.py:965`) — **dead** (only an *unused* import in `test_phs.py:13`; no call site anywhere; thin wrapper over the tested `phs_stencil_weights`). Doc drift: `pipeline_reference.md` lists it as an entry point with a wrong signature. Safe to delete. See [Cleanup Plan](../CLEANUP_PLAN.md).
 - **`derive_e2_uniform_boundary`** (`temo.py:212`) — **partial / legacy-oracle.** Fully implemented and correct but has zero production callers; retained intentionally as a regression oracle (tests pin the general builder against it). Do NOT delete — document as oracle-only.
@@ -155,7 +157,7 @@ Verified dead / partial / experimental items in THIS subsystem (from audited fla
 ## Tests
 Run: `cd scripts/stencil_gen && SYMPY_CACHE_SIZE=50000 uv run pytest tests/ -x -q`. (~139 `@slow` tests are deselected by default.)
 - **Covered:** `test_interior.py` (29), `test_boundary.py` (41, incl. conservation), `test_temo.py` (127, both entry points + uniform builders + E2_2 integration), `test_e4_cut_cell.py` (131, ~19 `@slow`), `test_codegen.py` (41), `test_codegen_e4u.py` (5), `test_printer.py` (16), `test_phs.py` (101, numeric weights + stability), `test_eval_e2_1.py` (3, builds an evaluator from `src/stencils/E2_1.cpp` to check C++/symbolic correspondence).
-- **NOT covered:** no dedicated `test_conservation.py` (covered via `test_boundary.py`); the `nu=2` Neumann path is verified for **E2_2 only** — **E4_2** symbolic cut-cell is catalogued but currently raises and has no asserting test; the dead `phs` B-spline functions, `cut_cell_weights`, and `blend_free_gammas` have no tests; `__main__.py` is not directly tested.
+- **NOT covered:** no dedicated `test_conservation.py` (covered via `test_boundary.py`); the `nu=2` Neumann path is verified for **E2_2 only** — **E4_2** symbolic cut-cell is catalogued but currently raises and has no asserting test; the dead `phs` B-spline functions and `cut_cell_weights` have no tests; `__main__.py` is not directly tested.
 - **Disabled/conditional:** 1 documented `xfail` (E4_1 conservation infeasibility at `nextra=0`); several `pytest.skip` guards when `sweeps/known_values.json` sub-keys are missing.
 
 For test conventions and fixtures, see `scripts/stencil_gen/docs/testing_reference.md` and the `stencil-testing` skill.
@@ -169,4 +171,4 @@ For test conventions and fixtures, see `scripts/stencil_gen/docs/testing_referen
   - Skills: `stencil-pipeline` (derivation + TEMO), `stencil-testing`, `stencil-sweeps`, `group-velocity-analysis`.
 - **Downstream sweep/optimizer/stability stack** (consumers of `phs.py` + the cut-cell entry points): `scripts/stencil_gen/docs/sweeps_reference.md`, `optimization_reference.md`, `mfbo_reference.md`, `pareto_reference.md`, `group_velocity_reference.md`, `brady2d_stability_reference.md`.
 - **C++ side that consumes the generated coefficients:** [Stencils](stencils.md) (the `src/stencils/` schemes + `from_lua` dispatch), [Operators](operators.md).
-- **Reference workflow this mirrors:** `mathematica-files/finitedifferences/` (`taylor.wl`, `explicitr-E4d1.nb` — the `mathematica` cut-cell path follows this).
+- **Reference workflow this mirrors:** `mathematica-files/finitedifferences/` (`taylor.wl`; `derive_cut_cell_paper`/`build_uniform_for_mathematica` follow this workflow's conventions), and `papers/BradyLivscu2021.pdf` (Brady & Livescu 2021, JCP 426:109794) for the published E4_1 cut-cell construction itself.
