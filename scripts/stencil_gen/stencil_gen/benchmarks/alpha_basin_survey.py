@@ -8,11 +8,10 @@ number of decimals.  The returned structure reports how many distinct basins
 the survey hit and how many seeds landed in each.
 
 The pipeline uses the widened ``DEFAULT_BOUNDS[("E4","classical")]`` envelope
-(plan 43.9a) — the analytical-stability feasibility region, which extends
-below the cut-cell-only 197/288 floor.  L8 C++ validation (plan 43.10a)
-will diagnose cut-cell violations downstream; this survey treats them as
-informational via the ``cpp_cutcell_violates_197_288`` flag propagated from
-:func:`run_staged_optimize`.
+(plan 43.9a) — the analytical-stability feasibility region for the uniform
+E4 boundary closure.  (Cut-cell feasibility lives in a different parameter
+space: the paper-aligned 4-alpha E4_1 family, Brady & Livescu 2021 — see
+``docs/reference/py-derivation.md``.)
 """
 
 from __future__ import annotations
@@ -64,8 +63,7 @@ def run_survey(
         "n_distinct_basins": int, "n_feasible_seeds": int, "compute_time": float,
         "config": {...}}``.  Each ``basin_dict`` holds
         ``{"alpha": [α₀, α₁], "best_objective": float,
-        "n_seeds_in_basin": int, "seeds": [...],
-        "cpp_cutcell_violates_197_288": bool}``.
+        "n_seeds_in_basin": int, "seeds": [...]}``.
     """
     if n_seeds < 1:
         raise ValueError(f"run_survey: n_seeds must be >= 1, got {n_seeds}")
@@ -103,9 +101,6 @@ def run_survey(
             "stage": result.extras.get("stage"),
             "n_evals": int(result.n_evals),
             "compute_time": float(result.compute_time),
-            "cpp_cutcell_violates_197_288": result.extras.get(
-                "cpp_cutcell_violates_197_288"
-            ),
         }
         seed_results.append(entry)
 
@@ -120,7 +115,6 @@ def run_survey(
                 "best_objective": entry["best_objective"],
                 "n_seeds_in_basin": 1,
                 "seeds": [seed],
-                "cpp_cutcell_violates_197_288": entry["cpp_cutcell_violates_197_288"],
             }
         else:
             basin["n_seeds_in_basin"] += 1
@@ -128,9 +122,6 @@ def run_survey(
             if entry["best_objective"] < basin["best_objective"]:
                 basin["alpha"] = list(entry["best_x"])
                 basin["best_objective"] = entry["best_objective"]
-                basin["cpp_cutcell_violates_197_288"] = entry[
-                    "cpp_cutcell_violates_197_288"
-                ]
 
     basin_list = sorted(basins.values(), key=lambda b: b["best_objective"])
     compute_time = time.perf_counter() - t0
@@ -173,14 +164,12 @@ def format_survey_table(survey: dict[str, Any]) -> str:
         f"distinct basins={survey.get('n_distinct_basins')}, "
         f"wall={survey.get('compute_time', 0.0):.1f}s"
     )
-    lines.append("| α₀ | α₁ | best_objective | n_seeds | 197/288 viol |")
-    lines.append("|----|----|----------------|---------|--------------|")
+    lines.append("| α₀ | α₁ | best_objective | n_seeds |")
+    lines.append("|----|----|----------------|---------|")
     for basin in survey.get("basins", []):
         a = basin["alpha"]
-        viol = basin.get("cpp_cutcell_violates_197_288")
-        viol_str = "-" if viol is None else ("yes" if viol else "no")
         lines.append(
             f"| {a[0]:+.4f} | {a[1]:+.4f} | {basin['best_objective']:+.4e} "
-            f"| {basin['n_seeds_in_basin']:>7d} | {viol_str:>12s} |"
+            f"| {basin['n_seeds_in_basin']:>7d} |"
         )
     return "\n".join(lines)

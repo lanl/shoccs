@@ -137,8 +137,8 @@ Codegen is a **separate, manual** step: build a `StencilGenSpec`, call `generate
 - **`SYMPY_CACHE_SIZE=50000` is mandatory.** Default 1000 causes severe slowdowns on the large symbolic matrices; E4 derivation runs ~30s with it set.
 - **Linearize bilinear unknowns before solving.** Any product of two unknowns (`w_{r-1}*phi_k`, cut-cell `w*gamma`) must go through theta-substitution (`solve_conservation`, `temo._solve_with_linearization`) and then recover `phi=theta/w_last`. Forgetting this makes the system nonlinear and `linsolve` fails.
 - **Use `linear_eq_to_matrix` + `linsolve`, NOT `sympy.solve`** for these parameterized linear systems (project convention — performance + determinism). `_util.solve_linear` is the standard wrapper.
-- **No end-to-end codegen driver.** `python -m stencil_gen generate <scheme>` prints `TODO`. `generate_stencil_cpp` is called only from tests; the `output/` → `src/stencils/` step is a manual copy and may be hand-edited afterward. `output/E4_1.cpp` already diverges from `src/stencils/E4_1.cpp` for exactly this reason.
-- **Conservation is a *soft* constraint for `q>=2`.** E4_1 conservation at `nextra=0` is structurally infeasible without the `zeros` pattern — this is the documented `xfail`. Don't expect strict conservation for high-q schemes.
+- **No end-to-end codegen driver.** `python -m stencil_gen generate <scheme>` prints `TODO`. `generate_stencil_cpp` is called only from tests; the `output/` → `src/stencils/` step is a manual copy. (`output/E4_1.cpp` and `src/stencils/E4_1.cpp` are byte-identical since the e4-align regeneration — no hand-edits remain.)
+- **Conservation is a *soft* constraint for `q>=2`.** E4_1 conservation at `nextra=0` is structurally infeasible without the `zeros` pattern (proven via Groebner basis); with the zeros pattern the paper construction solves cut conservation linearly. Don't expect strict conservation for high-q schemes without structural zeros.
 - **`compute_dimensions` special-cases `nu=2`.** It does NOT use the Eq.11 `nu=1` formulas; `r_eff = r-1` for `nu=2` because the last uniform boundary row overlaps the first interior row. Easy to mis-size a new `nu=2` scheme.
 - **`phs.py` returns numeric (float) weights**, unlike the exact-rational symbolic core. Don't assume exact coefficients out of the PHS arm.
 
@@ -158,7 +158,7 @@ Verified dead / partial / experimental items in THIS subsystem (from audited fla
 Run: `cd scripts/stencil_gen && SYMPY_CACHE_SIZE=50000 uv run pytest tests/ -x -q`. (~139 `@slow` tests are deselected by default.)
 - **Covered:** `test_interior.py` (29), `test_boundary.py` (41, incl. conservation), `test_temo.py` (127, both entry points + uniform builders + E2_2 integration), `test_e4_cut_cell.py` (131, ~19 `@slow`), `test_codegen.py` (41), `test_codegen_e4u.py` (5), `test_printer.py` (16), `test_phs.py` (101, numeric weights + stability), `test_eval_e2_1.py` (3, builds an evaluator from `src/stencils/E2_1.cpp` to check C++/symbolic correspondence).
 - **NOT covered:** no dedicated `test_conservation.py` (covered via `test_boundary.py`); the `nu=2` Neumann path is verified for **E2_2 only** — **E4_2** symbolic cut-cell is catalogued but currently raises and has no asserting test; the dead `phs` B-spline functions and `cut_cell_weights` have no tests; `__main__.py` is not directly tested.
-- **Disabled/conditional:** 1 documented `xfail` (E4_1 conservation infeasibility at `nextra=0`); several `pytest.skip` guards when `sweeps/known_values.json` sub-keys are missing.
+- **Disabled/conditional:** several `pytest.skip` guards when `sweeps/known_values.json` sub-keys are missing. (The former E4_1 conservation `xfail` was retired in the e4-align test overhaul.)
 
 For test conventions and fixtures, see `scripts/stencil_gen/docs/testing_reference.md` and the `stencil-testing` skill.
 
