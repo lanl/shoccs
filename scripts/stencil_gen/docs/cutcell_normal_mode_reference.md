@@ -240,9 +240,15 @@ cascade; `extract_field` reaches them via dotted paths
   eigenvalue at exactly `(1 − ψ_R)/(1 + ψ_R)` — N-independent, present
   for every ψ_R < 1 — via a per-end det-zero at that real s, while the
   cut closure at the LEFT (inflow) end is stable. The interval scan and
-  the per-end check own this instability; the axis round-trip radius
+  the per-end check own this eigenvalue; the axis round-trip radius
   correctly does not flag it. This is why `interval_worst_abscissa` is
-  large for any pair set containing cut right ends.
+  large for any pair set containing cut right ends. **Note:** Dirichlet
+  at an outflow end is ill-posed at the continuous level (it imposes
+  data against the outgoing characteristic), so this mode is the
+  expected symptom of over-specification, not a closure defect, and
+  stabilizing it is not a design goal. Such configurations appear in the
+  test suite only as exact validation anchors; the correct leeward
+  treatment for advection is the outflow (floating) closure.
 - **E2_1 α=0 round trip:** radius < 1 at all tested dense-stable pairs
   (approaches 1 − 6e-6 from below — near-origin consistency physics).
 
