@@ -220,7 +220,12 @@ per-end tiers' job (items 1.2 / 2.2 on the mirrored closure), not the
 round trip's. The 3.2 scan's outflow law is exactly such a case: the
 E2_1 cut Dirichlet closure at the RIGHT (outflow) end alone carries a
 right-localized eigenvalue at s = (1 - psi_R)/(1 + psi_R), so cut-right
-pairs are unstable regardless of rho(E_Dj) on the axis.
+Dirichlet pairs are unstable regardless of rho(E_Dj) on the axis.
+(Dirichlet at an outflow end is ill-posed at the continuous level —
+data imposed against the outgoing characteristic — so that eigenvalue
+is the expected symptom, not a closure defect; such configurations are
+used only as validation anchors. Leeward ends take the outflow/floating
+closure in practice.)
 
 Do not assume monotonicity of rho(E_Dj) in Dj — it is false: on the
 axis K and Mdiag are pure phases for the propagating modes, so
