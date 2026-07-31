@@ -88,19 +88,20 @@ You do not install dependencies by hand. The whole toolchain is provisioned by a
 - **`.devcontainer/devcontainer.json`** — bind-mounts the repo at `/workspace`,
   uses the Ninja generator, and its `postCreateCommand` runs the canonical
   configure:
-  `cmake -S /workspace -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON`.
+  `cmake -S /workspace -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON -DBUILD_BENCHMARKS=ON`.
 - **`run-dev-container.fish`** — convenience launcher (`./run-dev-container.fish
-  [gcc|clang|<image:tag>]`). It `docker run`s the `shoccs-devcontainer:<flavor>`
-  image, bind-mounts your `pwd` → `/workspace`, mounts `~/.gitconfig` / `~/.ssh`
-  (read-only) and a Claude config dir, caps `NET_ADMIN`/`NET_RAW`, and drops you
-  into `zsh`.
+  [<image:tag>]`, defaulting to `shoccs-devcontainer:latest`). It `docker run`s
+  that image, bind-mounts your `pwd` → `/workspace`, mounts `~/.gitconfig` /
+  `~/.ssh` (read-only) and a Claude config dir, caps `NET_ADMIN`/`NET_RAW`, and
+  drops you into `zsh`.
 - **`Makefile`** (repo root) — **does NOT build the solver.** It is a Docker-image
-  wrapper only (`make build-gcc`, `make shell`, etc.). Ignore it for code work; it
-  operates one layer up, on container provisioning.
+  wrapper only (`make build`, `make build-ci`, `make shell`). Ignore it for code
+  work; it operates one layer up, on container provisioning.
 
 The Python side has its own environment managed by **`uv`** inside the container
-(`scripts/stencil_gen/pyproject.toml`, Python ≥ 3.11). No separate setup — `uv
-run` provisions it on first use.
+(`scripts/stencil_gen/pyproject.toml`, Python ≥ 3.11; the container's own
+interpreter is 3.13, matching `UV_PYTHON` in `ci.yml`). No separate setup —
+`uv run` provisions it on first use.
 
 ---
 
