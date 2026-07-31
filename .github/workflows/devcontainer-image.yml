@@ -1,13 +1,26 @@
 # Builds the lean CI image (the `ci` stage of .devcontainer/Dockerfile) and
 # pushes it to GHCR. The cpp job in ci.yml consumes this image, so it only
 # needs to be rebuilt when the dependency stack changes — hence the paths
-# filter plus a weekly cron to pick up apt security updates.
+# filter plus a weekly cron.
+#
+# What the weekly cron actually does, so nobody is surprised again: BuildKit
+# keys a RUN step on its command string and its parent chain, never on the
+# state of the upstream apt archive, so on a week where nothing changed the
+# whole graph hits the registry cache and the job finishes in ~1-2 minutes
+# having rebuilt nothing. The cron nevertheless does refresh the image, just
+# not on its own schedule: buildx re-resolves `FROM python:3.13-slim` against
+# the registry every run, so whenever docker-library republishes that tag
+# (roughly monthly) the base layer changes and the full graph rebuilds. The
+# observed pattern is exactly that — alternating ~1m no-ops and ~1h rebuilds.
+# In other words the image tracks Debian/Python's release cadence, not ours.
+# If that is ever not prompt enough, the fix is a thin trailing stage carrying
+# only `apt-get upgrade`, invalidated via `no-cache-filters`, so the apt layers
+# refresh without dragging the multi-hour Spack stage along with them.
 #
 # A cold build compiles the full Spack dependency tree from source and takes
-# multiple hours on a standard runner; registry layer caching makes rebuilds
-# that don't touch the spack-builder stage fast. Runs on push to main (not
-# pull_request) because fork PRs have a read-only GITHUB_TOKEN and cannot
-# push packages.
+# ~1 hour on a standard runner (measured: 59m-1h3m across every from-scratch
+# run to date). Runs on push to main (not pull_request) because fork PRs have
+# a read-only GITHUB_TOKEN and cannot push packages.
 
 name: devcontainer image
 
@@ -37,7 +50,12 @@ env:
 jobs:
   build-push:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    # ~2x the measured cold-build time. The old value of 350 was no protection
+    # at all: GitHub hard-caps a job at 360 minutes anyway, so a wedged build
+    # (e.g. a Spack fetch retrying against a dead mirror) would burn most of a
+    # 6-hour runner slot and, with cancel-in-progress false, block the queue
+    # behind it for that whole window.
+    timeout-minutes: 120
     steps:
       # The spack build needs more scratch space than the ~14 GB the runner
       # ships with; drop the preinstalled toolchains we don't use.
@@ -46,7 +64,20 @@ jobs:
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
           df -h /
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+
+      # The container build fails in confusing ways if these two disagree, so
+      # check before spending an hour on it: the Dockerfile reads the pin back
+      # out of the manifest, and a manifest without a `tag:` would silently
+      # leave the builtin repo wherever spack's default put it.
+      - name: spack.yaml must carry exactly one builtin repo pin
+        run: |
+          n="$(grep -cE '^[[:space:]]*tag:[[:space:]]*' .devcontainer/spack.yaml || true)"
+          if [ "$n" -ne 1 ]; then
+            echo "::error file=.devcontainer/spack.yaml::found $n 'tag:' lines, expected exactly 1 — .devcontainer/Dockerfile greps this file for the spack-packages pin and takes the first match, so a second one would silently change which repo gets pinned"
+            exit 1
+          fi
+          echo "builtin package repo pinned to $(sed -n 's/^[[:space:]]*tag:[[:space:]]*//p' .devcontainer/spack.yaml)"
 
       - uses: docker/setup-buildx-action@v4
 

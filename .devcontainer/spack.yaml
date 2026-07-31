@@ -18,24 +18,26 @@ spack:
     # project's runtime profiling setup; drop it for a fully pinned build.
     # Pin kokkos to the exact validated 5.1.1 — an open `@5.1:` range otherwise
     # lets the concretizer slide kokkos to the `develop` branch version.
+    # (kokkos 5.2.0 was released 2026-07-24 but is not in a tagged
+    # spack-packages release yet, and the solver's Graph API call sites are only
+    # validated against 5.1.x — see spack_repo/shoccs/packages/shoccs.)
     - shoccs +tests +benchmarks +profiling ^kokkos@5.1.1
 
   repos:
     # Project recipe, copied here by the Dockerfile.
     shoccs: /home/user/spack_repo/shoccs
-    # Pin the community package repo to a develop commit that ships Kokkos 5.1.1
-    # (the Graph API the solver uses; no tagged release has 5.1.x yet — the
-    # newest tag, v2026.03.0, caps at 5.0.2). Pinning a commit keeps the
-    # container build reproducible. The trailing `::` fully REPLACES the
-    # inherited default entry (a plain `builtin:` would deep-merge into a
-    # conflicting branch+commit pair). Bump this commit (or switch to a tag) once
-    # a tagged spack-packages release ships kokkos 5.1+.
-    # NOTE: the Dockerfile re-syncs the on-disk clone via
-    # `spack repo update builtin --commit <sha>`; that SHA is what actually takes
-    # effect, so keep it identical to the commit below.
+    # Pin the community package repo to the newest tagged release. v2026.06.0 is
+    # the first tag that ships kokkos 5.1.1 (the Graph API the solver uses);
+    # before it existed this entry had to pin a raw `develop` commit. A tag is
+    # both reproducible and legible, so prefer bumping to the next tag over
+    # going back to a commit SHA.
+    # The trailing `::` fully REPLACES the inherited default entry (a plain
+    # `builtin:` would deep-merge into a conflicting branch+tag pair).
+    # This is the SINGLE source of truth for the pin: the Dockerfile greps the
+    # tag out of this file rather than restating it.
     builtin::
       git: https://github.com/spack/spack-packages.git
-      commit: 1b13532cdcb78de32ef23a83a05d2ab144bd0702
+      tag: v2026.06.0
 
   view: true
 

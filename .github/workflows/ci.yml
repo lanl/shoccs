@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: corporate-ca.pem must stay an empty placeholder
         run: |
           if [ -s .devcontainer/corporate-ca.pem ]; then
@@ -71,9 +71,9 @@ jobs:
       OMP_PROC_BIND: 'false'
       OMP_NUM_THREADS: '2'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: .ccache
           key: ccache-${{ runner.os }}-${{ github.sha }}
@@ -116,10 +116,12 @@ jobs:
       # Essential for SymPy performance — the default cache size of 1000
       # causes severe slowdowns with large symbolic expressions.
       SYMPY_CACHE_SIZE: '50000'
-      # Match the devcontainer's interpreter.
-      UV_PYTHON: '3.11'
+      # Match the devcontainer's interpreter (.devcontainer/Dockerfile's base
+      # image). Keep these two in step — the point of pinning here is that the
+      # Python pipeline resolves against the same interpreter locally and in CI.
+      UV_PYTHON: '3.13'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # setup-uv publishes no moving major tag (no @v8) — pin the exact release
       - uses: astral-sh/setup-uv@v8.2.0

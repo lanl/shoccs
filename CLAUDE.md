@@ -55,7 +55,7 @@ Benchmark executables are in `build/benchmarks/` (bench_stencil, bench_block, be
 
 GitHub Actions workflows in `.github/workflows/`:
 
-- `ci.yml` — runs on PRs and pushes to main. The `cpp` job builds and tests inside the prebuilt dependency image `ghcr.io/lanl/shoccs-ci` (visibly skipped if the image hasn't been published yet); the gating ctest run excludes `t-laplacian` (known failure, `docs/CLEANUP_PLAN.md` §0a), which runs separately as a non-gating step. The `python` job runs the stencil_gen suite (slow tests deselected) via uv. Benchmarks are compile-checked, never executed in CI.
+- `ci.yml` — runs on PRs and pushes to main. The `cpp` job builds and tests inside the prebuilt dependency image `ghcr.io/<owner>/shoccs-ci` (the workflow derives the owner from `github.repository_owner`, so it is `lanl` upstream and `pbrady` on the fork; the job is visibly skipped if the image hasn't been published yet); the gating ctest run excludes `t-laplacian` (known failure, `docs/CLEANUP_PLAN.md` §0a), which runs separately as a non-gating step. The `python` job runs the stencil_gen suite (slow tests deselected) via uv. Benchmarks are compile-checked, never executed in CI.
 - `devcontainer-image.yml` — builds the lean `ci` stage of `.devcontainer/Dockerfile` and pushes it to GHCR. Triggers on pushes to main touching `.devcontainer/` or `spack_repo/`, weekly cron, or manual dispatch. Dispatch it manually after changing the dependency stack; a cold build takes hours (full Spack source build).
 - `python-extended.yml` — weekly/manual run of the stencil_gen suite including `--run-slow` tests. Full-resolution sweeps stay out of CI.
 

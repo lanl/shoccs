@@ -2,10 +2,14 @@
 # Helper script to run Claude Code development container
 #
 # Usage:
-#   ./run-dev-container.fish              Run the default (gcc) container
-#   ./run-dev-container.fish gcc          Run the gcc container
-#   ./run-dev-container.fish clang        Run the clang container
+#   ./run-dev-container.fish              Run the devcontainer image
 #   ./run-dev-container.fish my-image:tag Run a custom container image
+#
+# The gcc/clang flavours this script used to accept are gone: they mapped to
+# `make build-gcc` / `make build-clang`, which produced identical images
+# because the SPACK_COMPILER build arg they passed was never declared by the
+# Dockerfile. The dependency tree is built with GCC, fixed by the
+# `packages: all: require:` line in .devcontainer/spack.yaml.
 
 # Ensure we're in the project directory
 cd (dirname (status --current-filename))
@@ -13,17 +17,12 @@ cd (dirname (status --current-filename))
 # Ensure ~/.claude-container exists
 mkdir -p $HOME/.claude-container
 
-# Default image name (should match IMAGE_NAME in Makefile)
+# Default image (should match IMAGE_NAME in Makefile, tag built by `make build`)
 set image_name shoccs-devcontainer
 
 # Resolve the container image from the argument
-set -q argv[1]; or set argv[1] gcc
-switch $argv[1]
-    case gcc clang
-        set container $image_name:$argv[1]
-    case '*'
-        set container $argv[1]
-end
+set -q argv[1]; or set argv[1] $image_name:latest
+set container $argv[1]
 set name (string split -r -m1 : $container)[1]
 
 # Colors for output

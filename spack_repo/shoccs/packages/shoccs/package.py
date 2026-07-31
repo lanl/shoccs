@@ -93,9 +93,10 @@ class Shoccs(CMakePackage):
     # to the validated 5.1.x series: 5.1.0 is the floor (the 5.0 two-arg form no
     # longer compiles) and the upper bound guards against a future 5.2/6.0
     # changing this still-Experimental overload — widen only after re-validating
-    # the call sites. As of June 2026 kokkos 5.1.x lives only on the
-    # spack-packages `develop` branch (newest tag v2026.03.0 caps at 5.0.2); the
-    # devcontainer pins a develop commit, native users point their builtin there.
+    # the call sites. kokkos 5.1.1 ships in spack-packages from tag v2026.06.0
+    # onwards (and is the default builtin pin for spack 1.2.x, which tracks
+    # releases/v2026.06), so no develop-branch pin is needed any more; the
+    # devcontainer pins that tag in .devcontainer/spack.yaml.
     depends_on("kokkos@5.1.0:5.1 +serial +openmp cxxstd=20")
     # Enable with +profiling. kokkos-tools currently ships only a `develop`
     # branch version (no tagged release), so this resolves to @develop and needs
