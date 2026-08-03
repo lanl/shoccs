@@ -53,3 +53,17 @@ spack:
       require: "%[when=%c]c=gcc %[when=%cxx]cxx=gcc %[when=%fortran]fortran=gcc"
       prefer:
         - cxxstd=20
+
+    readline:
+      # Hold at 8.2 because of how upstream fetches readline's patch files. Every
+      # readline patch is declared with a single hardcoded ftpmirror.gnu.org URL
+      # and no ftp.gnu.org fallback, so the only redundancy is Spack's own source
+      # cache. All 13 of 8.2's patches are cached on mirror.spack.io; for 8.3 only
+      # patch 001 is, leaving 002 and 003 riding entirely on GNU's geo-redirector.
+      # That redirector is unreliable from GitHub runners — it took down two
+      # image builds in a row (502 Bad Gateway, then ENETUNREACH) while resolving
+      # fine from other networks, which is why this passed locally and failed CI.
+      # readline only arrives here via lua/gdbm/sqlite, none of which this project
+      # uses interactively, so the version is immaterial. Drop the pin once
+      # mirror.spack.io carries the 8.3 patches.
+      require: "@8.2"
