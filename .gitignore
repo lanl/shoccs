@@ -4,3 +4,8 @@ build
 CMakeFiles
 logs/
 papers/
+
+# Local scratch, run output and agent worktrees
+.scratch/
+io/
+.claude/worktrees/

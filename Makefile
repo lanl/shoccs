@@ -71,6 +71,8 @@ build-ci:
 ## Start an interactive shell in the devcontainer image
 shell:
 	docker run --rm -it \
+		--security-opt seccomp=$(CURDIR)/.devcontainer/seccomp-bwrap.json \
+		--security-opt no-new-privileges:true \
 		-v $(CURDIR):/workspace \
 		$(IMAGE_NAME):latest
 

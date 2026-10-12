@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "disableBypassPermissionsMode": "disable",
+    "ask": [
+      "Bash(dangerouslyDisableSandbox:true)"
+    ],
+    "deny": [
+      "Read(~/.claude/.credentials.json)",
+      "Edit(~/.claude/.credentials.json)",
+      "Edit(~/.claude/settings.json)",
+      "Edit(~/.claude/settings.local.json)",
+      "Edit(~/.claude/.claude.json)",
+      "Edit(~/.claude/statusline-command.sh)",
+      "Edit(~/.claude/plugins/**)",
+      "Edit(~/.claude/hooks/**)",
+      "Edit(//workspace/**/.git/hooks/**)",
+      "Edit(//workspace/**/.git/config)",
+      "Edit(//workspace/**/.claude/settings.json)",
+      "Edit(//workspace/**/.claude/settings.local.json)",
+      "Edit(//workspace/**/.mcp.json)",
+      "Edit(//workspace/**/.vscode/**)",
+      "Edit(//workspace/**/.envrc)",
+      "Bash(*--dangerously-skip-permissions*)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "enableWeakerNestedSandbox": true,
+    "filesystem": {
+      "denyRead": [
+        "~/.claude/.credentials.json"
+      ]
+    }
+  }
+}

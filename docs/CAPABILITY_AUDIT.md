@@ -120,7 +120,7 @@ experimental code within mature subsystems are itemized in the
 | py-brady2d | **mature** | ✅ green (93 non-slow) | 8-layer analytical stability-scoring cascade (BL 2019 §4.3) | [py-brady2d](./reference/py-brady2d.md) |
 | py-sweeps | **partial** | ✅ wrappers green (79) | Parameter-sweep / optimization CLI; research sweeps mature, new optimizers partial | [py-sweeps](./reference/py-sweeps.md) |
 | py-cpp-bridge | **mature** | ✅ 30 pass (1 slow skip) | Python → compiled-shoccs L8 validator; real-binary path blocked by C++ build | [py-cpp-bridge](./reference/py-cpp-bridge.md) |
-| py-tests-and-skills | **mature** | ✅ 1174 collected | Pytest suite + benchmarks + Claude skills + `ralph_wiggum.sh` driver | [py-tests-and-skills](./reference/py-tests-and-skills.md) |
+| py-tests-and-skills | **mature** | ✅ 1174 collected | Pytest suite + benchmarks + Claude skills | [py-tests-and-skills](./reference/py-tests-and-skills.md) |
 
 ---
 
