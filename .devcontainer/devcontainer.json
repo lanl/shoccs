@@ -13,6 +13,16 @@
   "workspaceFolder": "/workspace",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
 
+  // Docker's default seccomp profile plus unshare/clone/mount/umount2/
+  // pivot_root, so Claude Code's bubblewrap Bash sandbox can create user and
+  // mount namespaces as the unprivileged container user. Same profile as
+  // run-dev-container.fish. No ~/.ssh mount and no NET_ADMIN/NET_RAW, matching
+  // the launcher. (The launcher also sets no-new-privileges; it is left out
+  // here because it would make `sudo` fail for devcontainer users.)
+  "runArgs": [
+    "--security-opt", "seccomp=${localWorkspaceFolder}/.devcontainer/seccomp-bwrap.json"
+  ],
+
   "mounts": [
     "source=shoccs-bashhistory,target=/commandhistory,type=volume"
   ],

@@ -91,9 +91,13 @@ You do not install dependencies by hand. The whole toolchain is provisioned by a
   `cmake -S /workspace -B /workspace/build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON -DBUILD_BENCHMARKS=ON`.
 - **`run-dev-container.fish`** — convenience launcher (`./run-dev-container.fish
   [<image:tag>]`, defaulting to `shoccs-devcontainer:latest`). It `docker run`s
-  that image, bind-mounts your `pwd` → `/workspace`, mounts `~/.gitconfig` /
-  `~/.ssh` (read-only) and a Claude config dir, caps `NET_ADMIN`/`NET_RAW`, and
-  drops you into `zsh`.
+  that image, bind-mounts your `pwd` → `/workspace`, mounts `~/.gitconfig`
+  (read-only) and a Claude config dir (`~/.claude-container`), and drops you
+  into `zsh`. It deliberately does **not** mount `~/.ssh`: commit inside the
+  container, push from the host. It runs with
+  `.devcontainer/seccomp-bwrap.json` (so Claude Code's bubblewrap sandbox works)
+  and `no-new-privileges` (so `sudo` is inert; use `docker exec -u 0` from the
+  host for root), and binds the forwarded port to 127.0.0.1.
 - **`Makefile`** (repo root) — **does NOT build the solver.** It is a Docker-image
   wrapper only (`make build`, `make build-ci`, `make shell`). Ignore it for code
   work; it operates one layer up, on container provisioning.
@@ -340,8 +344,8 @@ uv run python -m sweeps all                            # full resolution + updat
   `uv run python -m sweeps epsilon --scheme E2 --update-known-values`.
 - **Claude Code skills** under `.claude/skills/` describe how to drive the
   pipeline: `stencil-pipeline`, `stencil-sweeps`, `stencil-testing`,
-  `group-velocity-analysis`, and `ralph-wiggum`. Note that **three of them
-  (stencil-pipeline, stencil-testing, ralph-wiggum) and several reference docs are
+  and `group-velocity-analysis`. Note that **two of them
+  (stencil-pipeline, stencil-testing) and several reference docs are
   not yet tracked in git** (a harness permission layer blocks writes to
   `.claude/skills/**`); CLEANUP_PLAN §3/§5 covers committing them via the
   human-in-the-loop workaround.
@@ -435,14 +439,12 @@ evidence.
 - **For symbolic linear solves, use `linear_eq_to_matrix` + `linsolve`, not
   `sympy.solve`.** And linearize bilinear terms first via the theta-substitution
   trick (`theta = w*phi`). `sympy.solve` does not scale to these systems.
-- **The `plans/` directory + `ralph_wiggum.sh` workflow.** A large fraction of
-  this codebase was produced by an automated plan-executor: `ralph_wiggum.sh`
-  drives Claude Code non-interactively against numbered plan files in `plans/` in
-  a work/review/commit cycle. Architectural decisions are logged in
+- **The `plans/` directory.** A large fraction of this codebase was produced by
+  automated plan execution against numbered plan files in `plans/` (originally a
+  `ralph_wiggum.sh` loop, now Claude Code dynamic workflows, e.g.
+  `plans/48-driver.workflow.js`). Architectural decisions are logged in
   `plans/meta.md`. If you see commits like "47.8d: …" that is the plan/item
-  numbering. (Caveat: `ralph_wiggum.sh` still embeds some range-v3-migration-era
-  prompt text and a stale default plan path — CLEANUP_PLAN §5.) See the
-  `ralph-wiggum` skill / `docs/ralph_wiggum_reference.md`.
+  numbering.
 - **Doc trust guide.** The repo has a lot of documentation, of mixed freshness.
   - **Trust:** `CLAUDE.md` (authoritative for the C++ side), everything under
     `docs/handoff/*` and `docs/reference/*`, `docs/brady2d_cpp_bridge_reference.md`.
@@ -469,7 +471,6 @@ evidence.
 | Deep dive on one C++ subsystem | `docs/reference/<subsystem>.md` (see §6) |
 | The Python stencil/stability/optimization framework | **`docs/handoff/MASTER.md`** (entry point) → `framework_architecture.md` |
 | How to run sweeps / derive stencils / analyze GV | `.claude/skills/{stencil-pipeline,stencil-sweeps,stencil-testing,group-velocity-analysis}/SKILL.md` |
-| The automated plan-executor | `.claude/skills/ralph-wiggum/`, `docs/ralph_wiggum_reference.md` |
 | Python→C++ bridge details | `docs/brady2d_cpp_bridge_reference.md`, `docs/reference/py-cpp-bridge.md` |
 | The science (the actual papers) | `papers/BradyLivescu2019.pdf`, `papers/BradyLivscu2021.pdf`, plus the group-velocity/stability PDFs |
 | Current build blocker, in full | `docs/CLEANUP_PLAN.md` §0 (and `/tmp/audit/build_blocker.md`) |

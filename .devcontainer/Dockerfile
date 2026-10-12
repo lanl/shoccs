@@ -249,13 +249,32 @@ FROM base-system AS final
 
 ARG TZ=UTC
 ARG USERNAME=user
-ARG CLAUDE_CODE_VERSION=latest
+# Pinned so the image's Claude Code is known to support the sandbox and
+# settings keys the container policy relies on (sandbox.credentials needs
+# >= 2.1.246, hooks onFailure >= 2.1.295). Bump deliberately; the autoupdater
+# is disabled below so a running container does not drift from this pin.
+ARG CLAUDE_CODE_VERSION=2.1.296
+# 1 (default) keeps the historical passwordless sudo for the container user.
+# run-dev-container.fish starts the container with no-new-privileges, which
+# makes sudo inert at runtime regardless of this setting; set 0 to also drop
+# the sudoers entry from the image. Root for humans: `docker exec -u 0 ...`.
+ARG ENABLE_SUDO=1
+# 1 installs .devcontainer/claude-managed-settings.json as Claude Code managed
+# policy (/etc/claude-code/managed-settings.json, root-owned, so an agent
+# running as the container user cannot edit it). Off by default so the tracked
+# image does not impose a Claude policy on collaborators; enable it locally via
+# local.mk: DOCKER_BUILD_ARGS += --build-arg CLAUDE_MANAGED_POLICY=1
+ARG CLAUDE_MANAGED_POLICY=0
 # 0.19.2, not 0.19.0/0.19.1: those two shipped broken Debian packages (0.19.0
 # published only the musl .deb; 0.19.1's glibc build required 2.39). 0.19.2 was
 # released specifically to rebuild them for older glibc.
 ARG GIT_DELTA_VERSION=0.19.2
 
-# Install developer convenience tools
+# Install developer convenience tools.
+# bubblewrap + socat (+ ripgrep) are what Claude Code's Linux Bash sandbox
+# needs on PATH (sandbox.bwrapPath/socatPath are managed-only settings). The
+# sandbox also needs user+mount namespaces: see .devcontainer/seccomp-bwrap.json.
+# iptables/ipset/aggregate were only used by init-firewall.sh, which is gone.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     less \
     procps \
@@ -264,12 +283,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zsh \
     man-db \
     gh \
-    iptables \
-    ipset \
     iproute2 \
     bind9-dnsutils \
-    aggregate \
     jq \
+    bubblewrap \
+    socat \
+    ripgrep \
     neovim \
     openssh-client \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -277,15 +296,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install uv for Python package management
 RUN pip install --no-cache-dir uv
 
-# Configure user with sudo access. The NOPASSWD drop-in is required, not a
-# convenience: useradd sets no password, so the account's password field is
-# locked and a plain `sudo` would prompt for a password that can never be
-# supplied. zsh is available in this stage, so make it the login shell here
-# (base-system leaves it as bash — see the useradd comment there).
-RUN usermod -aG sudo $USERNAME \
-    && echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
-    && chmod 0440 /etc/sudoers.d/$USERNAME \
+# Configure user with sudo access (ENABLE_SUDO=1). The NOPASSWD drop-in is
+# required, not a convenience: useradd sets no password, so the account's
+# password field is locked and a plain `sudo` would prompt for a password that
+# can never be supplied. Note that commands inside Claude Code's sandbox can
+# never use it (bubblewrap sets no_new_privs), and run-dev-container.fish sets
+# no-new-privileges for the whole container. zsh is available in this stage,
+# so make it the login shell here (base-system leaves it as bash — see the
+# useradd comment there).
+RUN if [ "$ENABLE_SUDO" = 1 ]; then \
+        usermod -aG sudo $USERNAME \
+        && echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
+        && chmod 0440 /etc/sudoers.d/$USERNAME; \
+    fi \
     && chsh -s /bin/zsh $USERNAME
+
+# Optional Claude Code managed policy (see CLAUDE_MANAGED_POLICY above).
+COPY .devcontainer/claude-managed-settings.json /usr/local/share/shoccs/claude-managed-settings.json
+RUN if [ "$CLAUDE_MANAGED_POLICY" = 1 ]; then \
+        install -d -m 0755 /etc/claude-code \
+        && install -m 0644 -o root -g root /usr/local/share/shoccs/claude-managed-settings.json /etc/claude-code/managed-settings.json; \
+    fi
+
+LABEL org.shoccs.claude-sandbox="1"
 
 # Persist bash history
 RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
@@ -325,6 +358,7 @@ RUN curl -fsSL https://claude.ai/install.sh | bash -s ${CLAUDE_CODE_VERSION}
 
 # Environment variables
 ENV DEVCONTAINER=true \
+    DISABLE_AUTOUPDATER=1 \
     ENABLE_LSP_TOOLS=1 \
     PATH=$PATH:/home/$USERNAME/.local/bin \
     SHELL=/bin/zsh \

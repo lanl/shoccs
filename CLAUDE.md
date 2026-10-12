@@ -59,6 +59,24 @@ GitHub Actions workflows in `.github/workflows/`:
 - `devcontainer-image.yml` — builds the lean `ci` stage of `.devcontainer/Dockerfile` and pushes it to GHCR. Triggers on pushes to main touching `.devcontainer/` or `spack_repo/`, weekly cron, or manual dispatch. Dispatch it manually after changing the dependency stack; a cold build takes hours (full Spack source build).
 - `python-extended.yml` — weekly/manual run of the stencil_gen suite including `--run-slow` tests. Full-resolution sweeps stay out of CI.
 
+## Sandbox and agent permissions
+
+Claude Code sessions in this repo run with the Bash sandbox on (`.claude/settings.json`).
+Sandboxed commands run without prompts. They can write to the repo, `/tmp` and the uv/ccache caches, and they reach only GitHub, PyPI and pytorch hosts. Work with these limits rather than around them:
+
+- **Do not retry with `dangerouslyDisableSandbox`** to get past a sandbox error unless the task truly needs it (docker, writes outside the repo). Every such retry prompts the user. Say why you need it.
+- **Protected files prompt on every edit.** These are `.claude/`, `.git/hooks`, `.git/config`, `.github/workflows/`, `.devcontainer/`, `run-dev-container.fish` and `Makefile`. Batch your changes to them and expect review.
+- **Pushes, fetches and pulls:** on the owner's machine, a user-level hook (source: `tools/agents/push-guard.sh`, tests: `tools/agents/test-push-guard.sh`) allows network git only as **one plain command per Bash call, run from the repo directory** (this clone or a worktree of it):
+  - `git push -u origin feat:refs/heads/feat`: always an explicit same-name destination; `git push` and `git push origin feat` are blocked. Only `origin`, never `main` or `backup/*`, never tags, and force only with `--force-with-lease`.
+  - `git fetch --no-recurse-submodules origin` (or `upstream`), `git pull --ff-only --no-recurse-submodules origin feat`, `git ls-remote origin`.
+  - Nothing else on the line: no `cd` or `git -C` (start from the repo directory), no `&&`, `;`, `|` or other chains, no quotes, `$`, redirects, env prefixes or `git -c`. Run `git commit -m "..."` as its own command first, then push in a separate call. A `git` command whose text mentions push/fetch/pull (`git commit -m "fix push"`) is blocked too; use `git commit -F <file>` or a heredoc.
+  - Push feature branches and open PRs with `gh pr create`. Never push to `upstream`. Do not try to work around the hook (aliases, wrappers, `sh -c`); a blocked push is the intended outcome. Its message says which rule failed.
+- **gh:** read-only commands are fine. Merges, reviews, secrets/variables, repo edits and `gh api` writes are denied or prompt.
+- **Credentials:** never read or print anything under `~/.ssh`, `~/.config/gh`, `~/.claude/.credentials.json`, or tokens in the environment. These reads are denied anyway.
+- **Devcontainer:** the container has no ssh keys and no push access; push from the host. Sandboxing there relies on `.devcontainer/seccomp-bwrap.json`. If bwrap fails, rebuild the image (`make build`) rather than disabling the sandbox.
+- **Web searches:** never put private repository names, local paths or unpublished code into a web search query.
+- **Scratch output** goes in `.scratch/` (gitignored) or the session scratchpad, never in tracked directories.
+
 ## Code Conventions
 
 - **C++20** with concepts, `std::ranges`, and `std::span`. No C++23 features; missing C++23 utilities (stride, zip_transform, cartesian_product, bind_back) have project-local implementations in `src/fields/lazy_views.hpp`.
