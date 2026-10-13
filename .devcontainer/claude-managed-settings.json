@@ -1,9 +1,6 @@
 {
   "permissions": {
     "disableBypassPermissionsMode": "disable",
-    "ask": [
-      "Bash(dangerouslyDisableSandbox:true)"
-    ],
     "deny": [
       "Read(~/.claude/.credentials.json)",
       "Edit(~/.claude/.credentials.json)",
