@@ -83,6 +83,8 @@ Target naming, as actually defined:
 ### Third-party discovery (spack view)
 There is no vendored dependency tree. TPLs are found by plain `find_package` against a spack environment view. The active build's `Kokkos_DIR` points at `/home/user/spack/var/spack/environments/shoccs-dev/.spack-env/view/lib/cmake/Kokkos`, and the view symlinks all CMake config packages (Boost, Catch2, cxxopts, fmt, Kokkos, lapackpp, pugixml, spdlog, benchmark, …). Required packages and minimum versions, from the top-level `CMakeLists.txt`:
 
+(A native macOS build uses the same discovery against a user-managed spack environment on the host; see `macos-host-build.md`.)
+
 | `find_package` | Notes |
 | --- | --- |
 | `Lua REQUIRED` | wrapped into an INTERFACE `lua` target (`LUA_INCLUDE_DIR` / `LUA_LIBRARIES`). |
