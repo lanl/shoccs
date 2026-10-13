@@ -4,6 +4,8 @@
 
 The sandbox's `excludedCommands` lists the network git commands `git push`, `git push *`, `git fetch`, `git fetch *`, `git pull`, `git pull *` and `git ls-remote *` (plus read-only `gh` commands, `docker` and `spack`, which are not git and do not concern this hook). The network git commands run unsandboxed with the owner's ssh key; everything else runs inside the OS sandbox, which has no ssh, cannot read `~/.ssh` and cannot write the project's `.git/config` or `.git/hooks`. A compound command runs unsandboxed only if every subcommand matches an exclusion. The hook makes sure that any command that could run unsandboxed is exactly one safe network git command in an allowed repo. Server-side rulesets remain the real protection for `main`.
 
+`spack` is excluded because the macOS sandbox denies `sysctl`, which makes spack mis-detect the CPU as x86_64 and leaves it unable to write its own tree (`docs/reference/macos-host-build.md`). The owner's hook invocation also lists the spack clone (`~/projects/spack`) so that a normal session can move spack to the tag the devcontainer pins: `cd` there in one call, `git fetch --no-recurse-submodules --tags origin` in the next, then `git checkout <tag>`. A background session is confined to its worktree and cannot do this.
+
 v2 replaces v1's segment parser (843 lines) with a single rule: a command that mentions git together with a network verb must be **one plain command**. The v1 files are kept as `push-guard.v1.sh`, `test-push-guard.v1.sh` and `README.v1.md`.
 
 ## Files

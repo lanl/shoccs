@@ -97,7 +97,9 @@ You do not install dependencies by hand. The whole toolchain is provisioned by a
   container, push from the host. It runs with
   `.devcontainer/seccomp-bwrap.json` (so Claude Code's bubblewrap sandbox works)
   and `no-new-privileges` (so `sudo` is inert; use `docker exec -u 0` from the
-  host for root), and binds the forwarded port to 127.0.0.1.
+  host for root), and binds the forwarded port to 127.0.0.1. If bwrap fails
+  inside the container, rebuild the image (`make build`) rather than disabling
+  the sandbox. The container has no ssh keys: commit inside, push from the host.
 - **`Makefile`** (repo root) — **does NOT build the solver.** It is a Docker-image
   wrapper only (`make build`, `make build-ci`, `make shell`). Ignore it for code
   work; it operates one layer up, on container provisioning.
