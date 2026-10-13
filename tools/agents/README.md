@@ -2,7 +2,7 @@
 
 `push-guard.sh` is a Claude Code `PreToolUse` hook for the Bash tool. Agents may push feature branches to `origin` (the `pbrady/shoccs` fork) only. Pushes to `main`, `backup/*`, tags and `upstream` (`lanl/shoccs`) are blocked, and so are deletes and non-lease force pushes.
 
-The sandbox's `excludedCommands` lists only `git push`, `git push *`, `git fetch`, `git fetch *`, `git pull`, `git pull *` and `git ls-remote *`. Those commands run unsandboxed with the owner's ssh key; everything else runs inside the OS sandbox, which has no ssh, cannot read `~/.ssh` and cannot write the project's `.git/config` or `.git/hooks`. A compound command runs unsandboxed only if every subcommand matches an exclusion. The hook makes sure that any command that could run unsandboxed is exactly one safe network git command in an allowed repo. Server-side rulesets remain the real protection for `main`.
+The sandbox's `excludedCommands` lists the network git commands `git push`, `git push *`, `git fetch`, `git fetch *`, `git pull`, `git pull *` and `git ls-remote *` (plus read-only `gh` commands and `docker`, which are not git and do not concern this hook). The network git commands run unsandboxed with the owner's ssh key; everything else runs inside the OS sandbox, which has no ssh, cannot read `~/.ssh` and cannot write the project's `.git/config` or `.git/hooks`. A compound command runs unsandboxed only if every subcommand matches an exclusion. The hook makes sure that any command that could run unsandboxed is exactly one safe network git command in an allowed repo. Server-side rulesets remain the real protection for `main`.
 
 v2 replaces v1's segment parser (843 lines) with a single rule: a command that mentions git together with a network verb must be **one plain command**. The v1 files are kept as `push-guard.v1.sh`, `test-push-guard.v1.sh` and `README.v1.md`.
 
@@ -40,7 +40,7 @@ v2 replaces v1's segment parser (843 lines) with a single rule: a command that m
          }
        ]
      },
-     "permissions": { "ask": ["Edit(~/.claude/hooks/**)"] }
+     "permissions": { "deny": ["Edit(~/.claude/hooks/**)"] }
    }
    ```
 
