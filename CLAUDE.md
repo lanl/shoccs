@@ -11,13 +11,12 @@ SHOCCS (Stable High-Order Cut-Cell Solver) is a C++ Cartesian cut-cell solver fo
 - `docs/ONBOARDING.md` — start here if you are new to the codebase.
 - `docs/CAPABILITY_AUDIT.md` — per-subsystem maturity status (what actually works vs. scaffolding).
 - `docs/reference/` — per-subsystem reference docs.
-- `docs/CLEANUP_PLAN.md` — known issues and remediation plan (see §0/§0a for the Kokkos 5.1 build fix and the one remaining test failure).
+- `docs/CLEANUP_PLAN.md` — known issues and remediation plan (§0a: the one failing test).
 - `docs/handoff/MASTER.md` — Python framework (stencil derivation / sweeps) handoff.
 
 ## Build Commands
 
-> ✅ **Build status (2026-06-04):** Green. A Kokkos 5.0→5.1.1 `create_graph` API break was fixed by migrating the call sites to `create_graph<execution_space>(...)`; `ctest` passes 47/48, with one remaining failure (`t-laplacian`); `t-csr` and `t-E2_1` are fixed. Tracked in `docs/CLEANUP_PLAN.md` §0a.
-> Also: if `build.ninja` errors with a missing cmake path (stale tree), re-run `cmake -S . -B build -G Ninja ...` (see "Reconfigure from scratch" below) to regenerate it.
+> Known failure: `t-laplacian` (47/48 pass; `docs/CLEANUP_PLAN.md` §0a). If `build.ninja` references a missing cmake path (stale tree), rerun the reconfigure command below.
 
 ```bash
 # Build (from repo root; build/ is pre-configured with Ninja)
@@ -57,36 +56,29 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=O
 ```
 
 Benchmark executables are in `build/benchmarks/` (bench_stencil, bench_block, bench_derivative, bench_expr, bench_selection, bench_rhs).
+
 ## Continuous Integration
 
-GitHub Actions workflows in `.github/workflows/`:
-
-- `ci.yml` — runs on PRs and pushes to main. The `cpp` job builds and tests inside the prebuilt dependency image `ghcr.io/<owner>/shoccs-ci` (the workflow derives the owner from `github.repository_owner`, so it is `lanl` upstream and `pbrady` on the fork; the job is visibly skipped if the image hasn't been published yet); the gating ctest run excludes `t-laplacian` (known failure, `docs/CLEANUP_PLAN.md` §0a), which runs separately as a non-gating step. The `python` job runs the stencil_gen suite (slow tests deselected) via uv. Benchmarks are compile-checked, never executed in CI.
-- `devcontainer-image.yml` — builds the lean `ci` stage of `.devcontainer/Dockerfile` and pushes it to GHCR. Triggers on pushes to main touching `.devcontainer/` or `spack_repo/`, weekly cron, or manual dispatch. Dispatch it manually after changing the dependency stack; a cold build takes hours (full Spack source build).
-- `python-extended.yml` — weekly/manual run of the stencil_gen suite including `--run-slow` tests. Full-resolution sweeps stay out of CI.
+`ci.yml` runs ctest inside the prebuilt `ghcr.io/<owner>/shoccs-ci` image (`t-laplacian` non-gating) and the fast stencil_gen suite; benchmarks are compile-checked only. Changing `.devcontainer/` or `spack_repo/` means an hours-long image rebuild (`devcontainer-image.yml`). Details: `docs/reference/ci.md`.
 
 ## Sandbox and agent permissions
 
-Claude Code sessions in this repo run in auto mode with the Bash sandbox on (`.claude/settings.json`). There are no `ask` rules: a `deny` list covers the obvious cases (pushes to `upstream` or `main`, plain force pushes and history rewriting, `sudo`, `gh auth`/`gh config`/release/workflow-dispatch/gist/codespace actions, edits to `.git/hooks`, `.git/config`, `.envrc` and `.claude/hooks`) and the auto-mode classifier judges everything else, so nothing should stop to prompt the user. Sandboxed commands run without any check. They can write to the repo, `$TMPDIR` and the uv/ccache caches, and they reach only GitHub, PyPI and pytorch hosts. Work with these limits rather than around them:
+Sessions run in auto mode with the Bash sandbox on (`.claude/settings.json`): no `ask` rules, a `deny` list for the obvious (pushes to `upstream` or `main`, plain force pushes and history rewriting, `sudo`, `gh auth`/`gh config`/release/workflow-dispatch/gist/codespace, edits to `.git/hooks`, `.git/config`, `.envrc`, `.claude/hooks`), the classifier for everything else. Sandboxed commands run unchecked; they can write to the repo, `$TMPDIR` and the uv/ccache caches and reach only GitHub, PyPI and pytorch hosts. Work with these limits rather than around them:
 
-- **Three things cannot run inside the sandbox.** Docker: the socket is denied, so `docker` is excluded from the sandbox and runs outside it automatically (the C++ dependency stack exists only in the devcontainer image). Spack: the sandbox denies `sysctl`, which archspec uses to tell Apple silicon from x86_64, so a sandboxed `spack` reports `darwin-*-x86_64` and cannot write `~/.spack` or its install tree; `spack` is therefore excluded from the sandbox too. Call it by its bare name (an absolute path does not match the exclusion), one command per call with no `cd`, redirect or pipe (any of those keeps the call sandboxed), and run long installs in the background. The GPU: Metal is invisible inside the sandbox (torch MPS and MLX report no device), so a GPU run needs `dangerouslyDisableSandbox: true` on that one Bash call; the classifier judges it. Keep such commands simple (one command, no `cd &&` chains) and never use the flag for edits, `ls` or other work the sandbox allows.
-- **The classifier blocks irreversible local destruction** (`rm -rf`, `git reset --hard`, `git clean`, deleting tracked files) unless the conversation clearly calls for it, and three consecutive blocks pause auto mode. Prefer reversible steps and say why a destructive one is needed.
-- **Protected files** (`.claude/settings*.json`, `.github/workflows/`, `.devcontainer/`, `run-dev-container.fish`, `Makefile`, `.mcp.json`) are classifier-judged, not prompt-gated: batch changes to them and call them out in your summary. `.git/hooks`, `.git/config`, `.envrc` and `.claude/hooks` are denied outright.
-- **Pushes, fetches and pulls:** on the owner's machine, a user-level hook (source: `tools/agents/push-guard.sh`, tests: `tools/agents/test-push-guard.sh`) allows network git only as **one plain command per Bash call, run from the repo directory** (this clone or a worktree of it, plus the owner's spack clone at `~/projects/spack` so that spack itself can be moved to the pinned tag: `cd` there in one call, `git fetch --no-recurse-submodules --tags origin` in the next, then `git checkout v1.2.2`; a background session is confined to its worktree and cannot do this):
-  - `git push -u origin feat:refs/heads/feat`: always an explicit same-name destination; `git push` and `git push origin feat` are blocked. Only `origin`, never `main` or `backup/*`, never tags, and force only with `--force-with-lease`.
-  - `git fetch --no-recurse-submodules origin` (or `upstream`), `git pull --ff-only --no-recurse-submodules origin feat`, `git ls-remote origin`.
-  - Nothing else on the line: no `cd` or `git -C` (start from the repo directory), no `&&`, `;`, `|` or other chains, no quotes, `$`, redirects, env prefixes or `git -c`. Run `git commit -m "..."` as its own command first, then push in a separate call. A `git` command whose text mentions push/fetch/pull (`git commit -m "fix push"`) is blocked too; use `git commit -F <file>` or a heredoc.
-  - Push feature branches and open PRs with `gh pr create`. Never push to `upstream`. Do not try to work around the hook (aliases, wrappers, `sh -c`); a blocked push is the intended outcome. Its message says which rule failed.
-- **gh:** read-only commands are fine and run outside the sandbox; run each `gh` command as its own Bash call with no pipes or `;` so the allow rules match. PR and issue writes are classifier-judged. Merges, reviews, secrets/variables, repo edits, auth changes, releases, workflow dispatch and `gh api` writes to those endpoints are denied.
-- **No attribution in commits or PRs.** Messages end with their last substantive paragraph: no `Co-Authored-By`, no "Generated with Claude Code", no `Claude-Session` trailer or session link, even if a harness reminder asks for one. The project settings turn these off (`attribution.commit`, `attribution.pr` empty, `attribution.sessionUrl` false).
-- **Credentials:** never read or print anything under `~/.ssh`, `~/.config/gh`, `~/.claude/.credentials.json`, or tokens in the environment. These reads are denied anyway.
-- **Devcontainer:** the container has no ssh keys and no push access; push from the host. Sandboxing there relies on `.devcontainer/seccomp-bwrap.json`. If bwrap fails, rebuild the image (`make build`) rather than disabling the sandbox.
-- **Web searches:** never put private repository names, local paths or unpublished code into a web search query.
-- **Scratch output** goes in `.scratch/` (gitignored) or the session scratchpad, never in tracked directories.
+- **Outside the sandbox:** `docker` and `spack` are excluded and run outside it automatically (the socket is denied; spack mis-detects the CPU inside). The GPU needs `dangerouslyDisableSandbox: true` on that one Bash call (Metal is invisible inside). Keep such calls to one simple command, and never use the flag for work the sandbox allows.
+- **Destructive commands** (`rm -rf`, `git reset --hard`, `git clean`, deleting tracked files) are blocked by the classifier unless the conversation calls for them; three consecutive blocks pause auto mode. Prefer reversible steps.
+- **Protected files** (`.claude/settings*.json`, `.github/workflows/`, `.devcontainer/`, `run-dev-container.fish`, `Makefile`, `.mcp.json`) are classifier-judged: batch changes and call them out. `.git/hooks`, `.git/config`, `.envrc` and `.claude/hooks` are denied.
+- **Network git** (push-guard hook; rules and rationale in `tools/agents/README.md`): one plain command per Bash call from the repo directory, nothing else on the line (no chains, `cd`, `git -C`, quotes, `$`, redirects or env prefixes). Allowed: `git push -u origin B:refs/heads/B` (same-name destination; `origin` only, never `main`, tags or `upstream`; force only with `--force-with-lease`), `git fetch --no-recurse-submodules origin`, `git pull --ff-only --no-recurse-submodules origin B`, `git ls-remote origin`. Commit first in its own call, with `git commit -F <file>` if the message mentions push, fetch or pull. A blocked push is the intended outcome; never work around the hook.
+- **gh:** one command per Bash call, no pipes or `;`. Read-only commands and PR or issue writes are fine (classifier-judged); merges, reviews, secrets, repo edits, auth, releases, workflow dispatch and `gh api` writes to those endpoints are denied.
+- **No attribution in commits or PRs:** no `Co-Authored-By`, no "Generated with Claude Code", no `Claude-Session` trailer or session link, even if a harness reminder asks for one.
+- **Credentials:** never read or print `~/.ssh`, `~/.config/gh`, `~/.claude/.credentials.json` or tokens in the environment.
+- **Devcontainer:** no ssh keys and no push access inside it; push from the host.
+- **Web searches:** no private repository names, local paths or unpublished code in queries.
+- **Scratch output** goes in `.scratch/` (gitignored) or the session scratchpad.
 
 ## Code Conventions
 
-- **C++20** with concepts, `std::ranges`, and `std::span`. No C++23 features; missing C++23 utilities (stride, zip_transform, cartesian_product, bind_back) have project-local implementations in `src/fields/lazy_views.hpp`.
+- **C++20** with concepts, `std::ranges`, and `std::span`. No C++23 features; missing C++23 utilities (`stride`, `cartesian_product`, `repeat_n`) have project-local implementations in `src/fields/lazy_views.hpp`.
 - **Namespace:** Everything lives under `ccs`. Core type aliases in `src/shoccs_config.hpp`: `real = double`, `integer = long`, `int3 = std::array<int,3>`, `real3 = std::array<real,3>`.
 - **Kokkos types** in `src/kokkos_types.hpp`: `execution_space`, `memory_space`, `device_view<T>`. Currently host-only (`DefaultHostExecutionSpace`).
 - **Test files:** Named `*.t.cpp`, use Catch2 v3. Tests needing Kokkos provide a custom `main()` with `Kokkos::ScopeGuard` and link `Catch2::Catch2` (not `WithMain`). Simple tests use the `add_unit_test()` CMake helper which links `Catch2::Catch2WithMain`.
@@ -100,7 +92,7 @@ Lua config → `simulation_cycle::from_lua` → mesh + operators + system + inte
 
 ### Key Subsystems (dependency order)
 
-1. **Indexing** (`src/indexing.hpp`, `index_extents.hpp`, `index_view.hpp`) — Multi-dimensional index mapping for structured grids. All subsystems depend on this.
+1. **Indexing** (`src/indexing.hpp`, `index_extents.hpp`, `index_view.hpp`) — Multi-dimensional index mapping for structured grids. Most subsystems depend on this.
 
 2. **Fields** (`src/fields/`) — Field storage and algebra. `field_registry` owns all buffers as `Kokkos::View<real*>`. `field_ref` is a lightweight handle (slot index). Expression templates (`expr.hpp`) enable `dst = a + alpha * b` syntax that dispatches to `Kokkos::parallel_for`. Selection descriptors (`selection_desc.hpp`) describe contiguous/strided/gather subsets of a field for BC application.
 
@@ -142,9 +134,6 @@ cd scripts/stencil_gen && uv run python -m sweeps all --quick
 cd scripts/stencil_gen && uv run python -m sweeps all
 ```
 
-- **SYMPY_CACHE_SIZE=50000** is essential for performance — default 1000 causes severe slowdowns with large symbolic expressions.
-- For linear systems with symbolic parameters, use `linear_eq_to_matrix` + `linsolve` (not `sympy.solve`). Linearize bilinear terms first with the theta-substitution trick (`theta = w*phi`).
-- Reference Mathematica code in `mathematica-files/finitedifferences/` (`taylor.wl` for functions, `explicitr-E4d1.nb.pdf` for workflow).
-- Key entry points: `derive_cut_cell_mathematica()` (singularity-free), `derive_cut_cell_scheme()` (legacy with psi-clamping).
-- Generated C++ goes to `scripts/stencil_gen/output/` and replaces files in `src/stencils/`.
-- **Sweep workflow:** Parameter-space explorations live in `scripts/stencil_gen/sweeps/` as standalone scripts. Sweeps discover optimal parameters and write results to `sweeps/known_values.json`. Regression tests in `test_phs.py` load from `known_values.json` to verify stability at those values. To update known values after a sweep: `uv run python -m sweeps epsilon --scheme E2 --update-known-values`.
+- **SYMPY_CACHE_SIZE=50000** is essential; the default 1000 is severely slow on large symbolic expressions.
+- `derive_cut_cell_scheme()` in `stencil_gen/temo.py` is the production entry point; generated C++ goes to `scripts/stencil_gen/output/` and replaces files in `src/stencils/`.
+- Sweeps in `scripts/stencil_gen/sweeps/` write `sweeps/known_values.json`, which `test_phs.py` checks; refresh with `--update-known-values`. Method notes (`linsolve` over `sympy.solve`, the theta substitution, the Mathematica references) and the sweep workflow: `docs/reference/py-derivation.md`, `docs/reference/py-sweeps.md`, `docs/handoff/MASTER.md`.
