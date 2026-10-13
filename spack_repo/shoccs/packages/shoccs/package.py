@@ -107,7 +107,11 @@ class Shoccs(CMakePackage):
     # Test- / benchmark-only dependencies                                #
     # ------------------------------------------------------------------ #
     depends_on("catch2@3:", when="+tests")
-    depends_on("benchmark", when="+benchmarks")
+    # The benchmark mains call benchmark::Shutdown(), which older releases
+    # lack. On macOS the concretizer otherwise slides back to 1.5.0 to dodge
+    # the Linux-only libpfm4 of +performance_counters (see
+    # tools/spack/macos/spack.yaml).
+    depends_on("benchmark@1.6:", when="+benchmarks")
 
     def cmake_args(self):
         return [

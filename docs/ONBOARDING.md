@@ -101,6 +101,9 @@ You do not install dependencies by hand. The whole toolchain is provisioned by a
 - **`Makefile`** (repo root) — **does NOT build the solver.** It is a Docker-image
   wrapper only (`make build`, `make build-ci`, `make shell`). Ignore it for code
   work; it operates one layer up, on container provisioning.
+- **Native macOS build** (optional) — a user-managed spack environment on the
+  host instead of the container, for measurements on Apple silicon; see
+  `docs/reference/macos-host-build.md`.
 
 The Python side has its own environment managed by **`uv`** inside the container
 (`scripts/stencil_gen/pyproject.toml`, Python ≥ 3.11; the container's own

@@ -39,6 +39,13 @@ ctest --test-dir build -R t-dense
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON -DBUILD_BENCHMARKS=ON
 ```
 
+### Native macOS build (Apple silicon)
+
+- Optional host build in `build-host/` against a user-managed spack environment `shoccs-host` (nothing checked in); setup, manifest, the kokkos override and pitfalls: `docs/reference/macos-host-build.md`.
+- `spack` runs outside the Bash sandbox (it mis-detects the CPU inside it): bare name, one command per call, no `cd`, pipe or redirect; run installs in the background.
+- `cmake -S . -B build-host -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DBUILD_BENCHMARKS=ON -DCMAKE_PREFIX_PATH=$(spack location -e shoccs-host)/.spack-env/view`, then build and `ctest --test-dir build-host`; expect 47/48 (`t-laplacian`).
+- Benchmark with `--kokkos-num-threads=<performance cores>` (4 on a base M4) via `BUILD_DIR=build-host ./scripts/bench_compare.sh`; never compare against the stored baseline, which is from the Linux container.
+
 ## Benchmarks
 
 ```bash
@@ -50,7 +57,6 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=O
 ```
 
 Benchmark executables are in `build/benchmarks/` (bench_stencil, bench_block, bench_derivative, bench_expr, bench_selection, bench_rhs).
-
 ## Continuous Integration
 
 GitHub Actions workflows in `.github/workflows/`:
