@@ -126,7 +126,9 @@
     },
     "excludedCommands": [
       "docker",
-      "docker *"
+      "docker *",
+      "spack",
+      "spack *"
     ]
   }
 }
